@@ -26,11 +26,19 @@ pub struct LocalStorageConfig {
     pub json_store_path: String,
 }
 
+
+#[derive(Debug, Deserialize)]
+pub struct DICOMCStoreSCPConfig {
+    pub port: u16, 
+    pub ae_title: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct AppConfig {
     pub database: Option<DBConfig>,
     pub server: Option<ServerConfig>,
     pub local_storage: Option<LocalStorageConfig>,
+    pub dicom_cstore_scp: Option<DICOMCStoreSCPConfig>,
 }
 
 static APP_ENV: &str = "APP_ENV";

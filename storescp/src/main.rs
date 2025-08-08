@@ -6,17 +6,19 @@ use std::{
 };
 
 use clap::Parser;
+use common::server_config;
+use common::server_config::DICOMCStoreSCPConfig;
 use dicom_core::{dicom_value, DataElement, VR};
 use dicom_dictionary_std::tags;
 use dicom_object::{InMemDicomObject, StandardDataDictionary};
 use snafu::Report;
 use tracing::{error, info, Level};
 
+mod dicom_file_handler;
+mod producer;
 mod store_async;
 mod store_sync;
 mod transfer;
-mod producer;
-mod dicom_file_handler;
 
 use store_async::run_store_async;
 use store_sync::run_store_sync;
@@ -57,6 +59,9 @@ struct App {
     /// Run in non-blocking mode (spins up an async task to handle each incoming stream)
     #[arg(short, long)]
     non_blocking: bool,
+
+    #[arg(short = 'j', long = "json-store-path", default_value = ".")]
+    json_store_path: PathBuf,
 }
 
 fn create_cstore_response(
@@ -109,7 +114,48 @@ fn create_cecho_response(message_id: u16) -> InMemDicomObject<StandardDataDictio
 
 #[tokio::main]
 async fn main() {
-    let app = App::parse();
+    let config = server_config::load_config();
+    let config = match config {
+        Ok(config) => config,
+        Err(e) => {
+            error!("{:?}", e);
+            std::process::exit(-2);
+        }
+    };
+
+    let mut app = App::parse();
+    let scp_config = config.dicom_cstore_scp;
+    match scp_config {
+        Some(scp_config) => {
+            app.port = scp_config.port;
+
+            app.calling_ae_title = scp_config.ae_title;
+            let store_cfg = config.local_storage;
+            if store_cfg.is_some() {
+                let store_cfg = store_cfg.unwrap();
+                app.out_dir = store_cfg.dicom_store_path.parse().unwrap();
+                app.json_store_path = store_cfg.json_store_path.parse().unwrap();
+            }
+        }
+        None => {
+            info!("dicom_cstore_scp config with default value");
+        }
+    };
+    let out_dir = std::fs::exists(&app.out_dir);
+    if out_dir.unwrap() == false {
+        std::fs::create_dir_all(&app.out_dir).unwrap_or_else(|e| {
+            error!("Could not create output directory: {}", e);
+            std::process::exit(-2);
+        });
+    }
+
+    let json_dir = std::fs::exists(&app.json_store_path);
+    if json_dir.unwrap() == false {
+        std::fs::create_dir_all(&app.json_store_path).unwrap_or_else(|e| {
+            error!("Could not create output directory: {}", e);
+            std::process::exit(-2);
+        });
+    }
     if app.non_blocking {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
@@ -148,11 +194,6 @@ async fn run_async(args: App) -> Result<(), Box<dyn std::error::Error>> {
         );
     });
 
-    std::fs::create_dir_all(&args.out_dir).unwrap_or_else(|e| {
-        error!("Could not create output directory: {}", e);
-        std::process::exit(-2);
-    });
-
     let listen_addr = SocketAddrV4::new(Ipv4Addr::from(0), args.port);
     let listener = tokio::net::TcpListener::bind(listen_addr).await?;
     info!(
@@ -186,11 +227,6 @@ async fn run_sync(args: App) -> Result<(), Box<dyn std::error::Error>> {
             "Could not set up global logger: {}",
             snafu::Report::from_error(e)
         );
-    });
-
-    std::fs::create_dir_all(&args.out_dir).unwrap_or_else(|e| {
-        error!("Could not create output directory: {}", e);
-        std::process::exit(-2);
     });
 
     let listen_addr = SocketAddrV4::new(Ipv4Addr::from(0), args.port);

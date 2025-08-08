@@ -24,14 +24,15 @@ pub async fn run_store_async(
         promiscuous,
         max_pdu_length,
         out_dir,
-        port: _,
-        non_blocking: _,
+        json_store_path: _json_store_path,
+        port: _port,
+        non_blocking: _non_blocking,
     } = args;
     let verbose = *verbose;
 
     let peer = scu_stream.peer_addr().unwrap();
     info!(
-        "New association from remote ip: {} and port: {}",
+        "New association from remote ip: {} and remote port: {}",
         peer.ip(),
         peer.port()
     );
@@ -75,6 +76,7 @@ pub async fn run_store_async(
         "> Presentation contexts: {:?}",
         association.presentation_contexts()
     );
+    let base_dir = out_dir.to_str().unwrap();
     let kafka_producer = KafkaProducer::new("192.168.1.14:9092");
     loop {
         match association.receive().await {
@@ -163,7 +165,7 @@ pub async fn run_store_async(
                                         .whatever_context(
                                             "could not retrieve ISSUER_OF_PATIENT_ID",
                                         )?
-                                        .to_string();
+                                        .trim_end_matches("\0").to_string();
                                 }
                                 instance_buffer.clear();
                             } else if data_value.value_type == PDataValueType::Data
@@ -187,7 +189,7 @@ pub async fn run_store_async(
                                 match dicom_file_handler::process_dicom_file(
                                     &kafka_producer,
                                     &instance_buffer,
-                                    &out_dir,
+                                    base_dir,
                                     &issue_patient_id,
                                     ts,
                                     &sop_instance_uid,

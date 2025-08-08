@@ -5,13 +5,12 @@ use dicom_encoding::TransferSyntaxIndex;
 use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use snafu::{ResultExt, Whatever};
-use std::path::Path;
 use tracing::info;
 
 pub(crate) async fn process_dicom_file(
     kafka_producer: &KafkaProducer, // 添加这一行
     instance_buffer: &[u8],         //DICOM文件的字节数组或是二进制流
-    out_dir: &Path,                 //存储文件的根目录, 例如 :/opt/dicomStore/
+    out_dir: &str,                 //存储文件的根目录, 例如 :/opt/dicomStore/
     issue_patient_id: &String,      // 机构ID,或是医院ID, 用于区分多个医院.
     ts: &String,                    // 传输语法
     sop_instance_uid: &String,      //当前文件的SOP实例ID
@@ -26,21 +25,21 @@ pub(crate) async fn process_dicom_file(
         .whatever_context("Missing PatientID")?
         .to_str()
         .whatever_context("could not retrieve PatientID")?
-        .to_string();
+        .trim_end_matches("\0").to_string();
 
     let study_uid = obj
         .element(tags::STUDY_INSTANCE_UID)
         .whatever_context("Missing StudyID")?
         .to_str()
         .whatever_context("could not retrieve STUDY_INSTANCE_UID")?
-        .to_string();
+        .trim_end_matches("\0").to_string();
 
     let series_uid = obj
         .element(tags::SERIES_INSTANCE_UID)
         .whatever_context("Missing SeriesID")?
         .to_str()
         .whatever_context("could not retrieve SERIES_INSTANCE_UID")?
-        .to_string();
+        .trim_end_matches("\0").to_string();
 
     info!(
         "Issur:{} ,PatientID: {}, StudyUID: {}, SeriesUID: {}",
@@ -68,18 +67,20 @@ pub(crate) async fn process_dicom_file(
     let dir_path = match fp {
         true => {
             format!(
-                "{}{}/{}/{}",
-                out_dir.to_str().unwrap(),
-                pat_id,
+                "{}{}/{}/{}/{}",
+                out_dir,
+                issue_patient_id,
+                pat_id ,
                 study_uid,
                 series_uid
             )
         }
         false => {
             format!(
-                "{}/{}/{}/{}",
-                out_dir.to_str().unwrap(),
-                pat_id,
+                "{}/{}/{}/{}/{}",
+                out_dir,
+                issue_patient_id,
+                pat_id ,
                 study_uid,
                 series_uid
             )
