@@ -12,7 +12,7 @@ impl KafkaProducer {
     pub fn new(brokers: &str) -> Self {
         let producer = ClientConfig::new()
             .set("bootstrap.servers", brokers)
-            .set("message.timeout.ms", "5000")
+            .set("message.timeout.ms", "1000")
             .create()
             .expect("Failed to create Kafka producer");
 

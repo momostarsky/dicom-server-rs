@@ -1,8 +1,8 @@
-use crate::common_utils::{get_param_case_insensitive, parse_query_string_case_insensitive};
 use actix_web::http::header::ACCEPT;
 use actix_web::{HttpRequest, HttpResponse, Responder, get, web, web::Path};
 use serde::Deserialize;
 use slog::{Logger, info};
+use crate::common_utils::{get_param_case_insensitive, parse_query_string_case_insensitive};
 
 #[derive(Deserialize, Debug)]
 struct StudyQueryParams {
@@ -160,12 +160,12 @@ async fn retrieve_instance(
         sop_uid
     );
     // 检查 Accept 头
-    let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
-
-    if accept != Some(ACCEPT_DICOM_TYPE) {
-        return HttpResponse::NotAcceptable()
-            .body(format!("Accept header must be {}", ACCEPT_DICOM_TYPE));
-    }
+    // let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
+    //
+    // if accept != Some(ACCEPT_DICOM_TYPE) {
+    //     return HttpResponse::NotAcceptable()
+    //         .body(format!("Accept header must be {}", ACCEPT_DICOM_TYPE));
+    // }
     let dicom_file = format!(
         "/home/dhz/jpdata/CDSS/89269/{}/{}/{}.dcm",
         study_uid, series_uid, sop_uid

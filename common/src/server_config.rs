@@ -5,26 +5,38 @@ use std::env;
 
 // 定义配置结构体
 #[derive(Debug, Deserialize)]
-pub(crate) struct DBConfig {
-    pub(crate) url: String,
+pub struct DBConfig {
+    pub type_: String, //数据库类型 POSTGRES  MYSQL SQLITE
+    pub url: String,   //数据库连接字符串
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct ServerConfig {
-    pub(crate) port: u16,
-    pub(crate) host: String,
+pub struct ServerConfig {
+    pub port: u16,
+    pub host: String,
+}
+// "local_storage":{
+// "type": "DISK",
+// "dicom_store_path": "/home/dhz/jpdata/CDSS",
+// "json_store_path": "/home/dhz/jpdata/CDSS/store"
+// }
+#[derive(Debug, Deserialize)]
+pub struct LocalStorageConfig {
+    pub dicom_store_path: String,
+    pub json_store_path: String,
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct AppConfig {
-    pub(crate) database: DBConfig,
-    pub(crate) server: ServerConfig,
+pub struct AppConfig {
+    pub database: Option<DBConfig>,
+    pub server: Option<ServerConfig>,
+    pub local_storage: Option<LocalStorageConfig>,
 }
 
 static APP_ENV: &str = "APP_ENV";
-static APP_PREFIX: &str = "DICOMWEB";
+static APP_PREFIX: &str = "DICOM";
 
-pub(crate) fn load_config() -> Result<AppConfig, ConfigError> {
+pub fn load_config() -> Result<AppConfig, ConfigError> {
     // 1. 加载 .env 文件
     dotenv().ok();
 

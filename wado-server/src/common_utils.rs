@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 // 解析查询字符串，支持重复键
-pub(crate) fn parse_query_string_case_insensitive(query: &str) -> HashMap<String, Vec<String>> {
+pub fn parse_query_string_case_insensitive(query: &str) -> HashMap<String, Vec<String>> {
     let mut params: HashMap<String, Vec<String>> = HashMap::new();
 
     for pair in query.split('&') {
@@ -23,7 +23,7 @@ pub(crate) fn parse_query_string_case_insensitive(query: &str) -> HashMap<String
 }
 
 // 不区分大小写的参数获取
-pub(crate) fn get_param_case_insensitive<'a>(
+pub fn get_param_case_insensitive<'a>(
     params: &'a HashMap<String, Vec<String>>,
     key: &str
 ) -> Option<&'a Vec<String>> {
