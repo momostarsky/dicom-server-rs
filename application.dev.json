@@ -1,6 +1,6 @@
 {
   "database": {
-    "type": "POSTGRES",
+    "dbtype": "POSTGRES",
     "url": "postgres://Host=localhost;Port=5432;Database=dotnetHero;Username=admin;Password=Pass123$;"
   },
   "server": {

@@ -6,7 +6,7 @@ use std::env;
 // 定义配置结构体
 #[derive(Debug, Deserialize)]
 pub struct DBConfig {
-    pub type_: String, //数据库类型 POSTGRES  MYSQL SQLITE
+    pub dbtype: String, //数据库类型 POSTGRES  MYSQL SQLITE
     pub url: String,   //数据库连接字符串
 }
 
