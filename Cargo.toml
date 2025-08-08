@@ -1,6 +1,7 @@
 [workspace]
 members = [
-    "wado-server"
+    "wado-server",
+    "storescp"
 ]
 
 # use edition 2021 resolver
