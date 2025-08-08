@@ -64,7 +64,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         association.presentation_contexts()
     );
     let base_dir = out_dir.to_str().unwrap();
-    let kafka_producer = KafkaProducer::new("192.168.1.14:9092");
+    let kafka_producer = KafkaProducer::new();
     loop {
         match association.receive() {
             Ok(mut pdu) => {

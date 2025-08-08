@@ -29,12 +29,18 @@ pub struct LocalStorageConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct DICOMCStoreSCPConfig {
-    pub port: u16, 
+    pub port: u16,
     pub ae_title: String,
 }
 
 #[derive(Debug, Deserialize)]
+pub struct KafkaConfig {
+    pub brokers: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct AppConfig {
+    pub kafka: Option<KafkaConfig>,
     pub database: Option<DBConfig>,
     pub server: Option<ServerConfig>,
     pub local_storage: Option<LocalStorageConfig>,

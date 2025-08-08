@@ -1,6 +1,5 @@
 use dicom_dictionary_std::tags;
-use dicom_encoding::transfer_syntax::TransferSyntaxIndex;
-use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
+use dicom_object::{InMemDicomObject};
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dicom_ul::{pdu::PDataValueType, Pdu};
 use snafu::{OptionExt, Report, ResultExt, Whatever};
@@ -77,7 +76,7 @@ pub async fn run_store_async(
         association.presentation_contexts()
     );
     let base_dir = out_dir.to_str().unwrap();
-    let kafka_producer = KafkaProducer::new("192.168.1.14:9092");
+    let kafka_producer = KafkaProducer::new();
     loop {
         match association.receive().await {
             Ok(mut pdu) => {

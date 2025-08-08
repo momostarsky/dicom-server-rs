@@ -7,13 +7,16 @@
     "port": 8080,
     "host": "0.0.0.0"
   },
-  "local_storage":{
+  "local_storage": {
     "type": "DISK",
     "dicom_store_path": "/home/dhz/jpdata/DICOMStore",
     "json_store_path": "/home/dhz/jpdata/JSONStore"
   },
   "dicom_cstore_scp": {
     "port": 11111,
-    "ae_title": "DICOMSERVER"
+    "ae_title": "STORE-SCP"
+  },
+  "kafka": {
+    "brokers": "192.168.1.14:9092"
   }
 }
