@@ -10,7 +10,7 @@ use tracing::info;
 pub(crate) async fn process_dicom_file(
     kafka_producer: &KafkaProducer, // 添加这一行
     instance_buffer: &[u8],         //DICOM文件的字节数组或是二进制流
-    out_dir: &str,                 //存储文件的根目录, 例如 :/opt/dicomStore/
+    out_dir: &str,                  //存储文件的根目录, 例如 :/opt/dicomStore/
     issue_patient_id: &String,      // 机构ID,或是医院ID, 用于区分多个医院.
     ts: &String,                    // 传输语法
     sop_instance_uid: &String,      //当前文件的SOP实例ID
@@ -25,21 +25,24 @@ pub(crate) async fn process_dicom_file(
         .whatever_context("Missing PatientID")?
         .to_str()
         .whatever_context("could not retrieve PatientID")?
-        .trim_end_matches("\0").to_string();
+        .trim_end_matches("\0")
+        .to_string();
 
     let study_uid = obj
         .element(tags::STUDY_INSTANCE_UID)
         .whatever_context("Missing StudyID")?
         .to_str()
         .whatever_context("could not retrieve STUDY_INSTANCE_UID")?
-        .trim_end_matches("\0").to_string();
+        .trim_end_matches("\0")
+        .to_string();
 
     let series_uid = obj
         .element(tags::SERIES_INSTANCE_UID)
         .whatever_context("Missing SeriesID")?
         .to_str()
         .whatever_context("could not retrieve SERIES_INSTANCE_UID")?
-        .trim_end_matches("\0").to_string();
+        .trim_end_matches("\0")
+        .to_string();
 
     info!(
         "Issur:{} ,PatientID: {}, StudyUID: {}, SeriesUID: {}",
@@ -68,21 +71,13 @@ pub(crate) async fn process_dicom_file(
         true => {
             format!(
                 "{}{}/{}/{}/{}",
-                out_dir,
-                issue_patient_id,
-                pat_id ,
-                study_uid,
-                series_uid
+                out_dir, issue_patient_id, pat_id, study_uid, series_uid
             )
         }
         false => {
             format!(
                 "{}/{}/{}/{}/{}",
-                out_dir,
-                issue_patient_id,
-                pat_id ,
-                study_uid,
-                series_uid
+                out_dir, issue_patient_id, pat_id, study_uid, series_uid
             )
         }
     };
@@ -121,23 +116,19 @@ pub(crate) async fn process_dicom_file(
         file_size: instance_buffer.len() as u64,
     };
 
+    let key_str = format!(
+        "{}_{}",
+        dicom_message.tenant, dicom_message.sop_instance_uid
+    );
     // 1. 发送到存储队列
     kafka_producer
-        .send_message(
-            "storage_queue",
-            &dicom_message.sop_instance_uid,
-            &dicom_message,
-        )
+        .send_message("storage_queue", key_str.as_str(), &dicom_message)
         .await
         .unwrap();
 
     // 2. 发送到索引队列
     kafka_producer
-        .send_message(
-            "index_queue",
-            &dicom_message.sop_instance_uid,
-            &dicom_message,
-        )
+        .send_message("index_queue", key_str.as_str(), &dicom_message)
         .await
         .unwrap();
 

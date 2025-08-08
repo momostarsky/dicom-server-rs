@@ -68,9 +68,9 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
     loop {
         match association.receive() {
             Ok(mut pdu) => {
-                if verbose {
-                    debug!("scu ----> scp: {}", pdu.short_description());
-                }
+                // if verbose {
+                //     debug!("scu ----> scp: {}", pdu.short_description());
+                // }
                 match pdu {
                     Pdu::PData { ref mut data } => {
                         if data.is_empty() {

@@ -80,9 +80,9 @@ pub async fn run_store_async(
     loop {
         match association.receive().await {
             Ok(mut pdu) => {
-                if verbose {
-                    debug!("scu ----> scp: {}", pdu.short_description());
-                }
+                // if verbose {
+                //     debug!("scu ----> scp: {}", pdu.short_description());
+                // }
                 match pdu {
                     Pdu::PData { ref mut data } => {
                         if data.is_empty() {
