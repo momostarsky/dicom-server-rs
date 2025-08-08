@@ -1,3 +1,5 @@
+extern crate core;
+
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
     path::PathBuf,
@@ -13,6 +15,9 @@ use tracing::{error, info, Level};
 mod store_async;
 mod store_sync;
 mod transfer;
+mod producer;
+mod dicom_file_handler;
+
 use store_async::run_store_async;
 use store_sync::run_store_sync;
 
@@ -102,7 +107,8 @@ fn create_cecho_response(message_id: u16) -> InMemDicomObject<StandardDataDictio
     ])
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let app = App::parse();
     if app.non_blocking {
         tokio::runtime::Builder::new_multi_thread()
@@ -116,7 +122,7 @@ fn main() {
                 });
             });
     } else {
-        run_sync(app).unwrap_or_else(|e| {
+        run_sync(app).await.unwrap_or_else(|e| {
             error!("{:?}", e);
             std::process::exit(-2);
         });
@@ -165,7 +171,7 @@ async fn run_async(args: App) -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-fn run_sync(args: App) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_sync(args: App) -> Result<(), Box<dyn std::error::Error>> {
     tracing::subscriber::set_global_default(
         tracing_subscriber::FmtSubscriber::builder()
             .with_max_level(if args.verbose {
@@ -197,7 +203,7 @@ fn run_sync(args: App) -> Result<(), Box<dyn std::error::Error>> {
     for stream in listener.incoming() {
         match stream {
             Ok(scu_stream) => {
-                if let Err(e) = run_store_sync(scu_stream, &args) {
+                if let Err(e) = run_store_sync(scu_stream, &args).await {
                     error!("{}", snafu::Report::from_error(e));
                 }
             }

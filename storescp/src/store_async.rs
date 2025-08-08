@@ -6,7 +6,12 @@ use dicom_ul::{pdu::PDataValueType, Pdu};
 use snafu::{OptionExt, Report, ResultExt, Whatever};
 use tracing::{debug, info, warn};
 
-use crate::{create_cecho_response, create_cstore_response, transfer::ABSTRACT_SYNTAXES, App};
+use crate::producer::KafkaProducer;
+use crate::{
+    create_cecho_response, create_cstore_response, dicom_file_handler, transfer::ABSTRACT_SYNTAXES,
+    App,
+};
+
 pub async fn run_store_async(
     scu_stream: tokio::net::TcpStream,
     args: &App,
@@ -35,7 +40,7 @@ pub async fn run_store_async(
     let mut message_id = 1;
     let mut sop_class_uid = "".to_string();
     let mut sop_instance_uid = "".to_string();
-
+    let mut issue_patient_id = "".to_string();
     let mut options = dicom_ul::association::ServerAssociationOptions::new()
         .accept_any()
         .ae_title(calling_ae_title)
@@ -70,7 +75,7 @@ pub async fn run_store_async(
         "> Presentation contexts: {:?}",
         association.presentation_contexts()
     );
-
+    let kafka_producer = KafkaProducer::new("192.168.1.14:9092");
     loop {
         match association.receive().await {
             Ok(mut pdu) => {
@@ -151,6 +156,14 @@ pub async fn run_store_async(
                                             "could not retrieve Affected SOP Instance UID",
                                         )?
                                         .to_string();
+                                    issue_patient_id = obj
+                                        .element(tags::ISSUER_OF_PATIENT_ID)
+                                        .whatever_context("missing ISSUER_OF_PATIENT_ID")?
+                                        .to_str()
+                                        .whatever_context(
+                                            "could not retrieve ISSUER_OF_PATIENT_ID",
+                                        )?
+                                        .to_string();
                                 }
                                 instance_buffer.clear();
                             } else if data_value.value_type == PDataValueType::Data
@@ -165,100 +178,38 @@ pub async fn run_store_async(
                                     .whatever_context("missing presentation context")?;
                                 let ts = &presentation_context.transfer_syntax;
 
-                                let obj = InMemDicomObject::read_dataset_with_ts(
-                                    instance_buffer.as_slice(),
-                                    TransferSyntaxRegistry.get(ts).unwrap(),
+                                // let obj = InMemDicomObject::read_dataset_with_ts(
+                                //     instance_buffer.as_slice(),
+                                //     TransferSyntaxRegistry.get(ts).unwrap(),
+                                // )
+                                // .whatever_context("failed to read DICOM data object")?;
+
+                                match dicom_file_handler::process_dicom_file(
+                                    &kafka_producer,
+                                    &instance_buffer,
+                                    &out_dir,
+                                    &issue_patient_id,
+                                    ts,
+                                    &sop_instance_uid,
                                 )
-                                .whatever_context("failed to read DICOM data object")?;
-
-                                let pat_id = obj
-                                    .element(tags::PATIENT_ID)
-                                    .whatever_context("Missing PatientID")?
-                                    .to_str()
-                                    .whatever_context("could not retrieve PatientID")?
-                                    .to_string();
-
-                                let study_uid = obj
-                                    .element(tags::STUDY_INSTANCE_UID)
-                                    .whatever_context("Missing StudyID")?
-                                    .to_str()
-                                    .whatever_context("could not retrieve STUDY_INSTANCE_UID")?
-                                    .to_string();
-
-                                let series_uid = obj
-                                    .element(tags::SERIES_INSTANCE_UID)
-                                    .whatever_context("Missing SeriesID")?
-                                    .to_str()
-                                    .whatever_context("could not retrieve SERIES_INSTANCE_UID")?
-                                    .to_string();
-
-                                info!(
-                                    "PatientID: {}, StudyUID: {}, SeriesUID: {}",
-                                    pat_id, study_uid, series_uid
-                                );
-
-                                let fp = out_dir.ends_with("/");
-                                let dir_path = match fp {
-                                    true => {
-                                        format!(
-                                            "{}{}/{}/{}",
-                                            out_dir.to_str().unwrap(),
-                                            pat_id,
-                                            study_uid,
-                                            series_uid
-                                        )
+                                .await
+                                {
+                                    Ok(_) => {
+                                        info!(
+                                            "Successfully processed DICOM file for SOP instance {}",
+                                            sop_instance_uid
+                                        );
+                                        // 继续执行后续操作（发送C-STORE响应等）
                                     }
-                                    false => {
-                                        format!(
-                                            "{}/{}/{}/{}",
-                                            out_dir.to_str().unwrap(),
-                                            pat_id,
-                                            study_uid,
-                                            series_uid
-                                        )
+                                    Err(e) => {
+                                        warn!(
+                                            "Failed to process DICOM file for SOP instance {}: {}",
+                                            sop_instance_uid, e
+                                        );
+                                        // 可以选择是否继续执行后续操作，或者返回错误
+                                        // 根据业务需求决定如何处理
                                     }
-                                };
-
-                                info!("file path: {}", dir_path);
-
-                                let ok = std::fs::exists(&dir_path);
-                                match ok {
-                                    Ok(false) => {
-                                        std::fs::create_dir_all(&dir_path).unwrap_or_else(|_e| {
-                                            info!("create directory failed: {}", dir_path);
-                                        });
-                                    }
-                                    _ => {}
                                 }
-
-                                let file_path = format!(
-                                    "{}/{}",
-                                    dir_path,
-                                    sop_instance_uid.trim_end_matches('\0').to_string() + ".dcm"
-                                );
-                                let file_meta = FileMetaTableBuilder::new()
-                                    .media_storage_sop_class_uid(
-                                        obj.element(tags::SOP_CLASS_UID)
-                                            .whatever_context("missing SOP Class UID")?
-                                            .to_str()
-                                            .whatever_context("could not retrieve SOP Class UID")?,
-                                    )
-                                    .media_storage_sop_instance_uid(
-                                        obj.element(tags::SOP_INSTANCE_UID)
-                                            .whatever_context("missing SOP Instance UID")?
-                                            .to_str()
-                                            .whatever_context("missing SOP Instance UID")?,
-                                    )
-                                    .transfer_syntax(ts)
-                                    .build()
-                                    .whatever_context(
-                                        "failed to build DICOM meta file information",
-                                    )?;
-                                let file_obj = obj.with_exact_meta(file_meta);
-                                file_obj
-                                    .write_to_file(&file_path)
-                                    .whatever_context("could not save DICOM object to file")?;
-                                info!("Stored {}", file_path);
 
                                 // send C-STORE-RSP object
                                 // commands are always in implicit VR LE
