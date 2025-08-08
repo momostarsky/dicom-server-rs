@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "wado-server"
+]
+
+# use edition 2021 resolver
+resolver = "2"
