@@ -18,7 +18,8 @@
   },
   "kafka": {
     "brokers": "192.168.1.14:9092",
-    "topic": "dicom-store",
+    "topic": "storage_queue",
+    "consumer_group_id": "dicom-consumer-group",
     "queue_buffering_max_messages": 1000,
     "queue_buffering_max_kbytes": 1048576,
     "batch_num_messages": 100,

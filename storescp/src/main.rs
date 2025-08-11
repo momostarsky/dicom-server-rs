@@ -7,7 +7,6 @@ use std::{
 
 use clap::Parser;
 use common::server_config;
-use common::server_config::DICOMCStoreSCPConfig;
 use dicom_core::{dicom_value, DataElement, VR};
 use dicom_dictionary_std::tags;
 use dicom_object::{InMemDicomObject, StandardDataDictionary};
