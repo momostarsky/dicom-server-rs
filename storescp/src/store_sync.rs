@@ -3,15 +3,15 @@ use crate::{
     create_cecho_response, create_cstore_response, dicom_file_handler, transfer::ABSTRACT_SYNTAXES,
     App,
 };
+use dicom_core::chrono::Local;
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dicom_ul::{pdu::PDataValueType, Pdu};
 use snafu::{OptionExt, Report, ResultExt, Whatever};
 use std::net::TcpStream;
-use dicom_core::chrono::Local;
-use tracing::{debug, info, warn};
 use tracing::log::error;
+use tracing::{debug, info, warn};
 
 pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Whatever> {
     let App {
@@ -280,7 +280,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
     }
     if dicom_message_lists.len() > 0 {
         kafka_producer
-            .send_messages("index_queue", &dicom_message_lists)
+            .send_messages(kafka_producer.topic.as_str(), &dicom_message_lists)
             .await
             .unwrap_or_else(|e| {
                 warn!(

@@ -293,7 +293,7 @@ pub async fn run_store_async(
     }
     if dicom_message_lists.len() > 0 {
         kafka_producer
-            .send_messages("storescp_queue", &dicom_message_lists)
+            .send_messages( kafka_producer.topic.as_str(), &dicom_message_lists)
             .await
             .unwrap_or_else(|e| {
                 warn!(

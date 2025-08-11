@@ -8,6 +8,7 @@ use tracing::{error, info, debug};
 
 pub struct KafkaProducer {
     producer: FutureProducer,
+    pub(crate) topic: String,
 }
 
 impl KafkaProducer {}
@@ -58,7 +59,7 @@ impl KafkaProducer {
             .create()
             .expect("Failed to create Kafka producer");
 
-        KafkaProducer { producer }
+        KafkaProducer { producer, topic: kafka_config.topic  }
     }
 
     pub(crate) async fn send_messages(

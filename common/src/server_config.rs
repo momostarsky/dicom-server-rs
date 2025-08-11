@@ -42,6 +42,7 @@ pub struct KafkaConfig {
     pub queue_buffering_max_ms: u32,
     pub linger_ms: u32,
     pub compression_codec: String,
+    pub topic:  String,
 }
 
 #[derive(Debug, Deserialize)]
