@@ -1,15 +1,16 @@
-use dicom_dictionary_std::tags;
-use dicom_object::{InMemDicomObject};
-use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
-use dicom_ul::{pdu::PDataValueType, Pdu};
-use snafu::{OptionExt, Report, ResultExt, Whatever};
-use tracing::{debug, info, warn};
-
 use crate::producer::KafkaProducer;
 use crate::{
     create_cecho_response, create_cstore_response, dicom_file_handler, transfer::ABSTRACT_SYNTAXES,
     App,
 };
+use dicom_core::chrono::Local;
+use dicom_dictionary_std::tags;
+use dicom_object::InMemDicomObject;
+use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
+use dicom_ul::{pdu::PDataValueType, Pdu};
+use snafu::{OptionExt, Report, ResultExt, Whatever};
+use tracing::log::error;
+use tracing::{debug, info, warn};
 
 pub async fn run_store_async(
     scu_stream: tokio::net::TcpStream,
@@ -77,6 +78,7 @@ pub async fn run_store_async(
     );
     let base_dir = out_dir.to_str().unwrap();
     let kafka_producer = KafkaProducer::new();
+    let mut dicom_message_lists = vec![];
     loop {
         match association.receive().await {
             Ok(mut pdu) => {
@@ -164,7 +166,8 @@ pub async fn run_store_async(
                                         .whatever_context(
                                             "could not retrieve ISSUER_OF_PATIENT_ID",
                                         )?
-                                        .trim_end_matches("\0").to_string();
+                                        .trim_end_matches("\0")
+                                        .to_string();
                                 }
                                 instance_buffer.clear();
                             } else if data_value.value_type == PDataValueType::Data
@@ -186,12 +189,12 @@ pub async fn run_store_async(
                                 // .whatever_context("failed to read DICOM data object")?;
 
                                 match dicom_file_handler::process_dicom_file(
-                                    &kafka_producer,
                                     &instance_buffer,
                                     base_dir,
                                     &issue_patient_id,
                                     ts,
                                     &sop_instance_uid,
+                                    &mut dicom_message_lists,
                                 )
                                 .await
                                 {
@@ -288,6 +291,45 @@ pub async fn run_store_async(
     } else {
         info!("Dropping connection with {}", association.client_ae_title());
     }
+    if dicom_message_lists.len() > 0 {
+        kafka_producer
+            .send_messages("storescp_queue", &dicom_message_lists)
+            .await
+            .unwrap_or_else(|e| {
+                warn!(
+                    "Failed to send messages to Kafka: {}. Writing to disk backup.",
+                    e
+                );
+                // 生成带时间戳的备份文件名
+                let timestamp = Local::now().format("%Y%m%d_%H%M%S");
+                let backup_filename = format!("kafka_backup_{}.json", timestamp);
+                // 将消息列表序列化为 JSON
+                match serde_json::to_string_pretty(&dicom_message_lists) {
+                    Ok(json_data) => {
+                        // 写入磁盘文件
+                        match std::fs::write(&backup_filename, json_data) {
+                            Ok(_) => {
+                                info!(
+                                    "Successfully wrote {} messages to backup file: {}",
+                                    dicom_message_lists.len(),
+                                    backup_filename
+                                );
+                            }
+                            Err(write_err) => {
+                                error!(
+                                    "Failed to write backup file {}: {}",
+                                    backup_filename, write_err
+                                );
+                            }
+                        }
+                    }
+                    Err(serialize_err) => {
+                        error!("Failed to serialize dicom_message_lists: {}", serialize_err);
+                    }
+                }
+            });
 
+        dicom_message_lists.clear();
+    }
     Ok(())
 }

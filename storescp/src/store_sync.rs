@@ -4,12 +4,14 @@ use crate::{
     App,
 };
 use dicom_dictionary_std::tags;
-use dicom_object::{InMemDicomObject};
+use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dicom_ul::{pdu::PDataValueType, Pdu};
 use snafu::{OptionExt, Report, ResultExt, Whatever};
 use std::net::TcpStream;
+use dicom_core::chrono::Local;
 use tracing::{debug, info, warn};
+use tracing::log::error;
 
 pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Whatever> {
     let App {
@@ -65,6 +67,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
     );
     let base_dir = out_dir.to_str().unwrap();
     let kafka_producer = KafkaProducer::new();
+    let mut dicom_message_lists = vec![];
     loop {
         match association.receive() {
             Ok(mut pdu) => {
@@ -175,12 +178,12 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                 // .whatever_context("failed to read DICOM data object")?;
 
                                 match dicom_file_handler::process_dicom_file(
-                                    &kafka_producer,
                                     &instance_buffer,
                                     base_dir,
                                     &issue_patient_id,
                                     ts,
                                     &sop_instance_uid,
+                                    &mut dicom_message_lists,
                                 )
                                 .await
                                 {
@@ -274,6 +277,46 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                 break;
             }
         }
+    }
+    if dicom_message_lists.len() > 0 {
+        kafka_producer
+            .send_messages("index_queue", &dicom_message_lists)
+            .await
+            .unwrap_or_else(|e| {
+                warn!(
+                    "Failed to send messages to Kafka: {}. Writing to disk backup.",
+                    e
+                );
+                // 生成带时间戳的备份文件名
+                let timestamp = Local::now().format("%Y%m%d_%H%M%S");
+                let backup_filename = format!("kafka_backup_{}.json", timestamp);
+                // 将消息列表序列化为 JSON
+                match serde_json::to_string_pretty(&dicom_message_lists) {
+                    Ok(json_data) => {
+                        // 写入磁盘文件
+                        match std::fs::write(&backup_filename, json_data) {
+                            Ok(_) => {
+                                info!(
+                                    "Successfully wrote {} messages to backup file: {}",
+                                    dicom_message_lists.len(),
+                                    backup_filename
+                                );
+                            }
+                            Err(write_err) => {
+                                error!(
+                                    "Failed to write backup file {}: {}",
+                                    backup_filename, write_err
+                                );
+                            }
+                        }
+                    }
+                    Err(serialize_err) => {
+                        error!("Failed to serialize dicom_message_lists: {}", serialize_err);
+                    }
+                }
+            });
+
+        dicom_message_lists.clear();
     }
 
     if let Ok(peer_addr) = association.inner_stream().peer_addr() {

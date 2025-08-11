@@ -36,6 +36,12 @@ pub struct DICOMCStoreSCPConfig {
 #[derive(Debug, Deserialize)]
 pub struct KafkaConfig {
     pub brokers: String,
+    pub queue_buffering_max_messages: u32,
+    pub queue_buffering_max_kbytes: u32,
+    pub batch_num_messages: u32,
+    pub queue_buffering_max_ms: u32,
+    pub linger_ms: u32,
+    pub compression_codec: String,
 }
 
 #[derive(Debug, Deserialize)]
