@@ -123,7 +123,7 @@ async fn main() {
     };
 
     let mut app = App::parse();
-    let scp_config = config.dicom_cstore_scp;
+    let scp_config = config.dicom_store_scp;
     match scp_config {
         Some(scp_config) => {
             app.port = scp_config.port;

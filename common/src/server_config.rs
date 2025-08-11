@@ -5,7 +5,7 @@ use std::env;
 
 // 定义配置结构体
 #[derive(Debug, Deserialize)]
-pub struct DBConfig {
+pub struct DatabaseConfig {
     pub dbtype: String, //数据库类型 POSTGRES  MYSQL SQLITE
     pub url: String,   //数据库连接字符串
 }
@@ -28,7 +28,7 @@ pub struct LocalStorageConfig {
 
 
 #[derive(Debug, Deserialize)]
-pub struct DICOMCStoreSCPConfig {
+pub struct DicomStoreScpConfig {
     pub port: u16,
     pub ae_title: String,
 }
@@ -49,10 +49,10 @@ pub struct KafkaConfig {
 #[derive(Debug, Deserialize)]
 pub struct AppConfig {
     pub kafka: Option<KafkaConfig>,
-    pub database: Option<DBConfig>,
+    pub database: Option<DatabaseConfig>,
     pub server: Option<ServerConfig>,
     pub local_storage: Option<LocalStorageConfig>,
-    pub dicom_cstore_scp: Option<DICOMCStoreSCPConfig>,
+    pub dicom_store_scp: Option<DicomStoreScpConfig>,
 }
 
 static APP_ENV: &str = "APP_ENV";

@@ -12,7 +12,7 @@
     "dicom_store_path": "/home/dhz/jpdata/DICOMStore",
     "json_store_path": "/home/dhz/jpdata/JSONStore"
   },
-  "dicom_cstore_scp": {
+  "dicom_store_scp": {
     "port": 11111,
     "ae_title": "STORE-SCP"
   },
