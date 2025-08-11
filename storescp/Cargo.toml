@@ -11,7 +11,7 @@ keywords = ["dicom", "store"]
 readme = "README.md"
 
 [dependencies]
-clap = { version = "4.0.18", features = ["derive"] }
+clap = { version = "4.5.43", features = ["derive"] }
 dicom-core = {  version = "0.8.2" }
 dicom-ul = {  version = "0.8.2", features = ["async"] }
 dicom-object = {   version = "0.8.2" }

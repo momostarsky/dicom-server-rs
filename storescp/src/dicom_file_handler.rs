@@ -42,10 +42,16 @@ pub(crate) async fn process_dicom_file(
         .whatever_context("could not retrieve SERIES_INSTANCE_UID")?
         .trim_end_matches("\0")
         .to_string();
-
+    let accession_number = obj
+        .element(tags::ACCESSION_NUMBER)
+        .whatever_context("Missing ACCESSION_NUMBER")?
+        .to_str()
+        .whatever_context("could not retrieve ACCESSION_NUMBER")?
+        .trim_end_matches("\0")
+        .to_string();
     info!(
-        "Issur:{} ,PatientID: {}, StudyUID: {}, SeriesUID: {}",
-        issue_patient_id, pat_id, study_uid, series_uid
+        "Issur:{} ,PatientID: {}, StudyUID: {}, SeriesUID: {}, AccessionNumber: {}",
+        issue_patient_id, pat_id, study_uid, series_uid, accession_number
     );
 
     let file_meta = FileMetaTableBuilder::new()
@@ -112,6 +118,7 @@ pub(crate) async fn process_dicom_file(
         series_instance_uid: series_uid.to_string(),
         patient_id: pat_id.to_string(),
         file_path: file_path.to_string(),
+        accession_number: accession_number.to_string(),
         file_size: instance_buffer.len() as u64,
     };
     lst.push(dicom_message.clone());
