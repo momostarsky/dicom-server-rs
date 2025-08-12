@@ -1,19 +1,12 @@
 use crate::db_provider::DbProvider;
 use crate::entities::DbProviderBase;
 use async_trait::async_trait;
-use dicom_object::{DefaultDicomObject, InMemDicomObject};
-use sqlx::MySqlPool;
+use dicom_object::DefaultDicomObject;
+use sqlx::{MySqlPool, Row};
 use tracing::{error, info};
 
 pub struct MySqlProvider {
     pool: MySqlPool,
-}
-
-impl MySqlProvider {
-    pub async fn new(database_url: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let pool = MySqlPool::connect(database_url).await?;
-        Ok(MySqlProvider { pool })
-    }
 }
 
 #[async_trait]
@@ -193,7 +186,7 @@ impl DbProvider for MySqlProvider {
 
         // 4. 保存图像信息
         let image_result = sqlx::query(
-                r"INSERT INTO ImageEntity (
+            r"INSERT INTO ImageEntity (
                     tenant_id, SOPInstanceUID, SeriesInstanceUID, StudyInstanceUID,
                     PatientID, InstanceNumber, ImageComments, ContentDate, ContentTime,
                     AcquisitionDateTime, ImageType, ImageOrientationPatient,
@@ -233,7 +226,7 @@ impl DbProvider for MySqlProvider {
                     DeviceSerialNumber = VALUES(DeviceSerialNumber),
                     SoftwareVersions = VALUES(SoftwareVersions),
                     TransferSyntaxUID = VALUES(TransferSyntaxUID)"
-            )
+        )
             .bind(&image_entity.tenant_id)
             .bind(&image_entity.sop_instance_uid)
             .bind(&image_entity.series_instance_uid)
@@ -366,15 +359,129 @@ impl DbProvider for MySqlProvider {
             }
         }
     }
+
+    async fn patient_exists(&self, tenant_id: &str, patient_id: &str) -> Option<bool> {
+        let pool = self.pool.clone();
+
+        match sqlx::query(
+            "SELECT COUNT(*) FROM PatientEntity WHERE tenant_id = ? AND PatientID = ?",
+        )
+        .bind(tenant_id)
+        .bind(patient_id)
+        .fetch_one(&pool)
+        .await
+        {
+            Ok(row) => {
+                let count: i64 = row.get(0);
+                Some(count > 0)
+            }
+            Err(e) => {
+                error!("Failed to check if patient exists: {}", e);
+                None
+            }
+        }
+    }
+
+    async fn patient_study_exists(
+        &self,
+        tenant_id: &str,
+        patient_id: &str,
+        study_uid: &str,
+    ) -> Option<bool> {
+        let pool = self.pool.clone();
+
+        match sqlx::query(
+            "SELECT COUNT(*) FROM StudyEntity WHERE tenant_id = ? AND PatientID = ? AND StudyInstanceUID = ?"
+        )
+            .bind(tenant_id)
+            .bind(patient_id)
+            .bind(study_uid)
+            .fetch_one(&pool)
+            .await
+        {
+            Ok(row) => {
+                let count: i64 = row.get(0);
+                Some(count > 0)
+            }
+            Err(e) => {
+                error!("Failed to check if patient study exists: {}", e);
+                None
+            }
+        }
+    }
+    async fn patient_series_exists(
+        &self,
+        tenant_id: &str,
+        patient_id: &str,
+        study_uid: &str,
+        series_uid: &str,
+    ) -> Option<bool> {
+        let pool = self.pool.clone();
+
+        match sqlx::query(
+            "SELECT COUNT(*) FROM SeriesEntity
+         INNER JOIN StudyEntity ON SeriesEntity.StudyInstanceUID = StudyEntity.StudyInstanceUID
+         WHERE SeriesEntity.tenant_id = ? AND StudyEntity.PatientID = ? AND SeriesEntity.StudyInstanceUID = ? AND SeriesEntity.SeriesInstanceUID = ?"
+        )
+            .bind(tenant_id)
+            .bind(patient_id)
+            .bind(study_uid)
+            .bind(series_uid)
+            .fetch_one(&pool)
+            .await
+        {
+            Ok(row) => {
+                let count: i64 = row.get(0);
+                Some(count > 0)
+            }
+            Err(e) => {
+                error!("Failed to check if patient series exists: {}", e);
+                None
+            }
+        }
+    }
+
+    async fn patient_instance_exists(
+        &self,
+        tenant_id: &str,
+        patient_id: &str,
+        study_uid: &str,
+        series_uid: &str,
+        instance_uid: &str,
+    ) -> Option<bool> {
+        let pool = self.pool.clone();
+
+        match sqlx::query(
+            "SELECT COUNT(*) FROM ImageEntity
+         INNER JOIN StudyEntity ON ImageEntity.StudyInstanceUID = StudyEntity.StudyInstanceUID
+         WHERE ImageEntity.tenant_id = ? AND StudyEntity.PatientID = ? AND ImageEntity.StudyInstanceUID = ? AND ImageEntity.SeriesInstanceUID = ? AND ImageEntity.SOPInstanceUID = ?"
+        )
+            .bind(tenant_id)
+            .bind(patient_id)
+            .bind(study_uid)
+            .bind(series_uid)
+            .bind(instance_uid)
+            .fetch_one(&pool)
+            .await
+        {
+            Ok(row) => {
+                let count: i64 = row.get(0);
+                Some(count > 0)
+            }
+            Err(e) => {
+                error!("Failed to check if patient instance exists: {}", e);
+                None
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::file_utils;
-    use dicom_core::{DataElement, PrimitiveValue, Tag, VR};
+    use dicom_core::{DataElement, PrimitiveValue, VR};
     use dicom_dictionary_std::tags;
-    use dicom_encoding::snafu::ResultExt;
     use dicom_object::InMemDicomObject;
     use sqlx::MySqlPool;
     use std::path::Path;
@@ -490,18 +597,6 @@ mod tests {
         ));
 
         obj
-    }
-
-    #[tokio::test]
-    async fn test_new_mysql_provider() {
-        // 注意：这个测试需要一个正在运行的 MySQL 实例
-        // 在实际项目中，您可能需要使用 docker 或测试数据库
-        let result = MySqlProvider::new(TEST_DATABASE_URL).await;
-        // 我们不assert结果，因为这依赖于外部数据库
-        match result {
-            Ok(_) => println!("MySQL provider created successfully"),
-            Err(e) => println!("Failed to create MySQL provider: {}", e),
-        }
     }
 
     #[tokio::test]
