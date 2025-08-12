@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 mod db_provider;
 mod mysql_provider;
 pub mod server_config;
+mod entities;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DicomMessage {
@@ -29,7 +30,7 @@ mod tests {
             sop_instance_uid: "1.2.3".to_string(),
             study_instance_uid: "1.2.3".to_string(),
             series_instance_uid: "1.2.3".to_string(),
-            patient_id: "123".to_string(), 
+            patient_id: "123".to_string(),
             file_size: 1024,
             file_path: "/tmp/123.dcm".to_string(),
             accession_number: "123333".to_string(),

@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS PatientEntity
     -- 时间戳（去掉 ON UPDATE，由应用层设置）
     CreatedTime      DATETIME DEFAULT '1970-01-01 00:00:00' COMMENT '记录创建时间',
     UpdatedTime      DATETIME DEFAULT '1970-01-01 00:00:00' COMMENT '记录更新时间'
-    )
+)
     ENGINE = OLAP
     UNIQUE KEY(tenant_id, PatientID)
     COMMENT "患者实体表，符合DICOM标准，支持多租户"
@@ -56,20 +56,19 @@ CREATE TABLE IF NOT EXISTS StudyEntity
     StudyID                 VARCHAR(16) COMMENT '检查ID (0020,0010) - SH, VM=1, max 16 chars',
     StudyDescription        VARCHAR(64) COMMENT '检查描述 (0008,1030) - LO, VM=1, max 64 chars',
     -- 检查类型与目的
-    StudyStatusID           VARCHAR(16) COMMENT '检查状态 (0032,1030) - CS, VM=1, max 16 chars',
-    StudyPriorityID         VARCHAR(10) COMMENT '检查优先级 (0032,1031) - CS, VM=1, max 10 chars',
+
     ReferringPhysicianName  VARCHAR(192) COMMENT '转诊医生姓名 (0008,0090) - PN, VM=1, max 64×3',
     AdmissionID             VARCHAR(16) COMMENT '住院号 (0038,0010) - LO, VM=1, max 64 chars → 取16',
     PatientAgeAtStudy       VARCHAR(10) COMMENT '检查时患者年龄 (0010,1010) - AS, 来自图像或计算',
     -- 其他信息
     PerformingPhysicianName VARCHAR(192) COMMENT '执行医生姓名 (0008,1050) - PN, VM=1-n',
     ProcedureCodeSequence   TEXT COMMENT '检查过程代码序列 (0008,1032) - SQ, 复杂结构，暂存为JSON或文本',
-    StudyComments           TEXT COMMENT '检查注释 (0032,4000) - LT, VM=1, max 10240 chars',
+
 
     -- 时间戳（去掉 ON UPDATE，由应用层设置）
     CreatedTime      DATETIME DEFAULT '1970-01-01 00:00:00' COMMENT '记录创建时间',
     UpdatedTime      DATETIME DEFAULT '1970-01-01 00:00:00' COMMENT '记录更新时间'
-    )
+)
     ENGINE = OLAP
     UNIQUE KEY(tenant_id, StudyInstanceUID)
     COMMENT "患者实体表，符合DICOM标准，支持多租户"
@@ -105,13 +104,13 @@ CREATE TABLE IF NOT EXISTS SeriesEntity
     -- 其他信息
     PerformingPhysicianName        VARCHAR(192) COMMENT '执行医生姓名 (0008,1050) - PN, 可继承自 Study',
     OperatorsName                  VARCHAR(192) COMMENT '操作员姓名 (0008,1070) - PN, VM=1-n',
-    SeriesComments                 TEXT COMMENT '序列注释 (0040,4000) - LT, VM=1, max 10240 chars',
+
     -- 图像统计（可选）
     NumberOfSeriesRelatedInstances INT COMMENT '该序列关联的图像数量 (0020,1209) - IS',
     -- 时间戳（去掉 ON UPDATE，由应用层设置）
     CreatedTime      DATETIME DEFAULT '1970-01-01 00:00:00' COMMENT '记录创建时间',
     UpdatedTime      DATETIME DEFAULT '1970-01-01 00:00:00' COMMENT '记录更新时间'
-    )
+)
     ENGINE = OLAP
     UNIQUE KEY(tenant_id, SeriesInstanceUID)
     COMMENT "患者实体表，符合DICOM标准，支持多租户"
@@ -179,7 +178,7 @@ CREATE TABLE IF NOT EXISTS  ImageEntity
     -- 时间戳（去掉 ON UPDATE，由应用层设置）
     CreatedTime      DATETIME DEFAULT '1970-01-01 00:00:00' COMMENT '记录创建时间',
     UpdatedTime      DATETIME DEFAULT '1970-01-01 00:00:00' COMMENT '记录更新时间'
-    )
+)
     ENGINE = OLAP
     UNIQUE KEY(tenant_id, SOPInstanceUID)
     COMMENT "患者实体表，符合DICOM标准，支持多租户"
