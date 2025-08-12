@@ -4,6 +4,7 @@ mod db_provider;
 mod mysql_provider;
 pub mod server_config;
 mod entities;
+mod file_utils;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DicomMessage {

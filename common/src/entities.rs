@@ -1,6 +1,6 @@
 use dicom_core::Tag;
 use dicom_dictionary_std::tags;
-use dicom_object::InMemDicomObject;
+use dicom_object::{DefaultDicomObject, InMemDicomObject};
 
 // patient.rs
 #[derive(Debug, Clone)]
@@ -113,7 +113,7 @@ pub struct ImageEntity {
 }
 pub struct DbProviderBase {}
 impl DbProviderBase {
-    fn get_text_value(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<String> {
+    fn get_text_value(dicom_obj: &DefaultDicomObject, tag: Tag) -> Option<String> {
         dicom_obj
             .element(tag)
             .ok()
@@ -121,7 +121,7 @@ impl DbProviderBase {
             .map(|s| s.trim_end_matches('\0').to_string())
     }
 
-    fn get_date_value(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<String> {
+    fn get_date_value(dicom_obj: &DefaultDicomObject, tag: Tag) -> Option<String> {
         Self::get_text_value(dicom_obj, tag).and_then(|s| {
             // 尝试解析DICOM日期格式 (YYYYMMDD)
             if s.len() == 8 && s.chars().all(|c| c.is_ascii_digit()) {
@@ -132,25 +132,25 @@ impl DbProviderBase {
         })
     }
 
-    fn get_time_value(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<String> {
+    fn get_time_value(dicom_obj: &DefaultDicomObject, tag: Tag) -> Option<String> {
         Self::get_text_value(dicom_obj, tag).and_then(|s| {
             // 简单处理时间格式，实际可能需要更复杂的解析
             if !s.is_empty() { Some(s) } else { None }
         })
     }
 
-    fn get_int_value(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<i32> {
+    fn get_int_value(dicom_obj: &DefaultDicomObject, tag: Tag) -> Option<i32> {
         dicom_obj.element(tag).ok().and_then(|e| e.to_int().ok())
     }
 
-    fn get_decimal_value(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<f64> {
+    fn get_decimal_value(dicom_obj: &DefaultDicomObject, tag: Tag) -> Option<f64> {
         dicom_obj
             .element(tag)
             .ok()
             .and_then(|e| e.to_float64().ok())
     }
 
-    pub(crate) fn extract_patient_entity(tenant_id: &str, dicom_obj: &InMemDicomObject) -> PatientEntity {
+    pub(crate) fn extract_patient_entity(tenant_id: &str, dicom_obj: &DefaultDicomObject) -> PatientEntity {
         PatientEntity {
             tenant_id: tenant_id.to_string(),
             patient_id: Self::get_text_value(dicom_obj, tags::PATIENT_ID).unwrap_or_default(),
@@ -166,7 +166,7 @@ impl DbProviderBase {
 
     pub(crate) fn extract_study_entity(
         tenant_id: &str,
-        dicom_obj: &InMemDicomObject,
+        dicom_obj: &DefaultDicomObject,
         patient_id: &str,
     ) -> StudyEntity {
         StudyEntity {
@@ -209,7 +209,7 @@ impl DbProviderBase {
 
     pub(crate) fn extract_series_entity(
         tenant_id: &str,
-        dicom_obj: &InMemDicomObject,
+        dicom_obj: &DefaultDicomObject,
         study_uid: &str,
     ) -> SeriesEntity {
         SeriesEntity {
@@ -244,7 +244,7 @@ impl DbProviderBase {
 
     pub(crate) fn extract_image_entity(
         tenant_id: &str,
-        dicom_obj: &InMemDicomObject,
+        dicom_obj: &DefaultDicomObject,
         series_uid: &str,
         study_uid: &str,
         patient_id: &str,

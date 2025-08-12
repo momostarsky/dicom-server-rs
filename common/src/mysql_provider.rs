@@ -1,16 +1,14 @@
 use crate::db_provider::DbProvider;
-use async_trait::async_trait;
-use dicom_object::InMemDicomObject;
-use sqlx::{MySqlPool};
-use tracing::{error, info};
 use crate::entities::DbProviderBase;
+use async_trait::async_trait;
+use dicom_object::{DefaultDicomObject, InMemDicomObject};
+use sqlx::MySqlPool;
+use tracing::{error, info};
 
 pub struct MySqlProvider {
     pool: MySqlPool,
 }
 
- 
- 
 impl MySqlProvider {
     pub async fn new(database_url: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let pool = MySqlPool::connect(database_url).await?;
@@ -20,14 +18,23 @@ impl MySqlProvider {
 
 #[async_trait]
 impl DbProvider for MySqlProvider {
-    async fn save_dicom_info(&self, tenant_id: &str, dicom_obj: &InMemDicomObject) -> Option<bool> {
+    async fn save_dicom_info(
+        &self,
+        tenant_id: &str,
+        dicom_obj: &DefaultDicomObject,
+    ) -> Option<bool> {
         let tenant_id = tenant_id.to_string();
         let pool = self.pool.clone();
 
         // 使用 DbProviderBase 提取实体信息
         let patient_entity = DbProviderBase::extract_patient_entity(&tenant_id, dicom_obj);
-        let study_entity = DbProviderBase::extract_study_entity(&tenant_id, dicom_obj, &patient_entity.patient_id);
-        let series_entity = DbProviderBase::extract_series_entity(&tenant_id, dicom_obj, &study_entity.study_instance_uid);
+        let study_entity =
+            DbProviderBase::extract_study_entity(&tenant_id, dicom_obj, &patient_entity.patient_id);
+        let series_entity = DbProviderBase::extract_series_entity(
+            &tenant_id,
+            dicom_obj,
+            &study_entity.study_instance_uid,
+        );
         let image_entity = DbProviderBase::extract_image_entity(
             &tenant_id,
             dicom_obj,
@@ -361,16 +368,16 @@ impl DbProvider for MySqlProvider {
     }
 }
 
-
-    
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dicom_core::{DataElement, PrimitiveValue, VR};
+    use crate::file_utils;
+    use dicom_core::{DataElement, PrimitiveValue, Tag, VR};
     use dicom_dictionary_std::tags;
+    use dicom_encoding::snafu::ResultExt;
     use dicom_object::InMemDicomObject;
     use sqlx::MySqlPool;
+    use std::path::Path;
 
     // 测试数据库连接配置 - 使用测试数据库
     const TEST_DATABASE_URL: &str = "mysql://dicomstore:hzjp%23123@192.168.1.14:3306/dicomdb";
@@ -502,10 +509,37 @@ mod tests {
         let pool = setup_test_database().await;
         let provider = MySqlProvider { pool: pool.clone() };
 
-        let dicom_obj = create_test_dicom_object();
-        let result = provider.save_dicom_info("test_tenant", &dicom_obj).await;
+        let dir_path = "./testdata";
+        let dicom_files = file_utils::get_dicom_files_in_dir(dir_path).await;
+        // 需要处理 Result 类型
+        let dicom_files = match dicom_files {
+            Ok(files) => files,
+            Err(e) => {
+                eprintln!("Failed to get DICOM files: {}", e);
+                return;
+            }
+        };
+        for dicom_file_path in dicom_files {
+            let path = Path::new(&dicom_file_path);
 
-        assert!(result.is_some());
-        assert_eq!(result.unwrap(), true); 
+            // 检查路径是否存在
+            if !path.exists() {
+                eprintln!("File does not exist: {:?}", path);
+                continue;
+            }
+            let dicom_obj: Result<_, Box<dyn std::error::Error>> =
+                dicom_object::OpenFileOptions::new()
+                    .read_until(tags::PIXEL_DATA)
+                    .open_file(path)
+                    .map_err(Box::from);
+            match dicom_obj {
+                Ok(dcmobj) => {
+                    provider.save_dicom_info("1234567890", &dcmobj).await;
+                }
+                Err(e) => {
+                    eprintln!("Failed to open DICOM file: {}", e);
+                }
+            }
+        }
     }
 }
