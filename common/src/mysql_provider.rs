@@ -259,7 +259,6 @@ impl DbProvider for MySqlProvider {
         }
     }
 
-    //todo() 实现批量插入数据
     async fn save_patient_info(
         &self,
         tenant_id: &str,
@@ -271,37 +270,100 @@ impl DbProvider for MySqlProvider {
 
         let pool = self.pool.clone();
 
-        // 构建批量插入语句
-        let mut query_builder = "INSERT INTO PatientEntity (tenant_id, PatientID, PatientName, PatientBirthDate, PatientSex, PatientBirthTime, EthnicGroup) VALUES ".to_string();
-        let placeholders: Vec<String> = (0..patient_lists.len())
-            .map(|_| "(?, ?, ?, ?, ?, ?, ?)".to_string())
-            .collect();
-        query_builder.push_str(&placeholders.join(", "));
-        query_builder.push_str(" ON DUPLICATE KEY UPDATE PatientName = VALUES(PatientName), PatientBirthDate = VALUES(PatientBirthDate), PatientSex = VALUES(PatientSex), PatientBirthTime = VALUES(PatientBirthTime), EthnicGroup = VALUES(EthnicGroup)");
+        // 分批处理，避免SQL参数限制
+        const BATCH_SIZE: usize = 100;
+        for chunk in patient_lists.chunks(BATCH_SIZE) {
+            // 构建批量插入语句，确保字段顺序与表结构完全一致
+            let mut query_builder = "INSERT INTO PatientEntity (tenant_id, PatientID, PatientName, PatientBirthDate, PatientSex, PatientBirthTime, EthnicGroup) VALUES ".to_string();
+            let placeholders: Vec<String> = (0..chunk.len())
+                .map(|_| "(?, ?, ?, ?, ?, ?, ?)".to_string())
+                .collect();
+            query_builder.push_str(&placeholders.join(", "));
+            query_builder.push_str(" ON DUPLICATE KEY UPDATE PatientName = VALUES(PatientName), PatientBirthDate = VALUES(PatientBirthDate), PatientSex = VALUES(PatientSex), PatientBirthTime = VALUES(PatientBirthTime), EthnicGroup = VALUES(EthnicGroup)");
 
-        let query = sqlx::query(&query_builder);
+            let mut query = sqlx::query(&query_builder);
+            for patient in chunk {
+                query = query
+                    .bind(tenant_id)
+                    .bind(&patient.patient_id)
+                    .bind(&patient.patient_name)
+                    .bind(&patient.patient_birth_date)
+                    .bind(&patient.patient_sex)
+                    .bind(&patient.patient_birth_time)
+                    .bind(&patient.ethnic_group);
+            }
 
-        let mut query = query;
-        for patient in patient_lists {
-            query = query
-                .bind(tenant_id)
-                .bind(&patient.patient_id)
-                .bind(&patient.patient_name)
-                .bind(&patient.patient_birth_date)
-                .bind(&patient.patient_sex)
-                .bind(&patient.patient_birth_time)
-                .bind(&patient.ethnic_group);
-        }
-
-        match query.execute(&pool).await {
-            Ok(_) => Some(true),
-            Err(e) => {
-                error!("Failed to save patient info: {}", e);
-                None
+            match query.execute(&pool).await {
+                Ok(_) => continue,
+                Err(e) => {
+                    error!("Failed to save patient info: {}", e);
+                    return None;
+                }
             }
         }
+
+        Some(true)
     }
 
+
+    async fn save_study_info(&self, tenant_id: &str, study_lists: &[StudyEntity]) -> Option<bool> {
+        if study_lists.is_empty() {
+            return Some(true);
+        }
+
+        let pool = self.pool.clone();
+
+        // 分批处理，避免SQL参数限制
+        const BATCH_SIZE: usize = 100;
+        for chunk in study_lists.chunks(BATCH_SIZE) {
+            // 构建批量插入语句，确保字段顺序与表结构完全一致
+            let mut query_builder = "INSERT INTO StudyEntity (tenant_id, StudyInstanceUID, PatientID, StudyDate, StudyTime, AccessionNumber, StudyID, StudyDescription, ReferringPhysicianName, PatientAge, PatientSize, PatientWeight, MedicalAlerts, Allergies, PregnancyStatus, Occupation, AdditionalPatientHistory, PatientComments, AdmissionID, PatientAgeAtStudy, PerformingPhysicianName, ProcedureCodeSequence) VALUES ".to_string();
+            let placeholders: Vec<String> = (0..chunk.len())
+                .map(|_| {
+                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string()
+                })
+                .collect();
+            query_builder.push_str(&placeholders.join(", "));
+            query_builder.push_str(" ON DUPLICATE KEY UPDATE StudyDate = VALUES(StudyDate), StudyTime = VALUES(StudyTime), AccessionNumber = VALUES(AccessionNumber), StudyID = VALUES(StudyID), StudyDescription = VALUES(StudyDescription), ReferringPhysicianName = VALUES(ReferringPhysicianName), PatientAge = VALUES(PatientAge), PatientSize = VALUES(PatientSize), PatientWeight = VALUES(PatientWeight), MedicalAlerts = VALUES(MedicalAlerts), Allergies = VALUES(Allergies), PregnancyStatus = VALUES(PregnancyStatus), Occupation = VALUES(Occupation), AdditionalPatientHistory = VALUES(AdditionalPatientHistory), PatientComments = VALUES(PatientComments), AdmissionID = VALUES(AdmissionID), PatientAgeAtStudy = VALUES(PatientAgeAtStudy), PerformingPhysicianName = VALUES(PerformingPhysicianName), ProcedureCodeSequence = VALUES(ProcedureCodeSequence)");
+
+            let mut query = sqlx::query(&query_builder);
+            for study in chunk {
+                query = query
+                    .bind(tenant_id)
+                    .bind(&study.study_instance_uid)
+                    .bind(&study.patient_id)
+                    .bind(&study.study_date)
+                    .bind(&study.study_time)
+                    .bind(&study.accession_number)
+                    .bind(&study.study_id)
+                    .bind(&study.study_description)
+                    .bind(&study.referring_physician_name)
+                    .bind(&study.patient_age)
+                    .bind(&study.patient_size)
+                    .bind(&study.patient_weight)
+                    .bind(&study.medical_alerts)
+                    .bind(&study.allergies)
+                    .bind(&study.pregnancy_status)
+                    .bind(&study.occupation)
+                    .bind(&study.additional_patient_history)
+                    .bind(&study.patient_comments)
+                    .bind(&study.admission_id)
+                    .bind(&study.patient_age_at_study)
+                    .bind(&study.performing_physician_name)
+                    .bind(&study.procedure_code_sequence);
+            }
+
+            match query.execute(&pool).await {
+                Ok(_) => continue,
+                Err(e) => {
+                    error!("Failed to save study info: {}", e);
+                    return None;
+                }
+            }
+        }
+
+        Some(true)
+    }
     async fn save_series_info(
         &self,
         tenant_id: &str,
@@ -313,185 +375,122 @@ impl DbProvider for MySqlProvider {
 
         let pool = self.pool.clone();
 
-        // 构建批量插入语句
-        let mut query_builder = "INSERT INTO SeriesEntity (tenant_id, SeriesInstanceUID, StudyInstanceUID, Modality, SeriesNumber, SeriesDate, SeriesTime, SeriesDescription, BodyPartExamined, ProtocolName, ImageType, AcquisitionNumber, AcquisitionTime, AcquisitionDate, PerformingPhysicianName, OperatorsName, NumberOfSeriesRelatedInstances) VALUES ".to_string();
-        let placeholders: Vec<String> = (0..series_lists.len())
-            .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string())
-            .collect();
-        query_builder.push_str(&placeholders.join(", "));
-        query_builder.push_str(" ON DUPLICATE KEY UPDATE Modality = VALUES(Modality), SeriesNumber = VALUES(SeriesNumber), SeriesDate = VALUES(SeriesDate), SeriesTime = VALUES(SeriesTime), SeriesDescription = VALUES(SeriesDescription), BodyPartExamined = VALUES(BodyPartExamined), ProtocolName = VALUES(ProtocolName), ImageType = VALUES(ImageType), AcquisitionNumber = VALUES(AcquisitionNumber), AcquisitionTime = VALUES(AcquisitionTime), AcquisitionDate = VALUES(AcquisitionDate), PerformingPhysicianName = VALUES(PerformingPhysicianName), OperatorsName = VALUES(OperatorsName), NumberOfSeriesRelatedInstances = VALUES(NumberOfSeriesRelatedInstances)");
+        // 分批处理，避免SQL参数限制
+        const BATCH_SIZE: usize = 100;
+        for chunk in series_lists.chunks(BATCH_SIZE) {
+            // 构建批量插入语句，确保字段顺序与表结构完全一致
+            let mut query_builder = "INSERT INTO SeriesEntity (tenant_id, SeriesInstanceUID, StudyInstanceUID, Modality, SeriesNumber, SeriesDate, SeriesTime, SeriesDescription, BodyPartExamined, ProtocolName, ImageType, AcquisitionNumber, AcquisitionTime, AcquisitionDate, PerformingPhysicianName, OperatorsName, NumberOfSeriesRelatedInstances) VALUES ".to_string();
+            let placeholders: Vec<String> = (0..chunk.len())
+                .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string())
+                .collect();
+            query_builder.push_str(&placeholders.join(", "));
+            query_builder.push_str(" ON DUPLICATE KEY UPDATE Modality = VALUES(Modality), SeriesNumber = VALUES(SeriesNumber), SeriesDate = VALUES(SeriesDate), SeriesTime = VALUES(SeriesTime), SeriesDescription = VALUES(SeriesDescription), BodyPartExamined = VALUES(BodyPartExamined), ProtocolName = VALUES(ProtocolName), ImageType = VALUES(ImageType), AcquisitionNumber = VALUES(AcquisitionNumber), AcquisitionTime = VALUES(AcquisitionTime), AcquisitionDate = VALUES(AcquisitionDate), PerformingPhysicianName = VALUES(PerformingPhysicianName), OperatorsName = VALUES(OperatorsName), NumberOfSeriesRelatedInstances = VALUES(NumberOfSeriesRelatedInstances)");
 
-        let query = sqlx::query(&query_builder);
+            let mut query = sqlx::query(&query_builder);
+            for series in chunk {
+                query = query
+                    .bind(tenant_id)
+                    .bind(&series.series_instance_uid)
+                    .bind(&series.study_instance_uid)
+                    .bind(&series.modality)
+                    .bind(&series.series_number)
+                    .bind(&series.series_date)
+                    .bind(&series.series_time)
+                    .bind(&series.series_description)
+                    .bind(&series.body_part_examined)
+                    .bind(&series.protocol_name)
+                    .bind(&series.image_type)
+                    .bind(&series.acquisition_number)
+                    .bind(&series.acquisition_time)
+                    .bind(&series.acquisition_date)
+                    .bind(&series.performing_physician_name)
+                    .bind(&series.operators_name)
+                    .bind(&series.number_of_series_related_instances);
+            }
 
-        let mut query = query;
-        for series in series_lists {
-            query = query
-                .bind(tenant_id)
-                .bind(&series.series_instance_uid)
-                .bind(&series.study_instance_uid)
-                .bind(&series.modality)
-                .bind(&series.series_number)
-                .bind(&series.series_date)
-                .bind(&series.series_time)
-                .bind(&series.series_description)
-                .bind(&series.body_part_examined)
-                .bind(&series.protocol_name)
-                .bind(&series.image_type)
-                .bind(&series.acquisition_number)
-                .bind(&series.acquisition_time)
-                .bind(&series.acquisition_date)
-                .bind(&series.performing_physician_name)
-                .bind(&series.operators_name)
-                .bind(&series.number_of_series_related_instances);
-        }
-
-        match query.execute(&pool).await {
-            Ok(_) => Some(true),
-            Err(e) => {
-                error!("Failed to save series info: {}", e);
-                None
+            match query.execute(&pool).await {
+                Ok(_) => continue,
+                Err(e) => {
+                    error!("Failed to save series info: {}", e);
+                    return None;
+                }
             }
         }
+
+        Some(true)
     }
-    async fn save_study_info(&self, tenant_id: &str, study_lists: &[StudyEntity]) -> Option<bool> {
-        if study_lists.is_empty() {
+    async fn save_instance_info(&self, tenant_id: &str, dicom_obj: &[ImageEntity]) -> Option<bool> {
+        if dicom_obj.is_empty() {
             return Some(true);
         }
 
         let pool = self.pool.clone();
 
-        // 构建批量插入语句
-        let mut query_builder = "INSERT INTO StudyEntity (tenant_id, StudyInstanceUID, PatientID, StudyDate, StudyTime, AccessionNumber, StudyID, StudyDescription, ReferringPhysicianName, PatientAge, PatientSize, PatientWeight, MedicalAlerts, Allergies, PregnancyStatus, Occupation, AdditionalPatientHistory, PatientComments, AdmissionID, PatientAgeAtStudy, PerformingPhysicianName, ProcedureCodeSequence) VALUES ".to_string();
-        let placeholders: Vec<String> = (0..study_lists.len())
-            .map(|_| {
-                "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string()
-            })
-            .collect();
-        query_builder.push_str(&placeholders.join(", "));
-        query_builder.push_str(" ON DUPLICATE KEY UPDATE StudyDate = VALUES(StudyDate), StudyTime = VALUES(StudyTime), AccessionNumber = VALUES(AccessionNumber), StudyID = VALUES(StudyID), StudyDescription = VALUES(StudyDescription), ReferringPhysicianName = VALUES(ReferringPhysicianName), PatientAge = VALUES(PatientAge), PatientSize = VALUES(PatientSize), PatientWeight = VALUES(PatientWeight), MedicalAlerts = VALUES(MedicalAlerts), Allergies = VALUES(Allergies), PregnancyStatus = VALUES(PregnancyStatus), Occupation = VALUES(Occupation), AdditionalPatientHistory = VALUES(AdditionalPatientHistory), PatientComments = VALUES(PatientComments), AdmissionID = VALUES(AdmissionID), PatientAgeAtStudy = VALUES(PatientAgeAtStudy), PerformingPhysicianName = VALUES(PerformingPhysicianName), ProcedureCodeSequence = VALUES(ProcedureCodeSequence)");
+        // 分批处理，避免SQL参数限制
+        const BATCH_SIZE: usize = 100;
+        for (batch_index, chunk) in dicom_obj.chunks(BATCH_SIZE).enumerate() {
+            // 构建批量插入语句，确保字段顺序与表结构完全一致
+            let mut query_builder = "INSERT INTO ImageEntity (tenant_id, SOPInstanceUID, SeriesInstanceUID, StudyInstanceUID, PatientID, InstanceNumber, ImageComments, ContentDate, ContentTime, AcquisitionDateTime, ImageType, ImageOrientationPatient, ImagePositionPatient, SliceThickness, SpacingBetweenSlices, SliceLocation, SamplesPerPixel, PhotometricInterpretation, Width, Columns, BitsAllocated, BitsStored, HighBit, PixelRepresentation, RescaleIntercept, RescaleSlope, RescaleType, AcquisitionDeviceProcessingDescription, AcquisitionDeviceProcessingCode, DeviceSerialNumber, SoftwareVersions, TransferSyntaxUID, SOPClassUID) VALUES ".to_string();
+            let placeholders: Vec<String> = (0..chunk.len()).map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string()).collect();
+            query_builder.push_str(&placeholders.join(", "));
+            query_builder.push_str(" ON DUPLICATE KEY UPDATE InstanceNumber = VALUES(InstanceNumber), ImageComments = VALUES(ImageComments), ContentDate = VALUES(ContentDate), ContentTime = VALUES(ContentTime), AcquisitionDateTime = VALUES(AcquisitionDateTime), ImageType = VALUES(ImageType), ImageOrientationPatient = VALUES(ImageOrientationPatient), ImagePositionPatient = VALUES(ImagePositionPatient), SliceThickness = VALUES(SliceThickness), SpacingBetweenSlices = VALUES(SpacingBetweenSlices), SliceLocation = VALUES(SliceLocation), SamplesPerPixel = VALUES(SamplesPerPixel), PhotometricInterpretation = VALUES(PhotometricInterpretation), Width = VALUES(Width), Columns = VALUES(Columns), BitsAllocated = VALUES(BitsAllocated), BitsStored = VALUES(BitsStored), HighBit = VALUES(HighBit), PixelRepresentation = VALUES(PixelRepresentation), RescaleIntercept = VALUES(RescaleIntercept), RescaleSlope = VALUES(RescaleSlope), RescaleType = VALUES(RescaleType), AcquisitionDeviceProcessingDescription = VALUES(AcquisitionDeviceProcessingDescription), AcquisitionDeviceProcessingCode = VALUES(AcquisitionDeviceProcessingCode), DeviceSerialNumber = VALUES(DeviceSerialNumber), SoftwareVersions = VALUES(SoftwareVersions), TransferSyntaxUID = VALUES(TransferSyntaxUID)");
 
-        let query = sqlx::query(&query_builder);
+            let mut query = sqlx::query(&query_builder);
 
-        let mut query = query;
-        for study in study_lists {
-            query = query
-                .bind(tenant_id)
-                .bind(&study.study_instance_uid)
-                .bind(&study.patient_id)
-                .bind(&study.study_date)
-                .bind(&study.study_time)
-                .bind(&study.accession_number)
-                .bind(&study.study_id)
-                .bind(&study.study_description)
-                .bind(&study.referring_physician_name)
-                .bind(&study.patient_age)
-                .bind(&study.patient_size)
-                .bind(&study.patient_weight)
-                .bind(&study.medical_alerts)
-                .bind(&study.allergies)
-                .bind(&study.pregnancy_status)
-                .bind(&study.occupation)
-                .bind(&study.additional_patient_history)
-                .bind(&study.patient_comments)
-                .bind(&study.admission_id)
-                .bind(&study.patient_age_at_study)
-                .bind(&study.performing_physician_name)
-                .bind(&study.procedure_code_sequence);
-        }
-
-        match query.execute(&pool).await {
-            Ok(_) => Some(true),
-            Err(e) => {
-                error!("Failed to save study info: {}", e);
-                None
-            }
-        }
-    }
-
- async fn save_instance_info(&self, tenant_id: &str, dicom_obj: &[ImageEntity]) -> Option<bool> {
-    if dicom_obj.is_empty() {
-        return Some(true);
-    }
-
-    let pool = self.pool.clone();
-
-    // 分批处理，避免SQL参数限制
-    const BATCH_SIZE: usize = 100;
-    for (batch_index, chunk) in dicom_obj.chunks(BATCH_SIZE).enumerate() {
-        println!("Processing image batch {}/{} with {} items",
-                 batch_index + 1,
-                 (dicom_obj.len() + BATCH_SIZE - 1) / BATCH_SIZE,
-                 chunk.len());
-
-        // 构建批量插入语句
-        let mut query_builder = "INSERT INTO ImageEntity (tenant_id, SOPInstanceUID, SeriesInstanceUID, StudyInstanceUID, PatientID, InstanceNumber, ImageComments, ContentDate, ContentTime, AcquisitionDateTime, ImageType, ImageOrientationPatient, ImagePositionPatient, SliceThickness, SpacingBetweenSlices, SliceLocation, SamplesPerPixel, PhotometricInterpretation, Width, Columns, BitsAllocated, BitsStored, HighBit, PixelRepresentation, RescaleIntercept, RescaleSlope, RescaleType, AcquisitionDeviceProcessingDescription, AcquisitionDeviceProcessingCode, DeviceSerialNumber, SoftwareVersions, TransferSyntaxUID, SOPClassUID) VALUES ".to_string();
-        let placeholders: Vec<String> = (0..chunk.len()).map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string()).collect();
-        query_builder.push_str(&placeholders.join(", "));
-        query_builder.push_str(" ON DUPLICATE KEY UPDATE InstanceNumber = VALUES(InstanceNumber), ImageComments = VALUES(ImageComments), ContentDate = VALUES(ContentDate), ContentTime = VALUES(ContentTime), AcquisitionDateTime = VALUES(AcquisitionDateTime), ImageType = VALUES(ImageType), ImageOrientationPatient = VALUES(ImageOrientationPatient), ImagePositionPatient = VALUES(ImagePositionPatient), SliceThickness = VALUES(SliceThickness), SpacingBetweenSlices = VALUES(SpacingBetweenSlices), SliceLocation = VALUES(SliceLocation), SamplesPerPixel = VALUES(SamplesPerPixel), PhotometricInterpretation = VALUES(PhotometricInterpretation), Width = VALUES(Width), Columns = VALUES(Columns), BitsAllocated = VALUES(BitsAllocated), BitsStored = VALUES(BitsStored), HighBit = VALUES(HighBit), PixelRepresentation = VALUES(PixelRepresentation), RescaleIntercept = VALUES(RescaleIntercept), RescaleSlope = VALUES(RescaleSlope), RescaleType = VALUES(RescaleType), AcquisitionDeviceProcessingDescription = VALUES(AcquisitionDeviceProcessingDescription), AcquisitionDeviceProcessingCode = VALUES(AcquisitionDeviceProcessingCode), DeviceSerialNumber = VALUES(DeviceSerialNumber), SoftwareVersions = VALUES(SoftwareVersions), TransferSyntaxUID = VALUES(TransferSyntaxUID)");
-
-        let mut query = sqlx::query(&query_builder);
-
-        for (i, image) in chunk.iter().enumerate() {
-            // 添加调试信息
-            if i < 5 || i == chunk.len() - 1 {  // 只打印前5个和最后一个的调试信息
-                println!("Binding image {}: SOPInstanceUID={}, SeriesInstanceUID={}",
-                         i, image.sop_instance_uid, image.series_instance_uid);
+            for image in chunk {
+                query = query
+                    .bind(tenant_id)
+                    .bind(&image.sop_instance_uid)
+                    .bind(&image.series_instance_uid)
+                    .bind(&image.study_instance_uid)
+                    .bind(&image.patient_id)
+                    .bind(&image.instance_number)
+                    .bind(&image.image_comments)
+                    .bind(&image.content_date)
+                    .bind(&image.content_time)
+                    .bind(&image.acquisition_date_time)
+                    .bind(&image.image_type)
+                    .bind(&image.image_orientation_patient)
+                    .bind(&image.image_position_patient)
+                    .bind(&image.slice_thickness)
+                    .bind(&image.spacing_between_slices)
+                    .bind(&image.slice_location)
+                    .bind(&image.samples_per_pixel)
+                    .bind(&image.photometric_interpretation)
+                    .bind(&image.width)
+                    .bind(&image.columns)
+                    .bind(&image.bits_allocated)
+                    .bind(&image.bits_stored)
+                    .bind(&image.high_bit)
+                    .bind(&image.pixel_representation)
+                    .bind(&image.rescale_intercept)
+                    .bind(&image.rescale_slope)
+                    .bind(&image.rescale_type)
+                    .bind(&image.acquisition_device_processing_description)
+                    .bind(&image.acquisition_device_processing_code)
+                    .bind(&image.device_serial_number)
+                    .bind(&image.software_versions)
+                    .bind(&image.transfer_syntax_uid)
+                    .bind(&image.sop_class_uid);
             }
 
-            query = query
-                .bind(tenant_id)
-                .bind(&image.sop_instance_uid)
-                .bind(&image.series_instance_uid)
-                .bind(&image.study_instance_uid)
-                .bind(&image.patient_id)
-                .bind(&image.instance_number)
-                .bind(&image.image_comments)
-                .bind(&image.content_date)
-                .bind(&image.content_time)
-                .bind(&image.acquisition_date_time)
-                .bind(&image.image_type)
-                .bind(&image.image_orientation_patient)
-                .bind(&image.image_position_patient)
-                .bind(&image.slice_thickness)
-                .bind(&image.spacing_between_slices)
-                .bind(&image.slice_location)
-                .bind(&image.samples_per_pixel)
-                .bind(&image.photometric_interpretation)
-                .bind(&image.width)
-                .bind(&image.columns)
-                .bind(&image.bits_allocated)
-                .bind(&image.bits_stored)
-                .bind(&image.high_bit)
-                .bind(&image.pixel_representation)
-                .bind(&image.rescale_intercept)
-                .bind(&image.rescale_slope)
-                .bind(&image.rescale_type)
-                .bind(&image.acquisition_device_processing_description)
-                .bind(&image.acquisition_device_processing_code)
-                .bind(&image.device_serial_number)
-                .bind(&image.software_versions)
-                .bind(&image.transfer_syntax_uid)
-                .bind(&image.sop_class_uid);
-        }
-
-        match query.execute(&pool).await {
-            Ok(result) => {
-                println!("Batch {} completed. Rows affected: {}", batch_index + 1, result.rows_affected());
-                continue;
-            },
-            Err(e) => {
-                error!("Failed to save instance info in batch {}: {}", batch_index + 1, e);
-                println!("Failed to save instance info in batch {}: {}", batch_index + 1, e);
-                // 可以选择在这里继续处理下一个批次，或者直接返回错误
-                // 如果想继续处理其他批次，可以继续；如果想立即失败，可以返回 None
-                return None;
+            match query.execute(&pool).await {
+                Ok(_) => {
+                    continue;
+                }
+                Err(e) => {
+                    error!(
+                        "Failed to save instance info in batch {}: {}",
+                        batch_index + 1,
+                        e
+                    );
+                    return None;
+                }
             }
         }
-    }
 
-    println!("All image batches processed successfully");
-    Some(true)
-}
+        Some(true)
+    }
 
     async fn delete_study_info(&self, tenant_id: &str, study_uid: &str) -> Option<bool> {
         let tenant_id = tenant_id.to_string();
@@ -689,9 +688,7 @@ impl DbProvider for MySqlProvider {
 mod tests {
     use super::*;
     use crate::file_utils;
-    use dicom_core::{DataElement, PrimitiveValue, VR};
     use dicom_dictionary_std::tags;
-    use dicom_object::InMemDicomObject;
     use sqlx::MySqlPool;
     use std::collections::HashMap;
     use std::path::Path;
@@ -706,108 +703,108 @@ mod tests {
     }
 
     // 创建测试用的 DICOM 对象
-    fn create_test_dicom_object() -> InMemDicomObject {
-        let mut obj = InMemDicomObject::new_empty();
-
-        // 添加基本的 DICOM 元素用于测试
-        obj.put(DataElement::new(
-            tags::PATIENT_ID,
-            VR::LO,
-            PrimitiveValue::from("TEST_PATIENT_001"),
-        ));
-
-        obj.put(DataElement::new(
-            tags::PATIENT_NAME,
-            VR::PN,
-            PrimitiveValue::from("Doe^John"),
-        ));
-
-        obj.put(DataElement::new(
-            tags::PATIENT_BIRTH_DATE,
-            VR::DA,
-            PrimitiveValue::from("19800101"),
-        ));
-
-        obj.put(DataElement::new(
-            tags::PATIENT_SEX,
-            VR::CS,
-            PrimitiveValue::from("M"),
-        ));
-
-        obj.put(DataElement::new(
-            tags::STUDY_INSTANCE_UID,
-            VR::UI,
-            PrimitiveValue::from("1.2.3.4.5.6.7.8.9.10"),
-        ));
-
-        obj.put(DataElement::new(
-            tags::STUDY_DATE,
-            VR::DA,
-            PrimitiveValue::from("20230101"),
-        ));
-
-        obj.put(DataElement::new(
-            tags::STUDY_TIME,
-            VR::TM,
-            PrimitiveValue::from("120000"),
-        ));
-
-        obj.put(DataElement::new(
-            tags::STUDY_DESCRIPTION,
-            VR::LO,
-            PrimitiveValue::from("CT Chest"),
-        ));
-
-        obj.put(DataElement::new(
-            tags::SERIES_INSTANCE_UID,
-            VR::UI,
-            PrimitiveValue::from("1.2.3.4.5.6.7.8.9.11"),
-        ));
-
-        obj.put(DataElement::new(
-            tags::MODALITY,
-            VR::CS,
-            PrimitiveValue::from("CT"),
-        ));
-
-        obj.put(DataElement::new(
-            tags::SERIES_NUMBER,
-            VR::IS,
-            PrimitiveValue::from(1),
-        ));
-
-        obj.put(DataElement::new(
-            tags::SOP_INSTANCE_UID,
-            VR::UI,
-            PrimitiveValue::from("1.2.3.4.5.6.7.8.9.12"),
-        ));
-
-        obj.put(DataElement::new(
-            tags::SOP_CLASS_UID,
-            VR::UI,
-            PrimitiveValue::from("1.2.840.10008.5.1.4.1.1.2"), // CT Image Storage
-        ));
-
-        obj.put(DataElement::new(
-            tags::INSTANCE_NUMBER,
-            VR::IS,
-            PrimitiveValue::from(1),
-        ));
-
-        obj.put(DataElement::new(
-            tags::ROWS,
-            VR::US,
-            PrimitiveValue::from(512),
-        ));
-
-        obj.put(DataElement::new(
-            tags::COLUMNS,
-            VR::US,
-            PrimitiveValue::from(512),
-        ));
-
-        obj
-    }
+    // fn create_test_dicom_object() -> InMemDicomObject {
+    //     let mut obj = InMemDicomObject::new_empty();
+    //
+    //     // 添加基本的 DICOM 元素用于测试
+    //     obj.put(DataElement::new(
+    //         tags::PATIENT_ID,
+    //         VR::LO,
+    //         PrimitiveValue::from("TEST_PATIENT_001"),
+    //     ));
+    //
+    //     obj.put(DataElement::new(
+    //         tags::PATIENT_NAME,
+    //         VR::PN,
+    //         PrimitiveValue::from("Doe^John"),
+    //     ));
+    //
+    //     obj.put(DataElement::new(
+    //         tags::PATIENT_BIRTH_DATE,
+    //         VR::DA,
+    //         PrimitiveValue::from("19800101"),
+    //     ));
+    //
+    //     obj.put(DataElement::new(
+    //         tags::PATIENT_SEX,
+    //         VR::CS,
+    //         PrimitiveValue::from("M"),
+    //     ));
+    //
+    //     obj.put(DataElement::new(
+    //         tags::STUDY_INSTANCE_UID,
+    //         VR::UI,
+    //         PrimitiveValue::from("1.2.3.4.5.6.7.8.9.10"),
+    //     ));
+    //
+    //     obj.put(DataElement::new(
+    //         tags::STUDY_DATE,
+    //         VR::DA,
+    //         PrimitiveValue::from("20230101"),
+    //     ));
+    //
+    //     obj.put(DataElement::new(
+    //         tags::STUDY_TIME,
+    //         VR::TM,
+    //         PrimitiveValue::from("120000"),
+    //     ));
+    //
+    //     obj.put(DataElement::new(
+    //         tags::STUDY_DESCRIPTION,
+    //         VR::LO,
+    //         PrimitiveValue::from("CT Chest"),
+    //     ));
+    //
+    //     obj.put(DataElement::new(
+    //         tags::SERIES_INSTANCE_UID,
+    //         VR::UI,
+    //         PrimitiveValue::from("1.2.3.4.5.6.7.8.9.11"),
+    //     ));
+    //
+    //     obj.put(DataElement::new(
+    //         tags::MODALITY,
+    //         VR::CS,
+    //         PrimitiveValue::from("CT"),
+    //     ));
+    //
+    //     obj.put(DataElement::new(
+    //         tags::SERIES_NUMBER,
+    //         VR::IS,
+    //         PrimitiveValue::from(1),
+    //     ));
+    //
+    //     obj.put(DataElement::new(
+    //         tags::SOP_INSTANCE_UID,
+    //         VR::UI,
+    //         PrimitiveValue::from("1.2.3.4.5.6.7.8.9.12"),
+    //     ));
+    //
+    //     obj.put(DataElement::new(
+    //         tags::SOP_CLASS_UID,
+    //         VR::UI,
+    //         PrimitiveValue::from("1.2.840.10008.5.1.4.1.1.2"), // CT Image Storage
+    //     ));
+    //
+    //     obj.put(DataElement::new(
+    //         tags::INSTANCE_NUMBER,
+    //         VR::IS,
+    //         PrimitiveValue::from(1),
+    //     ));
+    //
+    //     obj.put(DataElement::new(
+    //         tags::ROWS,
+    //         VR::US,
+    //         PrimitiveValue::from(512),
+    //     ));
+    //
+    //     obj.put(DataElement::new(
+    //         tags::COLUMNS,
+    //         VR::US,
+    //         PrimitiveValue::from(512),
+    //     ));
+    //
+    //     obj
+    // }
 
     #[tokio::test]
     async fn test_save_dicom_info_success() {
@@ -945,8 +942,10 @@ mod tests {
                     // 添加更详细的调试信息
                     println!("图像数据详情:");
                     for (i, (id, image)) in images_list.iter().take(3).enumerate() {
-                        println!("  Image {}: ID={}, Series={}, Study={}",
-                                 i, id, image.series_instance_uid, image.study_instance_uid);
+                        println!(
+                            "  Image {}: ID={}, Series={}, Study={}",
+                            i, id, image.series_instance_uid, image.study_instance_uid
+                        );
                     }
                     if images_list.len() > 3 {
                         println!("  ... and {} more items", images_list.len() - 3);
