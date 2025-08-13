@@ -1,6 +1,6 @@
 use dicom_core::Tag;
 use dicom_dictionary_std::tags;
-use dicom_object::{DefaultDicomObject, InMemDicomObject};
+use dicom_object::DefaultDicomObject;
 
 // patient.rs
 #[derive(Debug, Clone)]
@@ -245,8 +245,8 @@ impl DbProviderBase {
     pub(crate) fn extract_image_entity(
         tenant_id: &str,
         dicom_obj: &DefaultDicomObject,
-        series_uid: &str,
         study_uid: &str,
+        series_uid: &str,
         patient_id: &str,
     ) -> ImageEntity {
         let acquisition_date_time = Self::get_text_value(dicom_obj, tags::ACQUISITION_DATE_TIME);

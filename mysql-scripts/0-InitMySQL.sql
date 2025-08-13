@@ -33,10 +33,10 @@ CREATE TABLE StudyEntity
 (
     tenant_id               VARCHAR(64) NOT NULL COMMENT '租户ID',
     -- 主键：检查唯一标识符
-    StudyInstanceUID        VARCHAR(64) NOT NULL PRIMARY KEY COMMENT '检查实例UID (0020,000D)',
+    StudyInstanceUID        VARCHAR(64) NOT NULL COMMENT '检查实例UID (0020,000D)',
     -- 外键：关联患者
     PatientID               VARCHAR(64) NOT NULL COMMENT '患者ID (外键，关联 PatientEntity) (0010,0020)',
-    CONSTRAINT fk_study_patient FOREIGN KEY (PatientID) REFERENCES PatientEntity (PatientID) ON DELETE CASCADE,
+
     -- 检查时的病人基本 信息
     PatientAge       VARCHAR(10) COMMENT '患者年龄 (0010,1010)',
     PatientSize      DECIMAL(5, 2) COMMENT '患者身高 (m)',
@@ -64,6 +64,7 @@ CREATE TABLE StudyEntity
     -- 时间戳
     CreatedTime             DATETIME DEFAULT CURRENT_TIMESTAMP,
     UpdatedTime             DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (tenant_id, StudyInstanceUID),
     -- 索引
     INDEX                   idx_patient_id (PatientID),
     INDEX                   idx_accession_number (AccessionNumber),
@@ -76,10 +77,10 @@ CREATE TABLE SeriesEntity
 (
     tenant_id                      VARCHAR(64) NOT NULL COMMENT '租户ID',
     -- 主键：序列唯一标识符
-    SeriesInstanceUID              VARCHAR(64) NOT NULL PRIMARY KEY COMMENT '序列实例UID (0020,000E)',
+    SeriesInstanceUID              VARCHAR(64) NOT NULL COMMENT '序列实例UID (0020,000E)',
     -- 外键：关联检查
     StudyInstanceUID               VARCHAR(64) NOT NULL COMMENT '检查实例UID (外键) (0020,000D)',
-    CONSTRAINT fk_series_study FOREIGN KEY (StudyInstanceUID) REFERENCES StudyEntity (StudyInstanceUID) ON DELETE CASCADE,
+
     -- 序列基本信息
     Modality                       VARCHAR(16) NOT NULL COMMENT '模态 (0008,0060) - CS, VM=1, max 16 chars (如 CT, MR, XR)',
     SeriesNumber                   INT COMMENT '序列号 (0020,0011) - IS, VM=1, max 12 chars → 用 INT',
@@ -102,6 +103,8 @@ CREATE TABLE SeriesEntity
     -- 时间戳
     CreatedTime                    DATETIME DEFAULT CURRENT_TIMESTAMP,
     UpdatedTime                    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    -- Primary Key
+    PRIMARY KEY (tenant_id, SeriesInstanceUID),
     -- 索引
     INDEX                          idx_study_uid (StudyInstanceUID),
     INDEX                          idx_modality (Modality),
@@ -113,20 +116,12 @@ CREATE TABLE ImageEntity
 (
     tenant_id                              VARCHAR(64) NOT NULL COMMENT '租户ID',
     -- 主键：图像唯一实例标识符 (SOP Instance UID)
-    SOPInstanceUID                         VARCHAR(64) NOT NULL PRIMARY KEY COMMENT 'SOP实例UID (0008,0018)',
+    SOPInstanceUID                         VARCHAR(64) NOT NULL COMMENT 'SOP实例UID (0008,0018)',
 
     -- 外键：关联上层实体
     SeriesInstanceUID                      VARCHAR(64) NOT NULL COMMENT '序列实例UID (外键，关联 SeriesEntity) (0020,000E)',
     StudyInstanceUID                       VARCHAR(64) NOT NULL COMMENT '检查实例UID (冗余但常用，便于查询) (0020,000D)',
     PatientID                              VARCHAR(64) NOT NULL COMMENT '患者ID (冗余但常用) (0010,0020)',
-
-    -- 建立外键约束
-    CONSTRAINT fk_image_series
-        FOREIGN KEY (SeriesInstanceUID) REFERENCES SeriesEntity (SeriesInstanceUID) ON DELETE CASCADE,
-    CONSTRAINT fk_image_study
-        FOREIGN KEY (StudyInstanceUID) REFERENCES StudyEntity (StudyInstanceUID) ON DELETE CASCADE,
-    CONSTRAINT fk_image_patient
-        FOREIGN KEY (PatientID) REFERENCES PatientEntity (PatientID) ON DELETE CASCADE,
     -- 图像基本信息
     InstanceNumber                         INT COMMENT '实例编号 (0020,0013) - IS, VM=1, max 12 chars → INT',
     ImageComments                          TEXT COMMENT '图像注释 (0020,4000) - LT, VM=1, max 10240 chars',
@@ -173,7 +168,8 @@ CREATE TABLE ImageEntity
     -- 时间戳
     CreatedTime                            DATETIME    DEFAULT CURRENT_TIMESTAMP,
     UpdatedTime                            DATETIME    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
+-- Primary Key
+    PRIMARY KEY (tenant_id, SOPInstanceUID),
     -- 索引：优化查询性能
     INDEX                                  idx_series_uid (SeriesInstanceUID),
     INDEX                                  idx_study_uid (StudyInstanceUID),
