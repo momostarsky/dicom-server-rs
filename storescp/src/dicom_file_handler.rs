@@ -3,7 +3,7 @@ use dicom_dictionary_std::tags;
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
-use snafu::{ResultExt, Whatever};
+use snafu::{whatever, ResultExt, Whatever};
 use tracing::info;
 use common::entities::DbProviderBase;
 
@@ -106,9 +106,13 @@ pub(crate) async fn process_dicom_file(
         sop_instance_uid.trim_end_matches('\0').to_string() + ".dcm"
     );
 
-    file_obj
-        .write_to_file(&file_path)
-        .whatever_context("could not save DICOM object to file")?;
+    let write_result = file_obj.write_to_file(&file_path);
+    if write_result.is_err() {
+        info!("write file failed: {}", file_path);
+        whatever!("write file failed");
+    }
+
+
     info!("Stored {}, {}", ts, sop_instance_uid);
     let pat =DbProviderBase::extract_patient_entity(issue_patient_id,&file_obj);
     let study =DbProviderBase::extract_study_entity(issue_patient_id,&file_obj , pat.patient_id.as_str());
