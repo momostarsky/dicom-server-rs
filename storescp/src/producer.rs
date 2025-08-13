@@ -1,10 +1,11 @@
 // producer.rs
+use common::entities::DicomObjectMeta;
 use common::{server_config, DicomMessage};
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord, Producer};
-use std::time::Duration;
 use rdkafka::util::Timeout;
-use tracing::{error, info, debug};
+use std::time::Duration;
+use tracing::{debug, error, info};
 
 pub struct KafkaProducer {
     producer: FutureProducer,
@@ -59,19 +60,26 @@ impl KafkaProducer {
             .create()
             .expect("Failed to create Kafka producer");
 
-        KafkaProducer { producer, topic: kafka_config.topic  }
+        KafkaProducer {
+            producer,
+            topic: kafka_config.topic,
+        }
     }
 
     pub(crate) async fn send_messages(
         &self,
         topic: &str,
-        messages: &[DicomMessage],
+        messages: &[DicomObjectMeta],
     ) -> Result<(), Box<dyn std::error::Error>> {
         info!("Sending {} messages to topic {}", messages.len(), topic);
         for msg in messages {
             let payload = serde_json::to_vec(msg)?;
-            let key = format!("{}_{}", msg.tenant, msg.sop_instance_uid);  // 使用 String 的引用
-            let record: FutureRecord<String, Vec<u8>> = FutureRecord::to(topic).key(&key).payload(&payload);
+            let key = format!(
+                "{}_{}",
+                msg.patient_info.tenant_id, msg.image_info.sop_instance_uid
+            ); // 使用 String 的引用
+            let record: FutureRecord<String, Vec<u8>> =
+                FutureRecord::to(topic).key(&key).payload(&payload);
             self.producer
                 .send(record, Timeout::After(Duration::from_secs(1)))
                 .await

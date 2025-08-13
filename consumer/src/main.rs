@@ -1,3 +1,4 @@
+use common::entities::DicomObjectMeta;
 use common::{DicomMessage, server_config};
 use futures::StreamExt;
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
@@ -21,15 +22,13 @@ async fn main() {
         }
     };
 
-    let kafka_config_opt = config.kafka ;
-    let kafka_config =match kafka_config_opt {
+    let kafka_config_opt = config.kafka;
+    let kafka_config = match kafka_config_opt {
         None => {
             error!("kafka config is None");
             std::process::exit(-2);
         }
-        Some(kafka_config) => {
-            kafka_config
-        }
+        Some(kafka_config) => kafka_config,
     };
 
     let processed_messages: ProcessedMessages = Arc::new(Mutex::new(HashSet::new()));
@@ -68,14 +67,14 @@ async fn main() {
             Ok(message) => {
                 match message.payload() {
                     Some(payload) => {
-                        match serde_json::from_slice::<DicomMessage>(payload) {
+                        match serde_json::from_slice::<DicomObjectMeta>(payload) {
                             Ok(dicom_message) => {
                                 // 处理消息（带幂等性检查）
                                 if let Err(e) = process_dicom_message_with_idempotency(
                                     dicom_message,
                                     processed_messages.clone(),
                                 )
-                                    .await
+                                .await
                                 {
                                     eprintln!("Failed to process message: {}", e);
                                     // 处理失败时不提交偏移量，消息会重新消费
@@ -116,10 +115,13 @@ async fn main() {
 }
 
 async fn process_dicom_message_with_idempotency(
-    message: DicomMessage,
+    message: DicomObjectMeta,
     processed_messages: ProcessedMessages,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let message_id = format!("{}_{}", message.tenant, message.sop_instance_uid);
+    let message_id = format!(
+        "{}_{}",
+        message.patient_info.tenant_id, message.image_info.sop_instance_uid
+    );
 
     // 检查是否已经处理过
     {

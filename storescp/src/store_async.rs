@@ -1,3 +1,4 @@
+use common::DicomMessage;
 use crate::producer::KafkaProducer;
 use crate::{
     create_cecho_response, create_cstore_response, dicom_file_handler, transfer::ABSTRACT_SYNTAXES,
@@ -78,7 +79,7 @@ pub async fn run_store_async(
     );
     let base_dir = out_dir.to_str().unwrap();
     let kafka_producer = KafkaProducer::new();
-    let mut dicom_message_lists = vec![];
+    let mut dicom_message_lists: Vec<common::entities::DicomObjectMeta> = vec![];
     loop {
         match association.receive().await {
             Ok(mut pdu) => {

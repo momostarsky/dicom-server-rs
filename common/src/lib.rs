@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-mod db_provider;
-mod mysql_provider;
+pub mod db_provider;
+pub mod mysql_provider;
 pub mod server_config;
-mod entities;
-mod file_utils;
+pub mod entities;
+pub mod file_utils;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DicomMessage {

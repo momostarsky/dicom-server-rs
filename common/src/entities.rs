@@ -1,9 +1,10 @@
 use dicom_core::Tag;
 use dicom_dictionary_std::tags;
 use dicom_object::DefaultDicomObject;
+use serde::{Deserialize, Serialize};
 
 // patient.rs
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PatientEntity {
     pub tenant_id: String,
     pub patient_id: String,
@@ -17,7 +18,7 @@ pub struct PatientEntity {
 }
 
 // study.rs
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StudyEntity {
     pub tenant_id: String,
     pub study_instance_uid: String,
@@ -46,7 +47,7 @@ pub struct StudyEntity {
 }
 
 // series.rs
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SeriesEntity {
     pub tenant_id: String,
     pub series_instance_uid: String,
@@ -70,7 +71,7 @@ pub struct SeriesEntity {
 }
 
 // image.rs
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImageEntity {
     pub tenant_id: String,
     pub sop_instance_uid: String,
@@ -111,6 +112,16 @@ pub struct ImageEntity {
     pub created_time: Option<String>,
     pub updated_time: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DicomObjectMeta {
+    pub patient_info: PatientEntity,
+    pub study_info: StudyEntity,
+    pub series_info: SeriesEntity,
+    pub image_info: ImageEntity,
+    pub file_size: u64,
+    pub file_path: String,
+}
 pub struct DbProviderBase {}
 impl DbProviderBase {
     fn get_text_value(dicom_obj: &DefaultDicomObject, tag: Tag) -> Option<String> {
@@ -150,7 +161,10 @@ impl DbProviderBase {
             .and_then(|e| e.to_float64().ok())
     }
 
-    pub(crate) fn extract_patient_entity(tenant_id: &str, dicom_obj: &DefaultDicomObject) -> PatientEntity {
+    pub fn extract_patient_entity(
+        tenant_id: &str,
+        dicom_obj: &DefaultDicomObject,
+    ) -> PatientEntity {
         PatientEntity {
             tenant_id: tenant_id.to_string(),
             patient_id: Self::get_text_value(dicom_obj, tags::PATIENT_ID).unwrap_or_default(),
@@ -164,7 +178,7 @@ impl DbProviderBase {
         }
     }
 
-    pub(crate) fn extract_study_entity(
+    pub fn extract_study_entity(
         tenant_id: &str,
         dicom_obj: &DefaultDicomObject,
         patient_id: &str,
@@ -207,7 +221,7 @@ impl DbProviderBase {
         }
     }
 
-    pub(crate) fn extract_series_entity(
+    pub fn extract_series_entity(
         tenant_id: &str,
         dicom_obj: &DefaultDicomObject,
         study_uid: &str,
@@ -242,7 +256,7 @@ impl DbProviderBase {
         }
     }
 
-    pub(crate) fn extract_image_entity(
+    pub fn extract_image_entity(
         tenant_id: &str,
         dicom_obj: &DefaultDicomObject,
         study_uid: &str,

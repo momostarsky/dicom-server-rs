@@ -5,6 +5,7 @@ use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use snafu::{ResultExt, Whatever};
 use tracing::info;
+use common::entities::DbProviderBase;
 
 pub(crate) async fn process_dicom_file(
     instance_buffer: &[u8],         //DICOM文件的字节数组或是二进制流
@@ -12,7 +13,7 @@ pub(crate) async fn process_dicom_file(
     issue_patient_id: &String,      // 机构ID,或是医院ID, 用于区分多个医院.
     ts: &String,                    // 传输语法
     sop_instance_uid: &String,      //当前文件的SOP实例ID
-    lst:&mut Vec<DicomMessage>
+    lst:&mut Vec<common::entities::DicomObjectMeta>
 ) -> Result<(), Whatever> {
     let obj = InMemDicomObject::read_dataset_with_ts(
         instance_buffer,
@@ -109,35 +110,26 @@ pub(crate) async fn process_dicom_file(
         .write_to_file(&file_path)
         .whatever_context("could not save DICOM object to file")?;
     info!("Stored {}, {}", ts, sop_instance_uid);
+    let pat =DbProviderBase::extract_patient_entity(issue_patient_id,&file_obj);
+    let study =DbProviderBase::extract_study_entity(issue_patient_id,&file_obj , pat.patient_id.as_str());
+    let series =DbProviderBase::extract_series_entity(issue_patient_id,&file_obj,study_uid.as_str());
+    let image =DbProviderBase::extract_image_entity(issue_patient_id,&file_obj,
+                                                    study_uid.as_str(),
+                                                    series_uid.as_str(),
+                                                    pat.patient_id.as_str());
 
-    let dicom_message = DicomMessage {
-        tenant: issue_patient_id.to_string(),
-        transfer_syntax: ts.to_string(),
-        sop_instance_uid: sop_instance_uid.to_string(),
-        study_instance_uid: study_uid.to_string(),
-        series_instance_uid: series_uid.to_string(),
-        patient_id: pat_id.to_string(),
-        file_path: file_path.to_string(),
-        accession_number: accession_number.to_string(),
-        file_size: instance_buffer.len() as u64,
+    let fs =   std::fs::metadata(file_path.as_str());
+    let file_size = match fs {
+        Ok(fs) => fs.len() as u64,
+        Err(_) => 0,
     };
-    lst.push(dicom_message.clone());
-
-    // let key_str = format!(
-    //     "{}_{}",
-    //     dicom_message.tenant, dicom_message.sop_instance_uid
-    // );
-    // // 1. 发送到存储队列
-    // kafka_producer
-    //     .send_message("storage_queue", key_str.as_str(), &dicom_message)
-    //     .await
-    //     .unwrap();
-    //
-    // // 2. 发送到索引队列
-    // kafka_producer
-    //     .send_message("index_queue", key_str.as_str(), &dicom_message)
-    //     .await
-    //     .unwrap();
-
+    lst.push(common::entities::DicomObjectMeta {
+        patient_info: pat,
+        study_info: study,
+        series_info: series,
+        image_info: image,
+        file_path: file_path.to_string(),
+        file_size,
+    });
     Ok(())
 }
