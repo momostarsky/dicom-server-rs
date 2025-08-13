@@ -870,8 +870,8 @@ mod tests {
                     let image_entity = crate::entities::DbProviderBase::extract_image_entity(
                         tenant_id,
                         &dcmobj,
-                        series_id.as_str(), // 使用 clone 后的值，避免 move
                         study_uid.as_str(), // 使用 clone 后的值，避免 move
+                        series_id.as_str(), // 使用 clone 后的值，避免 move 
                         &patient_id,        // 使用 clone 后的值，避免 move
                     );
                     let image_id = image_entity.sop_instance_uid.clone();
