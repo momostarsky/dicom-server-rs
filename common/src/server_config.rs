@@ -46,7 +46,9 @@ pub struct KafkaConfig {
     pub queue_buffering_max_ms: u32,
     pub linger_ms: u32,
     pub compression_codec: String,
-    pub topic: String,
+    pub topic_main: String,
+    pub topic_change_transfer_syntax: String,
+    pub topic_extract_dicom: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -148,7 +150,12 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
             );
             println!("kafka:linger_ms {:?}", kafka.linger_ms);
             println!("kafka:compression_codec {:?}", kafka.compression_codec);
-            println!("kafka:topic {:?}", kafka.topic);
+            println!("kafka:topic {:?}", kafka.topic_main);
+            println!(
+                "kafka:topic_change_transfer_syntax {:?}",
+                kafka.topic_change_transfer_syntax
+            );
+            println!("kafka:topic_extract_dicom {:?}", kafka.topic_extract_dicom); 
         }
         _ => {
             println!("other config {:?}", app_config);

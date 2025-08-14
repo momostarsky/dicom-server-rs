@@ -66,7 +66,7 @@ impl KafkaProducer {
 
         KafkaProducer {
             producer,
-            topic: kafka_config.topic,
+            topic: kafka_config.topic_main,
         }
     }
 

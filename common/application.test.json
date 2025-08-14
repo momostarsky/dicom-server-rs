@@ -22,7 +22,9 @@
   },
   "kafka": {
     "brokers": "192.168.1.14:9092",
-    "topic": "storage_queue",
+    "topic_main": "storage_queue",
+    "topic_change_transfer_syntax": "change_transfer_sntax",
+    "topic_extract_dicom": "extract_dicom",
     "consumer_group_id": "dicom-consumer-group",
     "queue_buffering_max_messages": 1000,
     "queue_buffering_max_kbytes": 1048576,

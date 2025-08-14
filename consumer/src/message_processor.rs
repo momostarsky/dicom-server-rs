@@ -60,7 +60,7 @@ pub async fn start_process() {
         .create()
         .expect("create consumer failed");
 
-    let topic = kafka_config.topic.as_str();
+    let topic = kafka_config.topic_main.as_str();
     tracing::info!("Subscribing to topic: {}", topic);
 
     match consumer.subscribe(&[topic]) {
