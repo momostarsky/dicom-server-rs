@@ -1,9 +1,9 @@
-use common::DicomMessage;
 use crate::producer::KafkaProducer;
 use crate::{
     create_cecho_response, create_cstore_response, dicom_file_handler, transfer::ABSTRACT_SYNTAXES,
     App,
 };
+use common::entities::DicomObjectMeta;
 use dicom_core::chrono::Local;
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
@@ -215,6 +215,21 @@ pub async fn run_store_async(
                                         // 根据业务需求决定如何处理
                                     }
                                 }
+                                if dicom_message_lists.len() >= 10 {
+                                    match kafka_producer
+                                        .send_batch_messages("dicom", &dicom_message_lists)
+                                        .await
+                                    {
+                                        Ok(_) => {
+                                            info!("Successfully sent messages to Kafka");
+                                        }
+                                        Err(e) => {
+                                            error!("Failed to send messages to Kafka: {}", e);
+                                        }
+                                    }
+
+                                    dicom_message_lists.clear();
+                                }
 
                                 // send C-STORE-RSP object
                                 // commands are always in implicit VR LE
@@ -292,45 +307,6 @@ pub async fn run_store_async(
     } else {
         info!("Dropping connection with {}", association.client_ae_title());
     }
-    if dicom_message_lists.len() > 0 {
-        kafka_producer
-            .send_messages( kafka_producer.topic.as_str(), &dicom_message_lists)
-            .await
-            .unwrap_or_else(|e| {
-                warn!(
-                    "Failed to send messages to Kafka: {}. Writing to disk backup.",
-                    e
-                );
-                // 生成带时间戳的备份文件名
-                let timestamp = Local::now().format("%Y%m%d_%H%M%S");
-                let backup_filename = format!("kafka_backup_{}.json", timestamp);
-                // 将消息列表序列化为 JSON
-                match serde_json::to_string_pretty(&dicom_message_lists) {
-                    Ok(json_data) => {
-                        // 写入磁盘文件
-                        match std::fs::write(&backup_filename, json_data) {
-                            Ok(_) => {
-                                info!(
-                                    "Successfully wrote {} messages to backup file: {}",
-                                    dicom_message_lists.len(),
-                                    backup_filename
-                                );
-                            }
-                            Err(write_err) => {
-                                error!(
-                                    "Failed to write backup file {}: {}",
-                                    backup_filename, write_err
-                                );
-                            }
-                        }
-                    }
-                    Err(serialize_err) => {
-                        error!("Failed to serialize dicom_message_lists: {}", serialize_err);
-                    }
-                }
-            });
-
-        dicom_message_lists.clear();
-    }
+    dicom_file_handler::sendmessage_to_kafka(&kafka_producer, &dicom_message_lists).await;
     Ok(())
 }

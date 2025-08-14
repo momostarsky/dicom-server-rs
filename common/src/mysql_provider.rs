@@ -6,7 +6,7 @@ use sqlx::{MySqlPool, Row};
 use tracing::{error, info};
 
 pub struct MySqlProvider {
-    pool: MySqlPool,
+    pub pool: MySqlPool,
 }
 
 #[async_trait]
@@ -304,7 +304,6 @@ impl DbProvider for MySqlProvider {
 
         Some(true)
     }
-
 
     async fn save_study_info(&self, tenant_id: &str, study_lists: &[StudyEntity]) -> Option<bool> {
         if study_lists.is_empty() {
@@ -687,19 +686,40 @@ impl DbProvider for MySqlProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::file_utils;
+    use crate::{file_utils, server_config};
     use dicom_dictionary_std::tags;
     use sqlx::MySqlPool;
     use std::collections::HashMap;
     use std::path::Path;
 
+
     // 测试数据库连接配置 - 使用测试数据库
-    const TEST_DATABASE_URL: &str = "mysql://dicomstore:hzjp%23123@192.168.1.14:3306/dicomdb";
 
     // 设置测试数据库
-    async fn setup_test_database() -> MySqlPool {
-        let pool = MySqlPool::connect(TEST_DATABASE_URL).await.unwrap();
-        pool
+    async fn setup_test_database() -> MySqlProvider {
+        // 对数据库 URL 进行解码处理
+        let config = server_config::load_config();
+        let config = match config {
+            Ok(config) => config,
+            Err(e) => {
+                tracing::log::error!("{:?}", e);
+                std::process::exit(-2);
+            }
+        };
+        let mysql_url = match server_config::generate_database_connection(&config) {
+            Ok(url) => url,
+            Err(e) => {
+                tracing::log::error!("{:?}", e);
+                std::process::exit(-2);
+            }
+        };
+        // 使用 url crate 正确解析包含特殊字符的URL
+
+        info!("mysql_url: {}", mysql_url);
+        let pool = MySqlPool::connect(mysql_url.as_str())
+            .await
+            .expect("Failed to connect to MySQL");
+        MySqlProvider { pool }
     }
 
     // 创建测试用的 DICOM 对象
@@ -808,8 +828,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_save_dicom_info_success() {
-        let pool = setup_test_database().await;
-        let provider = MySqlProvider { pool: pool.clone() };
+        let provider = setup_test_database().await;
 
         let dir_path = "/home/dhz/jpdata/CDSS/89269";
         let dicom_files = file_utils::get_dicom_files_in_dir(dir_path).await;
@@ -871,7 +890,7 @@ mod tests {
                         tenant_id,
                         &dcmobj,
                         study_uid.as_str(), // 使用 clone 后的值，避免 move
-                        series_id.as_str(), // 使用 clone 后的值，避免 move 
+                        series_id.as_str(), // 使用 clone 后的值，避免 move
                         &patient_id,        // 使用 clone 后的值，避免 move
                     );
                     let image_id = image_entity.sop_instance_uid.clone();

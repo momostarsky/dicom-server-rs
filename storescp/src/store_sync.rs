@@ -203,15 +203,32 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                         // 根据业务需求决定如何处理
                                     }
                                 }
-
-                                // let path = Path::new(&file_path);
-                                // let dicom_meta = dicom_object::OpenFileOptions::new()
-                                //     .read_until(tags::PIXEL_DATA)
-                                //     .open_file(path)
-                                //     .unwrap();
-                                // for ie in dicom_meta.iter() {
-                                //     info!("{:?} {:?}", ie.tag(), ie.vr());
+                                // match kafka_producer
+                                //     .send_message("dicom", &dicom_message_lists[0])
+                                //     .await
+                                // {
+                                //     Ok(_) => {
+                                //         info!("Successfully sent messages to Kafka");
+                                //     }
+                                //     Err(e) => {
+                                //         error!("Failed to send messages to Kafka: {}", e);
+                                //     }
                                 // }
+                                if dicom_message_lists.len() >= 10 {
+                                    match kafka_producer
+                                        .send_batch_messages("dicom", &dicom_message_lists)
+                                        .await
+                                    {
+                                        Ok(_) => {
+                                            info!("Successfully sent messages to Kafka");
+                                        }
+                                        Err(e) => {
+                                            error!("Failed to send messages to Kafka: {}", e);
+                                        }
+                                    }
+
+                                    dicom_message_lists.clear();
+                                }
 
                                 // send C-STORE-RSP object
                                 // commands are always in implicit VR LE
@@ -278,46 +295,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
             }
         }
     }
-    if dicom_message_lists.len() > 0 {
-        kafka_producer
-            .send_messages(kafka_producer.topic.as_str(), &dicom_message_lists)
-            .await
-            .unwrap_or_else(|e| {
-                warn!(
-                    "Failed to send messages to Kafka: {}. Writing to disk backup.",
-                    e
-                );
-                // 生成带时间戳的备份文件名
-                let timestamp = Local::now().format("%Y%m%d_%H%M%S");
-                let backup_filename = format!("kafka_backup_{}.json", timestamp);
-                // 将消息列表序列化为 JSON
-                match serde_json::to_string_pretty(&dicom_message_lists) {
-                    Ok(json_data) => {
-                        // 写入磁盘文件
-                        match std::fs::write(&backup_filename, json_data) {
-                            Ok(_) => {
-                                info!(
-                                    "Successfully wrote {} messages to backup file: {}",
-                                    dicom_message_lists.len(),
-                                    backup_filename
-                                );
-                            }
-                            Err(write_err) => {
-                                error!(
-                                    "Failed to write backup file {}: {}",
-                                    backup_filename, write_err
-                                );
-                            }
-                        }
-                    }
-                    Err(serialize_err) => {
-                        error!("Failed to serialize dicom_message_lists: {}", serialize_err);
-                    }
-                }
-            });
 
-        dicom_message_lists.clear();
-    }
 
     if let Ok(peer_addr) = association.inner_stream().peer_addr() {
         info!(
@@ -329,5 +307,6 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         info!("Dropping connection with {}", association.client_ae_title());
     }
 
+    dicom_file_handler::sendmessage_to_kafka(&kafka_producer, &dicom_message_lists).await;
     Ok(())
 }

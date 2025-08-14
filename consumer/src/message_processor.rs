@@ -1,0 +1,400 @@
+use common::db_provider::DbProvider;
+use common::entities::{DicomObjectMeta, ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
+use common::mysql_provider::MySqlProvider;
+use common::server_config;
+use futures::StreamExt;
+use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
+use rdkafka::{ClientConfig, Message};
+use sqlx::MySqlPool;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
+use tokio::runtime::Handle;
+use tracing::log::error;
+
+pub async fn start_process() {
+    let config = server_config::load_config();
+    let config = match config {
+        Ok(config) => config,
+        Err(e) => {
+            error!("{:?}", e);
+            std::process::exit(-2);
+        }
+    };
+
+    let mysql_url = match server_config::generate_database_connection(&config) {
+        Ok(url) => url,
+        Err(e) => {
+            tracing::log::error!("{:?}", e);
+            std::process::exit(-2);
+        }
+    };
+    // 使用 url crate 正确解析包含特殊字符的URL
+    tracing::info!("mysql_url: {}", mysql_url);
+    let pool = MySqlPool::connect(mysql_url.as_str())
+        .await
+        .expect("Failed to connect to MySQL");
+    let _db_provider = MySqlProvider { pool };
+
+    let kafka_config_opt = config.kafka;
+    let kafka_config = match kafka_config_opt {
+        None => {
+            tracing::log::error!("kafka config is None");
+            std::process::exit(-2);
+        }
+        Some(kafka_config) => kafka_config,
+    };
+
+    // 配置消费者
+    let consumer: StreamConsumer = ClientConfig::new()
+        .set("group.id", kafka_config.consumer_group_id.as_str())
+        .set("bootstrap.servers", kafka_config.brokers.as_str())
+        .set("enable.auto.commit", "false")
+        .set("auto.offset.reset", "earliest")
+        .set("session.timeout.ms", "6000")
+        .set("enable.partition.eof", "false")
+        .create()
+        .expect("create consumer failed");
+
+    let topic = kafka_config.topic.as_str();
+    tracing::info!("Subscribing to topic: {}", topic);
+
+    match consumer.subscribe(&[topic]) {
+        Ok(_) => println!("Successfully subscribed to topic: {}", topic),
+        Err(e) => {
+            eprintln!("Failed to subscribe to topic {}: {}", topic, e);
+            std::process::exit(-1);
+        }
+    }
+
+    // 创建一个线程安全的共享 Vec 和时间戳
+    let shared_vec = Arc::new(Mutex::new(Vec::new()));
+    let last_process_time = Arc::new(Mutex::new(Instant::now()));
+
+    // 克隆 Arc 供不同任务使用
+    let vec_for_reader = Arc::clone(&shared_vec);
+    let vec_for_writer = Arc::clone(&shared_vec);
+    let time_for_writer = Arc::clone(&last_process_time);
+
+    // 获取当前的 Tokio 运行时句柄
+    let handle = Handle::current();
+    let handle_for_reader = handle.clone();
+    let handle_for_writer = handle.clone();
+
+    // 启动消息读取任务（在新线程中运行异步代码）
+    let reader_thread = thread::spawn(move || {
+        handle_for_reader.block_on(async {
+            read_message(consumer, vec_for_reader, last_process_time).await;
+        });
+    });
+
+    // 启动消息处理任务（在新线程中运行异步代码）
+    let writer_thread = thread::spawn(move || {
+        handle_for_writer.block_on(async {
+            persist_message_loop(vec_for_writer, time_for_writer).await;
+        });
+    });
+
+    // 等待两个线程完成
+    let reader_result = reader_thread.join();
+    let writer_result = writer_thread.join();
+
+    match reader_result {
+        Ok(_) => println!("Reader thread completed successfully"),
+        Err(e) => eprintln!("Reader thread panicked: {:?}", e),
+    }
+
+    match writer_result {
+        Ok(_) => println!("Writer thread completed successfully"),
+        Err(e) => eprintln!("Writer thread panicked: {:?}", e),
+    }
+
+    // 主线程查看最终结果
+    let final_vec = shared_vec.lock().unwrap();
+    println!("Final Vec: {:?}", *final_vec);
+}
+
+async fn read_message(
+    consumer: StreamConsumer,
+    vec: Arc<Mutex<Vec<DicomObjectMeta>>>,
+    last_process_time: Arc<Mutex<Instant>>,
+) {
+    let mut message_stream = consumer.stream();
+    println!("Starting to read messages...");
+
+    while let Some(result) = message_stream.next().await {
+        match result {
+            Ok(message) => {
+                match message.payload() {
+                    Some(payload) => {
+                        match serde_json::from_slice::<DicomObjectMeta>(payload) {
+                            Ok(dicom_message) => {
+                                // 将消息添加到共享向量中
+                                {
+                                    let mut vec = vec.lock().unwrap();
+                                    vec.push(dicom_message);
+                                    println!(
+                                        "Added message to queue, current queue size: {}",
+                                        vec.len()
+                                    );
+
+                                    // 更新最后处理时间
+                                    let mut time = last_process_time.lock().unwrap();
+                                    *time = Instant::now();
+                                }
+
+                                // 处理成功后提交偏移量
+                                if let Err(e) = consumer.commit_message(&message, CommitMode::Sync)
+                                {
+                                    eprintln!("Failed to commit message: {}", e);
+                                } else {
+                                    println!("Successfully processed and committed message");
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to deserialize message: {}", e);
+                                // 反序列化失败也提交偏移量
+                                if let Err(e) = consumer.commit_message(&message, CommitMode::Sync)
+                                {
+                                    eprintln!("Failed to commit message: {}", e);
+                                }
+                            }
+                        }
+                    }
+                    None => {
+                        println!("Received message with no payload");
+                        if let Err(e) = consumer.commit_message(&message, CommitMode::Sync) {
+                            eprintln!("Failed to commit message: {}", e);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("Error receiving message: {}", e);
+            }
+        }
+    }
+}
+
+static MAX_MESSAGES_PER_BATCH: usize = 10;
+static MAX_TIME_BETWEEN_BATCHES: Duration = Duration::from_secs(10);
+async fn persist_message_loop(
+    vec: Arc<Mutex<Vec<DicomObjectMeta>>>,
+    last_process_time: Arc<Mutex<Instant>>,
+) {
+    println!("Starting message persistence loop...");
+
+    loop {
+        let should_process = {
+            let vec = vec.lock().unwrap();
+            let time = last_process_time.lock().unwrap();
+
+            // 检查是否满足处理条件：
+            // 1. 队列中有消息且数量>=100
+            // 2. 队列中有消息且距离上次处理超过10秒
+            let queue_size = vec.len();
+            let time_since_last_process = Instant::now().duration_since(*time);
+
+            (queue_size > 0 && queue_size >= MAX_MESSAGES_PER_BATCH)
+                || (queue_size > 0 && time_since_last_process >= MAX_TIME_BETWEEN_BATCHES)
+        };
+        if !should_process {
+            // 休眠一段时间，等待下一次处理
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+
+        // 批量处理消息
+        let messages_to_process = {
+            let mut vec = vec.lock().unwrap();
+            let mut messages = Vec::new();
+
+            // 取出所有消息或最多100条消息进行处理
+            let take_count = vec.len().min(MAX_MESSAGES_PER_BATCH);
+            for _ in 0..take_count {
+                if let Some(msg) = vec.pop() {
+                    messages.push(msg);
+                }
+            }
+
+            messages
+        };
+
+        if messages_to_process.is_empty() {
+            // 休眠一段时间，等待下一次处理
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        println!("Processing batch of {} messages", messages_to_process.len());
+
+        // 获取所有不同的 tenant_id
+        let unique_tenant_ids = get_unique_tenant_ids(&messages_to_process);
+        println!("Processing data for tenant IDs: {:?}", unique_tenant_ids);
+        for tenant_id in unique_tenant_ids {
+            let tenant_msg = messages_to_process
+                .iter()
+                .filter(|m| m.patient_info.tenant_id == tenant_id)
+                .cloned()
+                .collect::<Vec<_>>();
+            let (patients, studies, series, images) = group_dicom_messages(&tenant_msg);
+            persist_to_database(tenant_id.as_str(), &patients, &studies, &series, &images).await;
+        }
+
+        // 更新最后处理时间
+        {
+            let mut time = last_process_time.lock().unwrap();
+            *time = Instant::now();
+        }
+
+        println!(
+            "Successfully processed batch of {} messages",
+            messages_to_process.len()
+        );
+    }
+}
+
+// 获取消息组中所有不同的 tenant_id
+fn get_unique_tenant_ids(message: &[DicomObjectMeta]) -> Vec<String> {
+    let tenant_ids: HashSet<String> = message
+        .iter()
+        .map(|m| m.patient_info.tenant_id.clone())
+        .collect();
+
+    tenant_ids.into_iter().collect()
+}
+
+fn group_dicom_messages(
+    messages: &[DicomObjectMeta],
+) -> (
+    Vec<PatientEntity>,
+    Vec<StudyEntity>,
+    Vec<SeriesEntity>,
+    Vec<ImageEntity>,
+) {
+    let mut patient_groups: HashMap<String, bool> = HashMap::new();
+    let mut study_groups: HashMap<String, bool> = HashMap::new();
+    let mut series_groups: HashMap<String, bool> = HashMap::new();
+    let mut image_groups: HashMap<String, bool> = HashMap::new();
+    let mut patient_entities: Vec<PatientEntity> = Vec::new();
+    let mut study_entities: Vec<StudyEntity> = Vec::new();
+    let mut series_entities: Vec<SeriesEntity> = Vec::new();
+    let mut image_entities: Vec<ImageEntity> = Vec::new();
+
+    for message in messages {
+        let key = format!(
+            "{}_{}",
+            message.patient_info.patient_id, message.patient_info.tenant_id
+        );
+        if !patient_groups.contains_key(&key) {
+            patient_groups.insert(key, true);
+            patient_entities.push(message.patient_info.clone());
+        }
+
+        let key2 = format!(
+            "{}_{}",
+            message.study_info.tenant_id, message.study_info.study_instance_uid
+        );
+        if !study_groups.contains_key(&key2) {
+            study_groups.insert(key2, true);
+            study_entities.push(message.study_info.clone());
+        }
+
+        let key3 = format!(
+            "{}_{}_{}",
+            message.series_info.tenant_id,
+            message.series_info.study_instance_uid,
+            message.series_info.series_instance_uid,
+        );
+        if !series_groups.contains_key(&key3) {
+            series_groups.insert(key3, true);
+            series_entities.push(message.series_info.clone());
+        }
+
+        let key4 = format!(
+            "{}_{}_{}",
+            message.image_info.tenant_id,
+            message.image_info.study_instance_uid,
+            message.image_info.sop_instance_uid,
+        );
+        if !image_groups.contains_key(&key4) {
+            image_groups.insert(key4, true);
+            image_entities.push(message.image_info.clone());
+        }
+    }
+
+    (
+        patient_entities,
+        study_entities,
+        series_entities,
+        image_entities,
+    )
+}
+
+// 批量入库处理
+async fn persist_to_database(
+    tenant_id: &str,
+    patient_list: &[PatientEntity],
+    study_list: &[StudyEntity],
+    series_list: &[SeriesEntity],
+    images_list: &[ImageEntity],
+) {
+    let config = server_config::load_config();
+    let config = match config {
+        Ok(config) => config,
+        Err(e) => {
+            error!("{:?}", e);
+            std::process::exit(-2);
+        }
+    };
+
+    let mysql_url = match server_config::generate_database_connection(&config) {
+        Ok(url) => url,
+        Err(e) => {
+            tracing::log::error!("{:?}", e);
+            std::process::exit(-2);
+        }
+    };
+    // 使用 url crate 正确解析包含特殊字符的URL
+
+    tracing::info!("mysql_url: {}", mysql_url);
+    let pool = MySqlPool::connect(mysql_url.as_str())
+        .await
+        .expect("Failed to connect to MySQL");
+    let provider = MySqlProvider { pool };
+
+    // 批量插入到数据库，并处理结果
+    if !patient_list.is_empty() {
+        match provider.save_patient_info(tenant_id, &patient_list).await {
+            Some(true) => println!("成功保存 {} 条患者数据", patient_list.len()),
+            Some(false) => println!("患者数据已存在"),
+            None => println!("保存患者数据失败"),
+        }
+    }
+
+    if !study_list.is_empty() {
+        match provider.save_study_info(tenant_id, &study_list).await {
+            Some(true) => tracing::info!("成功保存 {} 条检查数据", study_list.len()),
+            Some(false) => tracing::info!("检查数据已存在"),
+            None => tracing::info!("保存检查数据失败"),
+        }
+    }
+
+    if !series_list.is_empty() {
+        match provider.save_series_info(tenant_id, &series_list).await {
+            Some(true) => tracing::info!("成功保存 {} 条序列数据", series_list.len()),
+            Some(false) => tracing::info!("序列数据已存在"),
+            None => tracing::info!("保存序列数据失败"),
+        }
+    }
+
+    if !images_list.is_empty() {
+        match provider.save_instance_info(tenant_id, &images_list).await {
+            Some(true) => tracing::info!("成功保存 {} 条图像数据", images_list.len()),
+            Some(false) => tracing::info!("图像数据已存在"),
+            None => {
+                tracing::info!("保存图像数据失败");
+            }
+        }
+    }
+}

@@ -1,10 +1,14 @@
+use std::collections::HashMap;
+use std::sync::Arc;
 // producer.rs
 use common::entities::DicomObjectMeta;
-use common::{server_config, DicomMessage};
+use common::server_config;
+use futures::future::join_all;
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord, Producer};
 use rdkafka::util::Timeout;
 use std::time::Duration;
+use tokio;
 use tracing::{debug, error, info};
 
 pub struct KafkaProducer {
@@ -66,12 +70,35 @@ impl KafkaProducer {
         }
     }
 
+    pub(crate) async fn send_message(
+        &self,
+        topic: &str,
+        msg: &DicomObjectMeta,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        info!("Sending message to topic {}", topic);
+        let payload = serde_json::to_vec(msg)?;
+        let key = format!(
+            "{}_{}",
+            msg.patient_info.tenant_id, msg.image_info.sop_instance_uid
+        ); // 使用 String 的引用
+        let record: FutureRecord<String, Vec<u8>> =
+            FutureRecord::to(topic).key(&key).payload(&payload);
+        self.producer
+            .send(record, Timeout::After(Duration::from_secs(1)))
+            .await
+            .map_err(|(e, _)| e)?;
+        self.producer.flush(Duration::from_micros(500))?;
+        debug!("Flushed producer");
+        Ok(())
+    }
+
     pub(crate) async fn send_messages(
         &self,
         topic: &str,
         messages: &[DicomObjectMeta],
     ) -> Result<(), Box<dyn std::error::Error>> {
         info!("Sending {} messages to topic {}", messages.len(), topic);
+
         for msg in messages {
             let payload = serde_json::to_vec(msg)?;
             let key = format!(
@@ -85,30 +112,72 @@ impl KafkaProducer {
                 .await
                 .map_err(|(e, _)| e)?;
         }
-        self.producer.flush(Duration::from_secs(5))?;
+        self.producer.flush(Duration::from_micros(500))?;
         debug!("Flushed producer");
         Ok(())
     }
 
-    // pub(crate) async fn send_message<T: Serialize>(
-    //     &self,
-    //     topic: &str,
-    //     key: &str,
-    //     payload: &T,
-    // ) -> Result<(), Box<dyn std::error::Error>> {
-    //     let payload_json = serde_json::to_string(payload)?;
-    //     let delivery = self
-    //         .producer
-    //         .send(
-    //             FutureRecord::to(topic).key(key).payload(&payload_json),
-    //             Duration::from_secs(5),
-    //         )
-    //         .await;
-    //
-    //     match delivery {
-    //         Ok(delivery) => println!("Sent: {:?}", delivery),
-    //         Err((e, _)) => println!("Error: {:?}", e),
-    //     }
-    //     Ok(())
-    // }
+    pub(crate) async fn send_batch_messages(
+        &self,
+        topic: &str,
+        messages: &[DicomObjectMeta],
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        info!(
+            "Sending {} messages in batch to topic {}",
+            messages.len(),
+            topic
+        );
+
+        let mut wait_message =HashMap::new();
+        // 预先创建所有消息的数据（Arc 包装）
+
+        for msg in messages {
+            match serde_json::to_vec(msg) {
+                Ok(payload) => {
+                    let key = format!(
+                        "{}_{}",
+                        msg.patient_info.tenant_id, msg.image_info.sop_instance_uid
+                    );
+                    wait_message.insert(key.clone(), payload.clone());
+                }
+                Err(e) => return Err(Box::new(e)),
+            }
+        }
+
+        // 创建所有Future
+
+        // 创建所有Future
+        let futures: Vec<_> = wait_message
+            .iter() // 注意这里要用 iter()，保证 Arc 存活
+            .map(|(key, payload)| {
+                let record = FutureRecord::to(topic).key(&key[..]).payload(&payload[..]);
+                self.producer
+                    .send(record, Timeout::After(Duration::from_secs(1)))
+            })
+            .collect();
+
+        // 并发等待所有消息发送完成
+        let results = join_all(futures).await;
+
+        // 检查发送结果
+        let mut success_count = 0;
+        let mut error_count = 0;
+
+        for result in results {
+            match result {
+                Ok(_) => success_count += 1,
+                Err(e) => {
+                    eprintln!("Failed to send message: {:?}", e);
+                    error_count += 1;
+                }
+            }
+        }
+
+        println!(
+            "✅ 批量发送完成: 成功 {} 条, 失败 {} 条",
+            success_count, error_count
+        );
+
+        Ok(())
+    }
 }

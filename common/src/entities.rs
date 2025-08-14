@@ -121,6 +121,7 @@ pub struct DicomObjectMeta {
     pub image_info: ImageEntity,
     pub file_size: u64,
     pub file_path: String,
+    pub tenant_id: String,
 }
 pub struct DbProviderBase {}
 impl DbProviderBase {

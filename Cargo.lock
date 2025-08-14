@@ -573,6 +573,8 @@ dependencies = [
  "sqlx",
  "tokio",
  "tracing",
+ "url",
+ "urlencoding",
 ]
 
 [[package]]
@@ -623,6 +625,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "urlencoding",
 ]
 
 [[package]]
@@ -862,6 +865,8 @@ dependencies = [
  "dicom-transfer-syntax-registry",
  "dicom-ul",
  "dotenv",
+ "futures",
+ "futures-util",
  "rdkafka",
  "serde",
  "serde_json",
