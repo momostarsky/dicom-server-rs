@@ -216,7 +216,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                 // }
                                 if dicom_message_lists.len() >= 10 {
                                     match kafka_producer
-                                        .send_batch_messages("dicom", &dicom_message_lists)
+                                        .send_batch_messages(  &dicom_message_lists)
                                         .await
                                     {
                                         Ok(_) => {

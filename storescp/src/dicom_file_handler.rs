@@ -161,7 +161,7 @@ pub(crate) async fn sendmessage_to_kafka(
     );
 
     match kafka_producer
-        .send_messages(&kafka_producer.topic, dicom_message_lists)
+        .send_messages( dicom_message_lists)
         .await
     {
         Ok(_) => {
@@ -174,7 +174,7 @@ pub(crate) async fn sendmessage_to_kafka(
             warn!(
                 "Failed to send messages to Kafka: {}. Writing to disk backup.",
                 e
-            ); 
+            );
         }
     }
 }

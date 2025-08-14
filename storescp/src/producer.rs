@@ -72,17 +72,17 @@ impl KafkaProducer {
 
     pub(crate) async fn send_message(
         &self,
-        topic: &str,
+
         msg: &DicomObjectMeta,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        info!("Sending message to topic {}", topic);
+        info!("Sending message to topic {}", self.topic);
         let payload = serde_json::to_vec(msg)?;
         let key = format!(
             "{}_{}",
             msg.patient_info.tenant_id, msg.image_info.sop_instance_uid
         ); // 使用 String 的引用
         let record: FutureRecord<String, Vec<u8>> =
-            FutureRecord::to(topic).key(&key).payload(&payload);
+            FutureRecord::to(&*self.topic).key(&key).payload(&payload);
         self.producer
             .send(record, Timeout::After(Duration::from_secs(1)))
             .await
@@ -94,10 +94,13 @@ impl KafkaProducer {
 
     pub(crate) async fn send_messages(
         &self,
-        topic: &str,
         messages: &[DicomObjectMeta],
     ) -> Result<(), Box<dyn std::error::Error>> {
-        info!("Sending {} messages to topic {}", messages.len(), topic);
+        info!(
+            "Sending {} messages to topic {}",
+            messages.len(),
+            self.topic
+        );
 
         for msg in messages {
             let payload = serde_json::to_vec(msg)?;
@@ -106,7 +109,7 @@ impl KafkaProducer {
                 msg.patient_info.tenant_id, msg.image_info.sop_instance_uid
             ); // 使用 String 的引用
             let record: FutureRecord<String, Vec<u8>> =
-                FutureRecord::to(topic).key(&key).payload(&payload);
+                FutureRecord::to(&*self.topic).key(&key).payload(&payload);
             self.producer
                 .send(record, Timeout::After(Duration::from_secs(1)))
                 .await
@@ -119,16 +122,16 @@ impl KafkaProducer {
 
     pub(crate) async fn send_batch_messages(
         &self,
-        topic: &str,
+
         messages: &[DicomObjectMeta],
     ) -> Result<(), Box<dyn std::error::Error>> {
         info!(
             "Sending {} messages in batch to topic {}",
             messages.len(),
-            topic
+            self.topic
         );
 
-        let mut wait_message =HashMap::new();
+        let mut wait_message = HashMap::new();
         // 预先创建所有消息的数据（Arc 包装）
 
         for msg in messages {
@@ -150,7 +153,9 @@ impl KafkaProducer {
         let futures: Vec<_> = wait_message
             .iter() // 注意这里要用 iter()，保证 Arc 存活
             .map(|(key, payload)| {
-                let record = FutureRecord::to(topic).key(&key[..]).payload(&payload[..]);
+                let record = FutureRecord::to(&*self.topic)
+                    .key(&key[..])
+                    .payload(&payload[..]);
                 self.producer
                     .send(record, Timeout::After(Duration::from_secs(1)))
             })
