@@ -9,6 +9,14 @@ pub struct MySqlProvider {
     pub pool: MySqlPool,
 }
 
+impl MySqlProvider {
+    pub fn new(pool: MySqlPool) -> Self {
+        info!("mysql_url: {:?}", pool);
+
+        Self { pool }
+    }
+}
+
 #[async_trait]
 impl DbProvider for MySqlProvider {
     async fn save_dicom_info(
@@ -681,17 +689,62 @@ impl DbProvider for MySqlProvider {
             }
         }
     }
+
+    async fn persist_to_database(
+        &self,
+        tenant_id: &str,
+        patient_list: &[PatientEntity],
+        study_list: &[StudyEntity],
+        series_list: &[SeriesEntity],
+        images_list: &[ImageEntity],
+    ) -> Option<bool> {
+        // 批量插入到数据库，并处理结果
+        if !patient_list.is_empty() {
+            match self.save_patient_info(tenant_id, &patient_list).await {
+                Some(true) => tracing::info!("成功保存 {} 条患者数据", patient_list.len()),
+                Some(false) => tracing::info!("患者数据已存在"),
+                None => tracing::error!("保存患者数据失败"),
+            }
+        }
+
+        if !study_list.is_empty() {
+            match self.save_study_info(tenant_id, &study_list).await {
+                Some(true) => tracing::info!("成功保存 {} 条检查数据", study_list.len()),
+                Some(false) => tracing::info!("检查数据已存在"),
+                None => tracing::error!("保存检查数据失败"),
+            }
+        }
+
+        if !series_list.is_empty() {
+            match self.save_series_info(tenant_id, &series_list).await {
+                Some(true) => tracing::info!("成功保存 {} 条序列数据", series_list.len()),
+                Some(false) => tracing::info!("序列数据已存在"),
+                None => tracing::error!("保存序列数据失败"),
+            }
+        }
+
+        if !images_list.is_empty() {
+            match self.save_instance_info(tenant_id, &images_list).await {
+                Some(true) => tracing::info!("成功保存 {} 条图像数据", images_list.len()),
+                Some(false) => tracing::info!("图像数据已存在"),
+                None => {
+                    tracing::error!("保存图像数据失败");
+                }
+            }
+        }
+
+        Some(true)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{file_utils, server_config};
+    use crate::{server_config, utils};
     use dicom_dictionary_std::tags;
     use sqlx::MySqlPool;
     use std::collections::HashMap;
     use std::path::Path;
-
 
     // 测试数据库连接配置 - 使用测试数据库
 
@@ -831,7 +884,7 @@ mod tests {
         let provider = setup_test_database().await;
 
         let dir_path = "/home/dhz/jpdata/CDSS/89269";
-        let dicom_files = file_utils::get_dicom_files_in_dir(dir_path).await;
+        let dicom_files = utils::get_dicom_files_in_dir(dir_path).await;
         // 需要处理 Result 类型
         let dicom_files = match dicom_files {
             Ok(files) => files,

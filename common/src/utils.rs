@@ -1,3 +1,6 @@
+use crate::entities::{DicomObjectMeta, ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
+use std::collections::{HashMap, HashSet};
+
 pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let path = std::path::Path::new(p0);
 
@@ -91,9 +94,7 @@ pub fn setup_logging(policy_name: & str) {
     use log4rs::append::rolling_file::policy::compound::trigger::size::SizeTrigger;
     use log4rs::append::rolling_file::policy::compound::roll::delete::DeleteRoller;
     use log4rs::encode::pattern::PatternEncoder;
-    use log4rs::config::{Appender, Config, Root, Logger};
-    use std::path::PathBuf;
-
+    use log4rs::config::{Appender, Config, Logger, Root};
     // 创建控制台appender
     let stdout = ConsoleAppender::builder()
         .encoder(Box::new(PatternEncoder::new(
@@ -131,4 +132,84 @@ pub fn setup_logging(policy_name: & str) {
 
     // 初始化log4rs
     let _handle = log4rs::init_config(config).unwrap();
+}
+
+
+pub fn get_unique_tenant_ids(message: &[DicomObjectMeta]) -> Vec<String> {
+    let tenant_ids: HashSet<String> = message
+        .iter()
+        .map(|m| m.patient_info.tenant_id.clone())
+        .collect();
+
+    tenant_ids.into_iter().collect()
+}
+
+
+// 获取消息组中所有不同的 tenant_id
+
+pub fn group_dicom_messages(
+    messages: &[DicomObjectMeta],
+) -> (
+    Vec<PatientEntity>,
+    Vec<StudyEntity>,
+    Vec<SeriesEntity>,
+    Vec<ImageEntity>,
+) {
+    let mut patient_groups: HashMap<String, bool> = HashMap::new();
+    let mut study_groups: HashMap<String, bool> = HashMap::new();
+    let mut series_groups: HashMap<String, bool> = HashMap::new();
+    let mut image_groups: HashMap<String, bool> = HashMap::new();
+    let mut patient_entities: Vec<PatientEntity> = Vec::new();
+    let mut study_entities: Vec<StudyEntity> = Vec::new();
+    let mut series_entities: Vec<SeriesEntity> = Vec::new();
+    let mut image_entities: Vec<ImageEntity> = Vec::new();
+
+    for message in messages {
+        let key = format!(
+            "{}_{}",
+            message.patient_info.patient_id, message.patient_info.tenant_id
+        );
+        if !patient_groups.contains_key(&key) {
+            patient_groups.insert(key, true);
+            patient_entities.push(message.patient_info.clone());
+        }
+
+        let key2 = format!(
+            "{}_{}",
+            message.study_info.tenant_id, message.study_info.study_instance_uid
+        );
+        if !study_groups.contains_key(&key2) {
+            study_groups.insert(key2, true);
+            study_entities.push(message.study_info.clone());
+        }
+
+        let key3 = format!(
+            "{}_{}_{}",
+            message.series_info.tenant_id,
+            message.series_info.study_instance_uid,
+            message.series_info.series_instance_uid,
+        );
+        if !series_groups.contains_key(&key3) {
+            series_groups.insert(key3, true);
+            series_entities.push(message.series_info.clone());
+        }
+
+        let key4 = format!(
+            "{}_{}_{}",
+            message.image_info.tenant_id,
+            message.image_info.study_instance_uid,
+            message.image_info.sop_instance_uid,
+        );
+        if !image_groups.contains_key(&key4) {
+            image_groups.insert(key4, true);
+            image_entities.push(message.image_info.clone());
+        }
+    }
+
+    (
+        patient_entities,
+        study_entities,
+        series_entities,
+        image_entities,
+    )
 }

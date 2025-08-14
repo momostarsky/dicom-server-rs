@@ -16,8 +16,7 @@ pub trait DbProvider {
         tenant_id: &str,
         patient_lists: &[PatientEntity],
     ) -> Option<bool>;
-    async fn save_study_info(&self, tenant_id: &str, study_lists: &[StudyEntity])
-    -> Option<bool>;
+    async fn save_study_info(&self, tenant_id: &str, study_lists: &[StudyEntity]) -> Option<bool>;
     async fn save_series_info(
         &self,
         tenant_id: &str,
@@ -90,5 +89,14 @@ pub trait DbProvider {
         study_uid: &str,
         series_uid: &str,
         instance_uid: &str,
+    ) -> Option<bool>;
+
+    async fn persist_to_database(
+        &self,
+        tenant_id: &str,
+        patient_list: &[PatientEntity],
+        study_list: &[StudyEntity],
+        series_list: &[SeriesEntity],
+        images_list: &[ImageEntity],
     ) -> Option<bool>;
 }

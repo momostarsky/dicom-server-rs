@@ -1,18 +1,16 @@
-use common::db_provider::DbProvider;
-use common::entities::{DicomObjectMeta, ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
+use common::entities::{DicomObjectMeta};
 use common::mysql_provider::MySqlProvider;
-use common::server_config;
+use common::utils::{get_unique_tenant_ids, group_dicom_messages, setup_logging};
+use common::{database_factory, server_config};
 use futures::StreamExt;
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message};
 use sqlx::MySqlPool;
-use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use tokio::runtime::Handle;
 use tracing::log::error;
-use common::file_utils::setup_logging;
 
 pub async fn start_process() {
     // 设置日志系统
@@ -119,8 +117,6 @@ pub async fn start_process() {
     let final_vec = shared_vec.lock().unwrap();
     tracing::info!("Final Vec: {:?}", *final_vec);
 }
-
-
 
 async fn read_message(
     consumer: StreamConsumer,
@@ -240,7 +236,28 @@ async fn persist_message_loop(
                 .cloned()
                 .collect::<Vec<_>>();
             let (patients, studies, series, images) = group_dicom_messages(&tenant_msg);
-            persist_to_database(tenant_id.as_str(), &patients, &studies, &series, &images).await;
+            let db_provider = database_factory::create_db_instance().await;
+            if db_provider.is_none() {
+                tracing::error!("Failed to create database provider");
+                continue;
+            }
+            let db_provider = db_provider.unwrap();
+            let result = db_provider
+                .persist_to_database(tenant_id.as_str(), &patients, &studies, &series, &images)
+                .await;
+            match result {
+                None => {
+                    tracing::error!(
+                        "Failed to persist data for tenant {}: {:?}",
+                        tenant_id,
+                        result
+                    );
+                    continue;
+                }
+                Some(_) => {
+                    tracing::info!("Successfully persisted data for tenant {}", tenant_id);
+                }
+            }
         }
 
         // 更新最后处理时间
@@ -253,150 +270,5 @@ async fn persist_message_loop(
             "Successfully processed batch of {} messages",
             messages_to_process.len()
         );
-    }
-}
-
-// 获取消息组中所有不同的 tenant_id
-fn get_unique_tenant_ids(message: &[DicomObjectMeta]) -> Vec<String> {
-    let tenant_ids: HashSet<String> = message
-        .iter()
-        .map(|m| m.patient_info.tenant_id.clone())
-        .collect();
-
-    tenant_ids.into_iter().collect()
-}
-
-fn group_dicom_messages(
-    messages: &[DicomObjectMeta],
-) -> (
-    Vec<PatientEntity>,
-    Vec<StudyEntity>,
-    Vec<SeriesEntity>,
-    Vec<ImageEntity>,
-) {
-    let mut patient_groups: HashMap<String, bool> = HashMap::new();
-    let mut study_groups: HashMap<String, bool> = HashMap::new();
-    let mut series_groups: HashMap<String, bool> = HashMap::new();
-    let mut image_groups: HashMap<String, bool> = HashMap::new();
-    let mut patient_entities: Vec<PatientEntity> = Vec::new();
-    let mut study_entities: Vec<StudyEntity> = Vec::new();
-    let mut series_entities: Vec<SeriesEntity> = Vec::new();
-    let mut image_entities: Vec<ImageEntity> = Vec::new();
-
-    for message in messages {
-        let key = format!(
-            "{}_{}",
-            message.patient_info.patient_id, message.patient_info.tenant_id
-        );
-        if !patient_groups.contains_key(&key) {
-            patient_groups.insert(key, true);
-            patient_entities.push(message.patient_info.clone());
-        }
-
-        let key2 = format!(
-            "{}_{}",
-            message.study_info.tenant_id, message.study_info.study_instance_uid
-        );
-        if !study_groups.contains_key(&key2) {
-            study_groups.insert(key2, true);
-            study_entities.push(message.study_info.clone());
-        }
-
-        let key3 = format!(
-            "{}_{}_{}",
-            message.series_info.tenant_id,
-            message.series_info.study_instance_uid,
-            message.series_info.series_instance_uid,
-        );
-        if !series_groups.contains_key(&key3) {
-            series_groups.insert(key3, true);
-            series_entities.push(message.series_info.clone());
-        }
-
-        let key4 = format!(
-            "{}_{}_{}",
-            message.image_info.tenant_id,
-            message.image_info.study_instance_uid,
-            message.image_info.sop_instance_uid,
-        );
-        if !image_groups.contains_key(&key4) {
-            image_groups.insert(key4, true);
-            image_entities.push(message.image_info.clone());
-        }
-    }
-
-    (
-        patient_entities,
-        study_entities,
-        series_entities,
-        image_entities,
-    )
-}
-
-// 批量入库处理
-async fn persist_to_database(
-    tenant_id: &str,
-    patient_list: &[PatientEntity],
-    study_list: &[StudyEntity],
-    series_list: &[SeriesEntity],
-    images_list: &[ImageEntity],
-) {
-    let config = server_config::load_config();
-    let config = match config {
-        Ok(config) => config,
-        Err(e) => {
-            error!("{:?}", e);
-            std::process::exit(-2);
-        }
-    };
-
-    let mysql_url = match server_config::generate_database_connection(&config) {
-        Ok(url) => url,
-        Err(e) => {
-            error!("{:?}", e);
-            std::process::exit(-2);
-        }
-    };
-    // 使用 url crate 正确解析包含特殊字符的URL
-
-    tracing::info!("mysql_url: {}", mysql_url);
-    let pool = MySqlPool::connect(mysql_url.as_str())
-        .await
-        .expect("Failed to connect to MySQL");
-    let provider = MySqlProvider { pool };
-
-    // 批量插入到数据库，并处理结果
-    if !patient_list.is_empty() {
-        match provider.save_patient_info(tenant_id, &patient_list).await {
-            Some(true) => tracing::info!("成功保存 {} 条患者数据", patient_list.len()),
-            Some(false) => tracing::info!("患者数据已存在"),
-            None => tracing::error!("保存患者数据失败"),
-        }
-    }
-
-    if !study_list.is_empty() {
-        match provider.save_study_info(tenant_id, &study_list).await {
-            Some(true) => tracing::info!("成功保存 {} 条检查数据", study_list.len()),
-            Some(false) => tracing::info!("检查数据已存在"),
-            None => tracing::error!("保存检查数据失败"),
-        }
-    }
-
-    if !series_list.is_empty() {
-        match provider.save_series_info(tenant_id, &series_list).await {
-            Some(true) => tracing::info!("成功保存 {} 条序列数据", series_list.len()),
-            Some(false) => tracing::info!("序列数据已存在"),
-            None => tracing::error!("保存序列数据失败"),
-        }
-    }
-
-    if !images_list.is_empty() {
-        match provider.save_instance_info(tenant_id, &images_list).await {
-            Some(true) => tracing::info!("成功保存 {} 条图像数据", images_list.len()),
-            Some(false) => tracing::info!("图像数据已存在"),
-            None => {
-                tracing::error!("保存图像数据失败");
-            }
-        }
     }
 }
