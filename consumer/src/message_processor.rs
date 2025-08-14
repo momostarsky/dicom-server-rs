@@ -12,12 +12,11 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tokio::runtime::Handle;
 use tracing::log::error;
-use tracing_subscriber::fmt::writer::MakeWriterExt;
 use common::file_utils::setup_logging;
 
 pub async fn start_process() {
     // 设置日志系统
-    setup_logging();
+    setup_logging("message_processor");
     tracing::info!("start process");
 
     let config = server_config::load_config();
