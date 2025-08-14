@@ -12,8 +12,14 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tokio::runtime::Handle;
 use tracing::log::error;
+use tracing_subscriber::fmt::writer::MakeWriterExt;
+use common::file_utils::setup_logging;
 
 pub async fn start_process() {
+    // 设置日志系统
+    setup_logging();
+    tracing::info!("start process");
+
     let config = server_config::load_config();
     let config = match config {
         Ok(config) => config,
@@ -26,7 +32,7 @@ pub async fn start_process() {
     let mysql_url = match server_config::generate_database_connection(&config) {
         Ok(url) => url,
         Err(e) => {
-            tracing::log::error!("{:?}", e);
+            error!("{:?}", e);
             std::process::exit(-2);
         }
     };
@@ -40,7 +46,7 @@ pub async fn start_process() {
     let kafka_config_opt = config.kafka;
     let kafka_config = match kafka_config_opt {
         None => {
-            tracing::log::error!("kafka config is None");
+            error!("kafka config is None");
             std::process::exit(-2);
         }
         Some(kafka_config) => kafka_config,
@@ -61,9 +67,9 @@ pub async fn start_process() {
     tracing::info!("Subscribing to topic: {}", topic);
 
     match consumer.subscribe(&[topic]) {
-        Ok(_) => println!("Successfully subscribed to topic: {}", topic),
+        Ok(_) => tracing::info!("Successfully subscribed to topic: {}", topic),
         Err(e) => {
-            eprintln!("Failed to subscribe to topic {}: {}", topic, e);
+            tracing::error!("Failed to subscribe to topic {}: {}", topic, e);
             std::process::exit(-1);
         }
     }
@@ -101,19 +107,21 @@ pub async fn start_process() {
     let writer_result = writer_thread.join();
 
     match reader_result {
-        Ok(_) => println!("Reader thread completed successfully"),
-        Err(e) => eprintln!("Reader thread panicked: {:?}", e),
+        Ok(_) => tracing::info!("Reader thread completed successfully"),
+        Err(e) => tracing::error!("Reader thread panicked: {:?}", e),
     }
 
     match writer_result {
-        Ok(_) => println!("Writer thread completed successfully"),
-        Err(e) => eprintln!("Writer thread panicked: {:?}", e),
+        Ok(_) => tracing::info!("Writer thread completed successfully"),
+        Err(e) => tracing::error!("Writer thread panicked: {:?}", e),
     }
 
     // 主线程查看最终结果
     let final_vec = shared_vec.lock().unwrap();
-    println!("Final Vec: {:?}", *final_vec);
+    tracing::info!("Final Vec: {:?}", *final_vec);
 }
+
+
 
 async fn read_message(
     consumer: StreamConsumer,
@@ -121,7 +129,7 @@ async fn read_message(
     last_process_time: Arc<Mutex<Instant>>,
 ) {
     let mut message_stream = consumer.stream();
-    println!("Starting to read messages...");
+    tracing::info!("Starting to read messages...");
 
     while let Some(result) = message_stream.next().await {
         match result {
@@ -134,11 +142,6 @@ async fn read_message(
                                 {
                                     let mut vec = vec.lock().unwrap();
                                     vec.push(dicom_message);
-                                    println!(
-                                        "Added message to queue, current queue size: {}",
-                                        vec.len()
-                                    );
-
                                     // 更新最后处理时间
                                     let mut time = last_process_time.lock().unwrap();
                                     *time = Instant::now();
@@ -147,43 +150,43 @@ async fn read_message(
                                 // 处理成功后提交偏移量
                                 if let Err(e) = consumer.commit_message(&message, CommitMode::Sync)
                                 {
-                                    eprintln!("Failed to commit message: {}", e);
+                                    tracing::error!("Failed to commit message: {}", e);
                                 } else {
-                                    println!("Successfully processed and committed message");
+                                    tracing::debug!("Successfully processed and committed message");
                                 }
                             }
                             Err(e) => {
-                                eprintln!("Failed to deserialize message: {}", e);
+                                tracing::error!("Failed to deserialize message: {}", e);
                                 // 反序列化失败也提交偏移量
                                 if let Err(e) = consumer.commit_message(&message, CommitMode::Sync)
                                 {
-                                    eprintln!("Failed to commit message: {}", e);
+                                    tracing::error!("Failed to commit message: {}", e);
                                 }
                             }
                         }
                     }
                     None => {
-                        println!("Received message with no payload");
+                        tracing::warn!("Received message with no payload");
                         if let Err(e) = consumer.commit_message(&message, CommitMode::Sync) {
-                            eprintln!("Failed to commit message: {}", e);
+                            tracing::error!("Failed to commit message: {}", e);
                         }
                     }
                 }
             }
             Err(e) => {
-                eprintln!("Error receiving message: {}", e);
+                tracing::error!("Error receiving message: {}", e);
             }
         }
     }
 }
 
-static MAX_MESSAGES_PER_BATCH: usize = 10;
-static MAX_TIME_BETWEEN_BATCHES: Duration = Duration::from_secs(10);
+static MAX_MESSAGES_PER_BATCH: usize = 50;
+static MAX_TIME_BETWEEN_BATCHES: Duration = Duration::from_secs(5);
 async fn persist_message_loop(
     vec: Arc<Mutex<Vec<DicomObjectMeta>>>,
     last_process_time: Arc<Mutex<Instant>>,
 ) {
-    println!("Starting message persistence loop...");
+    tracing::info!("Starting message persistence loop...");
 
     loop {
         let should_process = {
@@ -226,11 +229,11 @@ async fn persist_message_loop(
             tokio::time::sleep(Duration::from_secs(1)).await;
             continue;
         }
-        println!("Processing batch of {} messages", messages_to_process.len());
+        tracing::info!("Processing batch of {} messages", messages_to_process.len());
 
         // 获取所有不同的 tenant_id
         let unique_tenant_ids = get_unique_tenant_ids(&messages_to_process);
-        println!("Processing data for tenant IDs: {:?}", unique_tenant_ids);
+        tracing::info!("Processing data for tenant IDs: {:?}", unique_tenant_ids);
         for tenant_id in unique_tenant_ids {
             let tenant_msg = messages_to_process
                 .iter()
@@ -247,7 +250,7 @@ async fn persist_message_loop(
             *time = Instant::now();
         }
 
-        println!(
+        tracing::info!(
             "Successfully processed batch of {} messages",
             messages_to_process.len()
         );
@@ -351,7 +354,7 @@ async fn persist_to_database(
     let mysql_url = match server_config::generate_database_connection(&config) {
         Ok(url) => url,
         Err(e) => {
-            tracing::log::error!("{:?}", e);
+            error!("{:?}", e);
             std::process::exit(-2);
         }
     };
@@ -366,9 +369,9 @@ async fn persist_to_database(
     // 批量插入到数据库，并处理结果
     if !patient_list.is_empty() {
         match provider.save_patient_info(tenant_id, &patient_list).await {
-            Some(true) => println!("成功保存 {} 条患者数据", patient_list.len()),
-            Some(false) => println!("患者数据已存在"),
-            None => println!("保存患者数据失败"),
+            Some(true) => tracing::info!("成功保存 {} 条患者数据", patient_list.len()),
+            Some(false) => tracing::info!("患者数据已存在"),
+            None => tracing::error!("保存患者数据失败"),
         }
     }
 
@@ -376,7 +379,7 @@ async fn persist_to_database(
         match provider.save_study_info(tenant_id, &study_list).await {
             Some(true) => tracing::info!("成功保存 {} 条检查数据", study_list.len()),
             Some(false) => tracing::info!("检查数据已存在"),
-            None => tracing::info!("保存检查数据失败"),
+            None => tracing::error!("保存检查数据失败"),
         }
     }
 
@@ -384,7 +387,7 @@ async fn persist_to_database(
         match provider.save_series_info(tenant_id, &series_list).await {
             Some(true) => tracing::info!("成功保存 {} 条序列数据", series_list.len()),
             Some(false) => tracing::info!("序列数据已存在"),
-            None => tracing::info!("保存序列数据失败"),
+            None => tracing::error!("保存序列数据失败"),
         }
     }
 
@@ -393,7 +396,7 @@ async fn persist_to_database(
             Some(true) => tracing::info!("成功保存 {} 条图像数据", images_list.len()),
             Some(false) => tracing::info!("图像数据已存在"),
             None => {
-                tracing::info!("保存图像数据失败");
+                tracing::error!("保存图像数据失败");
             }
         }
     }

@@ -45,3 +45,40 @@ pub fn collect_dicom_files(
 
     Ok(())
 }
+
+
+pub fn setup_logging() {
+    use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+    use tracing_appender::rolling::{RollingFileAppender, Rotation};
+    use std::io::stdout;
+
+    // 创建日志文件appender，每天滚动一次
+    let file_appender = RollingFileAppender::new(
+        Rotation::DAILY,
+        "./logs", // 日志文件目录
+        "consumer.log", // 日志文件名前缀
+    );
+
+    // 创建控制台appender
+    let (non_blocking_file, _guard) = tracing_appender::non_blocking(file_appender);
+    let (non_blocking_stdout, _guard2) = tracing_appender::non_blocking(stdout());
+
+    // 构建日志订阅者
+    tracing_subscriber::registry()
+        .with(EnvFilter::from_default_env())
+        .with(
+            fmt::layer()
+                .with_writer(non_blocking_file.with_max_level(tracing::Level::INFO)) // 文件日志记录INFO及以上级别
+                .with_ansi(false) // 文件日志不使用ANSI颜色
+        )
+        .with(
+            fmt::layer()
+                .with_writer(non_blocking_stdout.with_max_level(tracing::Level::DEBUG)) // 控制台日志记录DEBUG及以上级别
+                .with_ansi(true) // 控制台日志使用ANSI颜色
+        )
+        .init();
+
+    // 将guard存储在全局变量中以防止被释放
+    std::mem::forget(_guard);
+    std::mem::forget(_guard2);
+}

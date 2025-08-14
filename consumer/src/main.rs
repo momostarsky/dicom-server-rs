@@ -8,6 +8,7 @@ use crate::message_processor::start_process;
 
 #[tokio::main]
 async fn main() {
-    let dispatcher = MessageDispatcher::new().await;
-    dispatcher.start_dispatch().await;
+    start_process().await;
+    // let dispatcher = MessageDispatcher::new().await;
+    // dispatcher.start_dispatch().await;
 }
