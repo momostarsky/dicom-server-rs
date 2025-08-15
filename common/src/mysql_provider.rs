@@ -701,34 +701,34 @@ impl DbProvider for MySqlProvider {
         // 批量插入到数据库，并处理结果
         if !patient_list.is_empty() {
             match self.save_patient_info(tenant_id, &patient_list).await {
-                Some(true) => tracing::info!("成功保存 {} 条患者数据", patient_list.len()),
-                Some(false) => tracing::info!("患者数据已存在"),
-                None => tracing::error!("保存患者数据失败"),
+                Some(true) => info!("成功保存 {} 条患者数据", patient_list.len()),
+                Some(false) => info!("患者数据已存在"),
+                None => error!("保存患者数据失败"),
             }
         }
 
         if !study_list.is_empty() {
             match self.save_study_info(tenant_id, &study_list).await {
-                Some(true) => tracing::info!("成功保存 {} 条检查数据", study_list.len()),
-                Some(false) => tracing::info!("检查数据已存在"),
-                None => tracing::error!("保存检查数据失败"),
+                Some(true) => info!("成功保存 {} 条检查数据", study_list.len()),
+                Some(false) => info!("检查数据已存在"),
+                None => error!("保存检查数据失败"),
             }
         }
 
         if !series_list.is_empty() {
             match self.save_series_info(tenant_id, &series_list).await {
-                Some(true) => tracing::info!("成功保存 {} 条序列数据", series_list.len()),
-                Some(false) => tracing::info!("序列数据已存在"),
-                None => tracing::error!("保存序列数据失败"),
+                Some(true) => info!("成功保存 {} 条序列数据", series_list.len()),
+                Some(false) => info!("序列数据已存在"),
+                None => error!("保存序列数据失败"),
             }
         }
 
         if !images_list.is_empty() {
             match self.save_instance_info(tenant_id, &images_list).await {
-                Some(true) => tracing::info!("成功保存 {} 条图像数据", images_list.len()),
-                Some(false) => tracing::info!("图像数据已存在"),
+                Some(true) => info!("成功保存 {} 条图像数据", images_list.len()),
+                Some(false) => info!("图像数据已存在"),
                 None => {
-                    tracing::error!("保存图像数据失败");
+                    error!("保存图像数据失败");
                 }
             }
         }
@@ -915,13 +915,13 @@ mod tests {
             match dicom_obj {
                 Ok(dcmobj) => {
                     let patient_entity =
-                        crate::database_entities::DbProviderBase::extract_patient_entity(tenant_id, &dcmobj);
+                        DbProviderBase::extract_patient_entity(tenant_id, &dcmobj);
                     // 修复：正确检查 patient_name 是否存在
                     let patient_id = patient_entity.patient_id.clone();
                     if !patient_list.contains_key(&patient_entity.patient_id) {
                         patient_list.insert(patient_id.clone(), patient_entity);
                     }
-                    let study_entity = crate::database_entities::DbProviderBase::extract_study_entity(
+                    let study_entity = DbProviderBase::extract_study_entity(
                         tenant_id,
                         &dcmobj,
                         &patient_id, // 使用 clone 后的值，避免 move
@@ -930,7 +930,7 @@ mod tests {
                     if !study_list.contains_key(study_uid.as_str()) {
                         study_list.insert(study_uid.clone(), study_entity);
                     }
-                    let series_entity = crate::database_entities::DbProviderBase::extract_series_entity(
+                    let series_entity = DbProviderBase::extract_series_entity(
                         tenant_id,
                         &dcmobj,
                         study_uid.as_str(), // 使用 clone 后的值，避免 move
@@ -939,7 +939,7 @@ mod tests {
                     if !series_list.contains_key(series_id.as_str()) {
                         series_list.insert(series_id.clone(), series_entity);
                     }
-                    let image_entity = crate::database_entities::DbProviderBase::extract_image_entity(
+                    let image_entity = DbProviderBase::extract_image_entity(
                         tenant_id,
                         &dcmobj,
                         study_uid.as_str(), // 使用 clone 后的值，避免 move
