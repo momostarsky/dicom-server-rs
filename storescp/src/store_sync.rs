@@ -10,7 +10,6 @@ use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dicom_ul::{pdu::PDataValueType, Pdu};
 use snafu::{OptionExt, Report, ResultExt, Whatever};
 use std::net::TcpStream;
-use std::sync::mpsc::channel;
 use tracing::log::error;
 use tracing::{debug, info, warn};
 
@@ -263,7 +262,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                         association.send(&Pdu::ReleaseRP).unwrap_or_else(|e| {
                             warn!(
                                 "Failed to send association release message to SCU: {}",
-                                snafu::Report::from_error(e)
+                                Report::from_error(e)
                             );
                         });
                         info!(
