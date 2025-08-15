@@ -1,5 +1,5 @@
-use common::dicom_utils;
 use common::database_entities::{DbProviderBase, DicomObjectMeta};
+use common::dicom_utils;
 use common::kafka_producer_factory::KafkaProducer;
 use dicom_dictionary_std::tags;
 use dicom_encoding::TransferSyntaxIndex;
@@ -7,7 +7,7 @@ use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use snafu::{whatever, ResultExt, Whatever};
 use tracing::info;
-use tracing::log::warn;
+use tracing::log::{error, warn};
 
 pub(crate) async fn process_dicom_file(
     instance_buffer: &[u8],    //DICOM文件的字节数组或是二进制流
@@ -21,7 +21,7 @@ pub(crate) async fn process_dicom_file(
         instance_buffer,
         TransferSyntaxRegistry.get(ts).unwrap(),
     )
-    .whatever_context("failed to read DICOM data object")?;
+        .whatever_context("failed to read DICOM data object")?;
     let pat_id = obj
         .element(tags::PATIENT_ID)
         .whatever_context("Missing PatientID")?
@@ -150,32 +150,85 @@ pub(crate) async fn process_dicom_file(
     Ok(())
 }
 
-pub(crate) async fn sendmessage_to_kafka(
-    kafka_producer: &KafkaProducer,
+pub(crate) async fn publish_messages(
+    main_kafka_producer: &KafkaProducer,
+    multi_frames_kafka_producer: Option<&KafkaProducer>,
+    chgts_kafka_producer: Option<&KafkaProducer>,
     dicom_message_lists: &Vec<DicomObjectMeta>,
-) {
+) -> Result<(), Whatever> {
     if dicom_message_lists.is_empty() {
-        return;
+        return Ok(());
     }
-
-    // 消息数量不超过100条，一次性发送
-    info!(
-        "Sending {} messages in single batch",
-        dicom_message_lists.len()
-    );
-
-    match kafka_producer.send_messages(dicom_message_lists).await {
+    match main_kafka_producer
+        .send_batch_messages(&dicom_message_lists)
+        .await
+    {
         Ok(_) => {
-            info!(
-                "Successfully sent {} messages to Kafka",
-                dicom_message_lists.len()
-            );
+            info!("Successfully sent messages to Kafka");
         }
         Err(e) => {
-            warn!(
-                "Failed to send messages to Kafka: {}. Writing to disk backup.",
-                e
-            );
+            error!("Failed to send messages to Kafka: {}", e);
         }
     }
+
+    if  multi_frames_kafka_producer.is_none() && chgts_kafka_producer.is_none() {
+        return Ok(());
+    }
+
+    match chgts_kafka_producer {
+        Some(producer) => {
+            info!("chgts_kafka_producer is not None");
+            //----需要创建一个KafkaProducer单独处理多帧图像
+            //----多帧会进行CHGTS转换
+            let chgts_messages: Vec<_> = dicom_message_lists
+                .iter()
+                .filter(|msg| msg.number_of_frames == 1 &&  common::cornerstonejs::SUPPORTED_TRANSFER_SYNTAXES.contains(&msg.transfer_synatx_uid.as_str()))
+                .cloned()
+                .collect();
+            if chgts_messages.len() > 0 {
+                match producer.send_batch_messages(&chgts_messages).await {
+                    Ok(_) => {
+                        info!("Successfully sent messages to Kafka");
+                    }
+                    Err(e) => {
+                        error!("Failed to send messages to Kafka: {}", e);
+                    }
+                }
+            }
+        },
+        None => {
+            info!("chgts_kafka_producer is None");
+        }
+    }
+
+    match multi_frames_kafka_producer {
+        Some(producer) => {
+            info!("multi_frames_kafka_producer is not None");
+            //----需要创建一个KafkaProducer单独处理多帧图像
+            //----多帧会对DICOM图像进行传输语法转换.
+            let multi_frame_messages: Vec<_> = dicom_message_lists
+                .iter()
+                .filter(|msg| msg.number_of_frames > 1)
+                .cloned()
+                .collect();
+
+            if multi_frame_messages.len() > 0 {
+                match producer.send_batch_messages(&multi_frame_messages).await {
+                    Ok(_) => {
+                        info!("Successfully sent messages to Kafka");
+                    }
+                    Err(e) => {
+                        error!("Failed to send messages to Kafka: {}", e);
+                    }
+                }
+            }
+        }
+        None => {
+            info!("multi_frames_kafka_producer is None");
+        }
+    }
+
+
+    // 添加返回语句
+    Ok(())
 }

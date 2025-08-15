@@ -76,7 +76,11 @@ pub async fn run_store_async(
         association.presentation_contexts()
     );
     let base_dir = out_dir.to_str().unwrap();
-    let kafka_producer = kafka_producer_factory::create_main_kafka_producer();
+    let main_kafka_producer = kafka_producer_factory::create_main_kafka_producer();
+    let chgts_kafka_producer =
+        kafka_producer_factory::create_change_transfersyntax_kafka_producer();
+    let multi_frames_kafka_producer =
+        kafka_producer_factory::create_extract_frames_kafka_producer();
     let mut dicom_message_lists: Vec<common::database_entities::DicomObjectMeta> = vec![];
     loop {
         match association.receive().await {
@@ -214,18 +218,21 @@ pub async fn run_store_async(
                                     }
                                 }
                                 if dicom_message_lists.len() >= 10 {
-                                    match kafka_producer
-                                        .send_batch_messages(&dicom_message_lists)
-                                        .await
+                                    match dicom_file_handler::publish_messages(
+                                        &main_kafka_producer,
+                                        Some(&multi_frames_kafka_producer),
+                                        Some(&chgts_kafka_producer),
+                                        &dicom_message_lists,
+                                    )
+                                    .await
                                     {
                                         Ok(_) => {
-                                            info!("Successfully sent messages to Kafka");
+                                            info!("Successfully published messages to Kafka");
                                         }
                                         Err(e) => {
-                                            error!("Failed to send messages to Kafka: {}", e);
+                                            error!("Failed to publish messages to Kafka: {}", e);
                                         }
                                     }
-
                                     dicom_message_lists.clear();
                                 }
 
@@ -305,6 +312,24 @@ pub async fn run_store_async(
     } else {
         info!("Dropping connection with {}", association.client_ae_title());
     }
-    dicom_file_handler::sendmessage_to_kafka(&kafka_producer, &dicom_message_lists).await;
+    if dicom_message_lists.len() > 0 {
+        match dicom_file_handler::publish_messages(
+            &main_kafka_producer,
+            Some(&multi_frames_kafka_producer),
+            Some(&chgts_kafka_producer),
+            &dicom_message_lists,
+        )
+            .await
+        {
+            Ok(_) => {
+                info!("Successfully published messages to Kafka");
+            }
+            Err(e) => {
+                error!("Failed to publish messages to Kafka: {}", e);
+            }
+        }
+    } else {
+        info!("No messages to publish to Kafka");
+    }
     Ok(())
 }
