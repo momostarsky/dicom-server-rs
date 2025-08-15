@@ -1,4 +1,3 @@
-use crate::producer::KafkaProducer;
 use common::entities::{DbProviderBase, DicomObjectMeta};
 use common::DicomMessage;
 use dicom_core::chrono::Local;
@@ -9,6 +8,7 @@ use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use snafu::{whatever, ResultExt, Whatever};
 use tracing::log::warn;
 use tracing::{error, info};
+use common::kafka_producer_factory::KafkaProducer;
 
 pub(crate) async fn process_dicom_file(
     instance_buffer: &[u8],    //DICOM文件的字节数组或是二进制流

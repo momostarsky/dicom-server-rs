@@ -14,7 +14,6 @@ use snafu::Report;
 use tracing::{error, info, Level};
 
 mod dicom_file_handler;
-mod producer;
 mod store_async;
 mod store_sync;
 mod transfer;

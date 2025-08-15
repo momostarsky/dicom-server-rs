@@ -1,4 +1,4 @@
-use crate::producer::KafkaProducer;
+
 use crate::{
     create_cecho_response, create_cstore_response, dicom_file_handler, transfer::ABSTRACT_SYNTAXES,
     App,
@@ -12,6 +12,8 @@ use snafu::{OptionExt, Report, ResultExt, Whatever};
 use std::net::TcpStream;
 use tracing::log::error;
 use tracing::{debug, info, warn};
+use common::kafka_producer_factory;
+use common::kafka_producer_factory::KafkaProducer;
 
 pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Whatever> {
     let App {
@@ -66,7 +68,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         association.presentation_contexts()
     );
     let base_dir = out_dir.to_str().unwrap();
-    let kafka_producer = KafkaProducer::new();
+    let kafka_producer = kafka_producer_factory::create_main_kafka_producer();
     let mut dicom_message_lists = vec![];
     loop {
         match association.receive() {

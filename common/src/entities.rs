@@ -162,6 +162,40 @@ impl DbProviderBase {
             .and_then(|e| e.to_float64().ok())
     }
 
+    pub fn get_tag_value<T>(tag: Tag, obj: &DefaultDicomObject, def_value: T) -> T
+    where
+        T: std::str::FromStr,
+        <T as std::str::FromStr>::Err: std::fmt::Debug,
+    {
+        obj.element_opt(tag)
+            .ok()
+            .flatten()
+            .and_then(|e| e.to_str().ok())
+            .and_then(|s| s.parse::<T>().ok())
+            .unwrap_or(def_value)
+    }
+
+    pub fn get_tag_values<T>(tag: Tag, obj: &DefaultDicomObject) -> Vec<T>
+    where
+        T: std::str::FromStr,
+        <T as std::str::FromStr>::Err: std::fmt::Debug,
+    {
+        obj.element_opt(tag)
+            .ok()
+            .flatten()
+            .and_then(|e| e.to_str().ok())
+            .and_then(|s| {
+                let mut result = vec![];
+                for s in s.trim_end().split("\\") {
+                    if let Ok(v) = s.parse::<T>() {
+                        result.push(v);
+                    }
+                }
+                Some(result)
+            })
+            .unwrap_or_else(|| vec![])
+    }
+
     pub fn extract_patient_entity(
         tenant_id: &str,
         dicom_obj: &DefaultDicomObject,

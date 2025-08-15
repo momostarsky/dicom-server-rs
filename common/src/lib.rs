@@ -3,9 +3,11 @@ use serde::{Deserialize, Serialize};
 pub mod db_provider;
 pub mod mysql_provider;
 pub mod server_config;
+pub mod kafka_producer_factory;
 pub mod entities;
 pub mod utils;
 pub mod database_factory;
+ 
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DicomMessage {
