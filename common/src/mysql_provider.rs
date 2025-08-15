@@ -11,7 +11,7 @@ pub struct MySqlProvider {
 
 impl MySqlProvider {
     pub fn new(pool: MySqlPool) -> Self {
-        info!("mysql_url: {:?}", pool);
+        info!("MySqlProvider created with pool: {:?}", pool);
 
         Self { pool }
     }
@@ -56,13 +56,15 @@ impl DbProvider for MySqlProvider {
         // 1. 保存或更新患者信息
         let patient_result = sqlx::query(
             r"INSERT INTO PatientEntity (
-            tenant_id, PatientID, PatientName, PatientBirthDate,
-            PatientSex, PatientBirthTime, EthnicGroup
-        ) SELECT ?, ?, ?, ?, ?, ?, ?
-        WHERE NOT EXISTS (
-            SELECT 1 FROM PatientEntity
-            WHERE tenant_id = ? AND PatientID = ?
-        )",
+                tenant_id, PatientID, PatientName, PatientBirthDate,
+                PatientSex, PatientBirthTime, EthnicGroup
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                PatientName = VALUES(PatientName),
+                PatientBirthDate = VALUES(PatientBirthDate),
+                PatientSex = VALUES(PatientSex),
+                PatientBirthTime = VALUES(PatientBirthTime),
+                EthnicGroup = VALUES(EthnicGroup)"
         )
         .bind(&patient_entity.tenant_id)
         .bind(&patient_entity.patient_id)
@@ -71,8 +73,6 @@ impl DbProvider for MySqlProvider {
         .bind(&patient_entity.patient_sex)
         .bind(&patient_entity.patient_birth_time)
         .bind(&patient_entity.ethnic_group)
-        .bind(&patient_entity.tenant_id) // 重复绑定用于WHERE子句
-        .bind(&patient_entity.patient_id) // 重复绑定用于WHERE子句
         .execute(&mut *tx)
         .await;
 
@@ -84,17 +84,35 @@ impl DbProvider for MySqlProvider {
         // 2. 保存或更新检查信息
         let study_result = sqlx::query(
             r"INSERT INTO StudyEntity (
-            tenant_id, StudyInstanceUID, PatientID, StudyDate, StudyTime,
-            AccessionNumber, StudyID, StudyDescription, ReferringPhysicianName,
-            PatientAge, PatientSize, PatientWeight, MedicalAlerts, Allergies,
-            PregnancyStatus, Occupation, AdditionalPatientHistory, PatientComments,
-            AdmissionID, PatientAgeAtStudy,
-            PerformingPhysicianName, ProcedureCodeSequence
-        ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        WHERE NOT EXISTS (
-            SELECT 1 FROM StudyEntity 
-            WHERE tenant_id = ? AND StudyInstanceUID = ?
-        )",
+                tenant_id, StudyInstanceUID, PatientID, StudyDate, StudyTime,
+                AccessionNumber, StudyID, StudyDescription, ReferringPhysicianName,
+                PatientAge, PatientSize, PatientWeight, MedicalAlerts, Allergies,
+                PregnancyStatus, Occupation, AdditionalPatientHistory, PatientComments,
+                AdmissionID, PatientAgeAtStudy,
+                PerformingPhysicianName, ProcedureCodeSequence, ReceivedInstances, SpaceSize
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                StudyDate = VALUES(StudyDate),
+                StudyTime = VALUES(StudyTime),
+                AccessionNumber = VALUES(AccessionNumber),
+                StudyID = VALUES(StudyID),
+                StudyDescription = VALUES(StudyDescription),
+                ReferringPhysicianName = VALUES(ReferringPhysicianName),
+                PatientAge = VALUES(PatientAge),
+                PatientSize = VALUES(PatientSize),
+                PatientWeight = VALUES(PatientWeight),
+                MedicalAlerts = VALUES(MedicalAlerts),
+                Allergies = VALUES(Allergies),
+                PregnancyStatus = VALUES(PregnancyStatus),
+                Occupation = VALUES(Occupation),
+                AdditionalPatientHistory = VALUES(AdditionalPatientHistory),
+                PatientComments = VALUES(PatientComments),
+                AdmissionID = VALUES(AdmissionID),
+                PatientAgeAtStudy = VALUES(PatientAgeAtStudy),
+                PerformingPhysicianName = VALUES(PerformingPhysicianName),
+                ProcedureCodeSequence = VALUES(ProcedureCodeSequence),
+                ReceivedInstances = VALUES(ReceivedInstances),
+                SpaceSize = VALUES(SpaceSize)"
         )
         .bind(&study_entity.tenant_id)
         .bind(&study_entity.study_instance_uid)
@@ -118,8 +136,8 @@ impl DbProvider for MySqlProvider {
         .bind(&study_entity.patient_age_at_study)
         .bind(&study_entity.performing_physician_name)
         .bind(&study_entity.procedure_code_sequence)
-        .bind(&study_entity.tenant_id) // 用于WHERE子句
-        .bind(&study_entity.study_instance_uid) // 用于WHERE子句
+        .bind(&study_entity.received_instances.unwrap_or(0))
+        .bind(&study_entity.space_size.unwrap_or(0))
         .execute(&mut *tx)
         .await;
 
@@ -131,16 +149,29 @@ impl DbProvider for MySqlProvider {
         // 3. 保存或更新序列信息
         let series_result = sqlx::query(
             r"INSERT INTO SeriesEntity (
-            tenant_id, SeriesInstanceUID, StudyInstanceUID, Modality,
-            SeriesNumber, SeriesDate, SeriesTime, SeriesDescription,
-            BodyPartExamined, ProtocolName, ImageType, AcquisitionNumber,
-            AcquisitionTime, AcquisitionDate, PerformingPhysicianName,
-            OperatorsName, NumberOfSeriesRelatedInstances
-        ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        WHERE NOT EXISTS (
-            SELECT 1 FROM SeriesEntity 
-            WHERE tenant_id = ? AND SeriesInstanceUID = ?
-        )",
+                tenant_id, SeriesInstanceUID, StudyInstanceUID, Modality,
+                SeriesNumber, SeriesDate, SeriesTime, SeriesDescription,
+                BodyPartExamined, ProtocolName, ImageType, AcquisitionNumber,
+                AcquisitionTime, AcquisitionDate, PerformingPhysicianName,
+                OperatorsName, NumberOfSeriesRelatedInstances, ReceivedInstances, SpaceSize
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                Modality = VALUES(Modality),
+                SeriesNumber = VALUES(SeriesNumber),
+                SeriesDate = VALUES(SeriesDate),
+                SeriesTime = VALUES(SeriesTime),
+                SeriesDescription = VALUES(SeriesDescription),
+                BodyPartExamined = VALUES(BodyPartExamined),
+                ProtocolName = VALUES(ProtocolName),
+                ImageType = VALUES(ImageType),
+                AcquisitionNumber = VALUES(AcquisitionNumber),
+                AcquisitionTime = VALUES(AcquisitionTime),
+                AcquisitionDate = VALUES(AcquisitionDate),
+                PerformingPhysicianName = VALUES(PerformingPhysicianName),
+                OperatorsName = VALUES(OperatorsName),
+                NumberOfSeriesRelatedInstances = VALUES(NumberOfSeriesRelatedInstances),
+                ReceivedInstances = VALUES(ReceivedInstances),
+                SpaceSize = VALUES(SpaceSize)"
         )
         .bind(&series_entity.tenant_id)
         .bind(&series_entity.series_instance_uid)
@@ -159,92 +190,98 @@ impl DbProvider for MySqlProvider {
         .bind(&series_entity.performing_physician_name)
         .bind(&series_entity.operators_name)
         .bind(&series_entity.number_of_series_related_instances)
-        .bind(&series_entity.tenant_id) // 用于WHERE子句
-        .bind(&series_entity.series_instance_uid) // 用于WHERE子句
+        .bind(&series_entity.received_instances.unwrap_or(0))
+        .bind(&series_entity.space_size.unwrap_or(0))
         .execute(&mut *tx)
         .await;
+
         if let Err(e) = series_result {
             error!("Failed to save series info: {}", e);
             return None;
         }
+
         // 4. 保存图像信息
         let image_result = sqlx::query(
             r"INSERT INTO ImageEntity (
-                    tenant_id, SOPInstanceUID, SeriesInstanceUID, StudyInstanceUID,
-                    PatientID, InstanceNumber, ImageComments, ContentDate, ContentTime,
-                    AcquisitionDateTime, ImageType, ImageOrientationPatient,
-                    ImagePositionPatient, SliceThickness, SpacingBetweenSlices,
-                    SliceLocation, SamplesPerPixel, PhotometricInterpretation,
-                    Width, Columns, BitsAllocated, BitsStored, HighBit,
-                    PixelRepresentation, RescaleIntercept, RescaleSlope,
-                    RescaleType, AcquisitionDeviceProcessingDescription,
-                    AcquisitionDeviceProcessingCode, DeviceSerialNumber,
-                    SoftwareVersions, TransferSyntaxUID, SOPClassUID
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE
-                    InstanceNumber = VALUES(InstanceNumber),
-                    ImageComments = VALUES(ImageComments),
-                    ContentDate = VALUES(ContentDate),
-                    ContentTime = VALUES(ContentTime),
-                    AcquisitionDateTime = VALUES(AcquisitionDateTime),
-                    ImageType = VALUES(ImageType),
-                    ImageOrientationPatient = VALUES(ImageOrientationPatient),
-                    ImagePositionPatient = VALUES(ImagePositionPatient),
-                    SliceThickness = VALUES(SliceThickness),
-                    SpacingBetweenSlices = VALUES(SpacingBetweenSlices),
-                    SliceLocation = VALUES(SliceLocation),
-                    SamplesPerPixel = VALUES(SamplesPerPixel),
-                    PhotometricInterpretation = VALUES(PhotometricInterpretation),
-                    Width = VALUES(Width),
-                    Columns = VALUES(Columns),
-                    BitsAllocated = VALUES(BitsAllocated),
-                    BitsStored = VALUES(BitsStored),
-                    HighBit = VALUES(HighBit),
-                    PixelRepresentation = VALUES(PixelRepresentation),
-                    RescaleIntercept = VALUES(RescaleIntercept),
-                    RescaleSlope = VALUES(RescaleSlope),
-                    RescaleType = VALUES(RescaleType),
-                    AcquisitionDeviceProcessingDescription = VALUES(AcquisitionDeviceProcessingDescription),
-                    AcquisitionDeviceProcessingCode = VALUES(AcquisitionDeviceProcessingCode),
-                    DeviceSerialNumber = VALUES(DeviceSerialNumber),
-                    SoftwareVersions = VALUES(SoftwareVersions),
-                    TransferSyntaxUID = VALUES(TransferSyntaxUID)"
+                tenant_id, SOPInstanceUID, SeriesInstanceUID, StudyInstanceUID,
+                PatientID, InstanceNumber, ImageComments, ContentDate, ContentTime,
+                AcquisitionDateTime, ImageType, ImageOrientationPatient,
+                ImagePositionPatient, SliceThickness, SpacingBetweenSlices,
+                SliceLocation, SamplesPerPixel, PhotometricInterpretation,
+                Width, Columns, BitsAllocated, BitsStored, HighBit,
+                PixelRepresentation, RescaleIntercept, RescaleSlope,
+                RescaleType, AcquisitionDeviceProcessingDescription,
+                AcquisitionDeviceProcessingCode, DeviceSerialNumber,
+                SoftwareVersions, TransferSyntaxUID, SOPClassUID, NumberOfFrames, SpaceSize
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                InstanceNumber = VALUES(InstanceNumber),
+                ImageComments = VALUES(ImageComments),
+                ContentDate = VALUES(ContentDate),
+                ContentTime = VALUES(ContentTime),
+                AcquisitionDateTime = VALUES(AcquisitionDateTime),
+                ImageType = VALUES(ImageType),
+                ImageOrientationPatient = VALUES(ImageOrientationPatient),
+                ImagePositionPatient = VALUES(ImagePositionPatient),
+                SliceThickness = VALUES(SliceThickness),
+                SpacingBetweenSlices = VALUES(SpacingBetweenSlices),
+                SliceLocation = VALUES(SliceLocation),
+                SamplesPerPixel = VALUES(SamplesPerPixel),
+                PhotometricInterpretation = VALUES(PhotometricInterpretation),
+                Width = VALUES(Width),
+                Columns = VALUES(Columns),
+                BitsAllocated = VALUES(BitsAllocated),
+                BitsStored = VALUES(BitsStored),
+                HighBit = VALUES(HighBit),
+                PixelRepresentation = VALUES(PixelRepresentation),
+                RescaleIntercept = VALUES(RescaleIntercept),
+                RescaleSlope = VALUES(RescaleSlope),
+                RescaleType = VALUES(RescaleType),
+                AcquisitionDeviceProcessingDescription = VALUES(AcquisitionDeviceProcessingDescription),
+                AcquisitionDeviceProcessingCode = VALUES(AcquisitionDeviceProcessingCode),
+                DeviceSerialNumber = VALUES(DeviceSerialNumber),
+                SoftwareVersions = VALUES(SoftwareVersions),
+                TransferSyntaxUID = VALUES(TransferSyntaxUID),
+                NumberOfFrames = VALUES(NumberOfFrames),
+                SpaceSize = VALUES(SpaceSize)"
         )
-            .bind(&image_entity.tenant_id)
-            .bind(&image_entity.sop_instance_uid)
-            .bind(&image_entity.series_instance_uid)
-            .bind(&image_entity.study_instance_uid)
-            .bind(&image_entity.patient_id)
-            .bind(&image_entity.instance_number)
-            .bind(&image_entity.image_comments)
-            .bind(&image_entity.content_date)
-            .bind(&image_entity.content_time)
-            .bind(&image_entity.acquisition_date_time)
-            .bind(&image_entity.image_type)
-            .bind(&image_entity.image_orientation_patient)
-            .bind(&image_entity.image_position_patient)
-            .bind(&image_entity.slice_thickness)
-            .bind(&image_entity.spacing_between_slices)
-            .bind(&image_entity.slice_location)
-            .bind(&image_entity.samples_per_pixel)
-            .bind(&image_entity.photometric_interpretation)
-            .bind(&image_entity.width)
-            .bind(&image_entity.columns)
-            .bind(&image_entity.bits_allocated)
-            .bind(&image_entity.bits_stored)
-            .bind(&image_entity.high_bit)
-            .bind(&image_entity.pixel_representation)
-            .bind(&image_entity.rescale_intercept)
-            .bind(&image_entity.rescale_slope)
-            .bind(&image_entity.rescale_type)
-            .bind(&image_entity.acquisition_device_processing_description)
-            .bind(&image_entity.acquisition_device_processing_code)
-            .bind(&image_entity.device_serial_number)
-            .bind(&image_entity.software_versions)
-            .bind(&image_entity.transfer_syntax_uid)
-            .bind(&image_entity.sop_class_uid)
-            .execute(&mut *tx)
-            .await;
+        .bind(&image_entity.tenant_id)
+        .bind(&image_entity.sop_instance_uid)
+        .bind(&image_entity.series_instance_uid)
+        .bind(&image_entity.study_instance_uid)
+        .bind(&image_entity.patient_id)
+        .bind(&image_entity.instance_number)
+        .bind(&image_entity.image_comments)
+        .bind(&image_entity.content_date)
+        .bind(&image_entity.content_time)
+        .bind(&image_entity.acquisition_date_time)
+        .bind(&image_entity.image_type)
+        .bind(&image_entity.image_orientation_patient)
+        .bind(&image_entity.image_position_patient)
+        .bind(&image_entity.slice_thickness)
+        .bind(&image_entity.spacing_between_slices)
+        .bind(&image_entity.slice_location)
+        .bind(&image_entity.samples_per_pixel)
+        .bind(&image_entity.photometric_interpretation)
+        .bind(&image_entity.width)
+        .bind(&image_entity.columns)
+        .bind(&image_entity.bits_allocated)
+        .bind(&image_entity.bits_stored)
+        .bind(&image_entity.high_bit)
+        .bind(&image_entity.pixel_representation)
+        .bind(&image_entity.rescale_intercept)
+        .bind(&image_entity.rescale_slope)
+        .bind(&image_entity.rescale_type)
+        .bind(&image_entity.acquisition_device_processing_description)
+        .bind(&image_entity.acquisition_device_processing_code)
+        .bind(&image_entity.device_serial_number)
+        .bind(&image_entity.software_versions)
+        .bind(&image_entity.transfer_syntax_uid)
+        .bind(&image_entity.sop_class_uid)
+        .bind(&image_entity.number_of_frames)
+        .bind(&image_entity.space_size.unwrap_or(0))
+        .execute(&mut *tx)
+        .await;
 
         if let Err(e) = image_result {
             error!("Failed to save image info: {}", e);
@@ -324,14 +361,14 @@ impl DbProvider for MySqlProvider {
         const BATCH_SIZE: usize = 100;
         for chunk in study_lists.chunks(BATCH_SIZE) {
             // 构建批量插入语句，确保字段顺序与表结构完全一致
-            let mut query_builder = "INSERT INTO StudyEntity (tenant_id, StudyInstanceUID, PatientID, StudyDate, StudyTime, AccessionNumber, StudyID, StudyDescription, ReferringPhysicianName, PatientAge, PatientSize, PatientWeight, MedicalAlerts, Allergies, PregnancyStatus, Occupation, AdditionalPatientHistory, PatientComments, AdmissionID, PatientAgeAtStudy, PerformingPhysicianName, ProcedureCodeSequence) VALUES ".to_string();
+            let mut query_builder = "INSERT INTO StudyEntity (tenant_id, StudyInstanceUID, PatientID, StudyDate, StudyTime, AccessionNumber, StudyID, StudyDescription, ReferringPhysicianName, PatientAge, PatientSize, PatientWeight, MedicalAlerts, Allergies, PregnancyStatus, Occupation, AdditionalPatientHistory, PatientComments, AdmissionID, PatientAgeAtStudy, PerformingPhysicianName, ProcedureCodeSequence, ReceivedInstances, SpaceSize) VALUES ".to_string();
             let placeholders: Vec<String> = (0..chunk.len())
                 .map(|_| {
-                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string()
+                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string()
                 })
                 .collect();
             query_builder.push_str(&placeholders.join(", "));
-            query_builder.push_str(" ON DUPLICATE KEY UPDATE StudyDate = VALUES(StudyDate), StudyTime = VALUES(StudyTime), AccessionNumber = VALUES(AccessionNumber), StudyID = VALUES(StudyID), StudyDescription = VALUES(StudyDescription), ReferringPhysicianName = VALUES(ReferringPhysicianName), PatientAge = VALUES(PatientAge), PatientSize = VALUES(PatientSize), PatientWeight = VALUES(PatientWeight), MedicalAlerts = VALUES(MedicalAlerts), Allergies = VALUES(Allergies), PregnancyStatus = VALUES(PregnancyStatus), Occupation = VALUES(Occupation), AdditionalPatientHistory = VALUES(AdditionalPatientHistory), PatientComments = VALUES(PatientComments), AdmissionID = VALUES(AdmissionID), PatientAgeAtStudy = VALUES(PatientAgeAtStudy), PerformingPhysicianName = VALUES(PerformingPhysicianName), ProcedureCodeSequence = VALUES(ProcedureCodeSequence)");
+            query_builder.push_str(" ON DUPLICATE KEY UPDATE StudyDate = VALUES(StudyDate), StudyTime = VALUES(StudyTime), AccessionNumber = VALUES(AccessionNumber), StudyID = VALUES(StudyID), StudyDescription = VALUES(StudyDescription), ReferringPhysicianName = VALUES(ReferringPhysicianName), PatientAge = VALUES(PatientAge), PatientSize = VALUES(PatientSize), PatientWeight = VALUES(PatientWeight), MedicalAlerts = VALUES(MedicalAlerts), Allergies = VALUES(Allergies), PregnancyStatus = VALUES(PregnancyStatus), Occupation = VALUES(Occupation), AdditionalPatientHistory = VALUES(AdditionalPatientHistory), PatientComments = VALUES(PatientComments), AdmissionID = VALUES(AdmissionID), PatientAgeAtStudy = VALUES(PatientAgeAtStudy), PerformingPhysicianName = VALUES(PerformingPhysicianName), ProcedureCodeSequence = VALUES(ProcedureCodeSequence), ReceivedInstances = VALUES(ReceivedInstances), SpaceSize = VALUES(SpaceSize)");
 
             let mut query = sqlx::query(&query_builder);
             for study in chunk {
@@ -357,7 +394,9 @@ impl DbProvider for MySqlProvider {
                     .bind(&study.admission_id)
                     .bind(&study.patient_age_at_study)
                     .bind(&study.performing_physician_name)
-                    .bind(&study.procedure_code_sequence);
+                    .bind(&study.procedure_code_sequence)
+                    .bind(&study.received_instances)
+                    .bind(&study.space_size);
             }
 
             match query.execute(&pool).await {
@@ -371,6 +410,7 @@ impl DbProvider for MySqlProvider {
 
         Some(true)
     }
+
     async fn save_series_info(
         &self,
         tenant_id: &str,
@@ -386,12 +426,12 @@ impl DbProvider for MySqlProvider {
         const BATCH_SIZE: usize = 100;
         for chunk in series_lists.chunks(BATCH_SIZE) {
             // 构建批量插入语句，确保字段顺序与表结构完全一致
-            let mut query_builder = "INSERT INTO SeriesEntity (tenant_id, SeriesInstanceUID, StudyInstanceUID, Modality, SeriesNumber, SeriesDate, SeriesTime, SeriesDescription, BodyPartExamined, ProtocolName, ImageType, AcquisitionNumber, AcquisitionTime, AcquisitionDate, PerformingPhysicianName, OperatorsName, NumberOfSeriesRelatedInstances) VALUES ".to_string();
+            let mut query_builder = "INSERT INTO SeriesEntity (tenant_id, SeriesInstanceUID, StudyInstanceUID, Modality, SeriesNumber, SeriesDate, SeriesTime, SeriesDescription, BodyPartExamined, ProtocolName, ImageType, AcquisitionNumber, AcquisitionTime, AcquisitionDate, PerformingPhysicianName, OperatorsName, NumberOfSeriesRelatedInstances, ReceivedInstances, SpaceSize) VALUES ".to_string();
             let placeholders: Vec<String> = (0..chunk.len())
-                .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string())
+                .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string())
                 .collect();
             query_builder.push_str(&placeholders.join(", "));
-            query_builder.push_str(" ON DUPLICATE KEY UPDATE Modality = VALUES(Modality), SeriesNumber = VALUES(SeriesNumber), SeriesDate = VALUES(SeriesDate), SeriesTime = VALUES(SeriesTime), SeriesDescription = VALUES(SeriesDescription), BodyPartExamined = VALUES(BodyPartExamined), ProtocolName = VALUES(ProtocolName), ImageType = VALUES(ImageType), AcquisitionNumber = VALUES(AcquisitionNumber), AcquisitionTime = VALUES(AcquisitionTime), AcquisitionDate = VALUES(AcquisitionDate), PerformingPhysicianName = VALUES(PerformingPhysicianName), OperatorsName = VALUES(OperatorsName), NumberOfSeriesRelatedInstances = VALUES(NumberOfSeriesRelatedInstances)");
+            query_builder.push_str(" ON DUPLICATE KEY UPDATE Modality = VALUES(Modality), SeriesNumber = VALUES(SeriesNumber), SeriesDate = VALUES(SeriesDate), SeriesTime = VALUES(SeriesTime), SeriesDescription = VALUES(SeriesDescription), BodyPartExamined = VALUES(BodyPartExamined), ProtocolName = VALUES(ProtocolName), ImageType = VALUES(ImageType), AcquisitionNumber = VALUES(AcquisitionNumber), AcquisitionTime = VALUES(AcquisitionTime), AcquisitionDate = VALUES(AcquisitionDate), PerformingPhysicianName = VALUES(PerformingPhysicianName), OperatorsName = VALUES(OperatorsName), NumberOfSeriesRelatedInstances = VALUES(NumberOfSeriesRelatedInstances), ReceivedInstances = VALUES(ReceivedInstances), SpaceSize = VALUES(SpaceSize)");
 
             let mut query = sqlx::query(&query_builder);
             for series in chunk {
@@ -412,7 +452,9 @@ impl DbProvider for MySqlProvider {
                     .bind(&series.acquisition_date)
                     .bind(&series.performing_physician_name)
                     .bind(&series.operators_name)
-                    .bind(&series.number_of_series_related_instances);
+                    .bind(&series.number_of_series_related_instances)
+                    .bind(&series.received_instances)
+                    .bind(&series.space_size);
             }
 
             match query.execute(&pool).await {
@@ -426,6 +468,7 @@ impl DbProvider for MySqlProvider {
 
         Some(true)
     }
+
     async fn save_instance_info(&self, tenant_id: &str, dicom_obj: &[ImageEntity]) -> Option<bool> {
         if dicom_obj.is_empty() {
             return Some(true);
@@ -437,10 +480,12 @@ impl DbProvider for MySqlProvider {
         const BATCH_SIZE: usize = 100;
         for (batch_index, chunk) in dicom_obj.chunks(BATCH_SIZE).enumerate() {
             // 构建批量插入语句，确保字段顺序与表结构完全一致
-            let mut query_builder = "INSERT INTO ImageEntity (tenant_id, SOPInstanceUID, SeriesInstanceUID, StudyInstanceUID, PatientID, InstanceNumber, ImageComments, ContentDate, ContentTime, AcquisitionDateTime, ImageType, ImageOrientationPatient, ImagePositionPatient, SliceThickness, SpacingBetweenSlices, SliceLocation, SamplesPerPixel, PhotometricInterpretation, Width, Columns, BitsAllocated, BitsStored, HighBit, PixelRepresentation, RescaleIntercept, RescaleSlope, RescaleType, AcquisitionDeviceProcessingDescription, AcquisitionDeviceProcessingCode, DeviceSerialNumber, SoftwareVersions, TransferSyntaxUID, SOPClassUID) VALUES ".to_string();
-            let placeholders: Vec<String> = (0..chunk.len()).map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string()).collect();
+            let mut query_builder = "INSERT INTO ImageEntity (tenant_id, SOPInstanceUID, SeriesInstanceUID, StudyInstanceUID, PatientID, InstanceNumber, ImageComments, ContentDate, ContentTime, AcquisitionDateTime, ImageType, ImageOrientationPatient, ImagePositionPatient, SliceThickness, SpacingBetweenSlices, SliceLocation, SamplesPerPixel, PhotometricInterpretation, Width, Columns, BitsAllocated, BitsStored, HighBit, PixelRepresentation, RescaleIntercept, RescaleSlope, RescaleType, AcquisitionDeviceProcessingDescription, AcquisitionDeviceProcessingCode, DeviceSerialNumber, SoftwareVersions, TransferSyntaxUID, SOPClassUID, NumberOfFrames, SpaceSize) VALUES ".to_string();
+            let placeholders: Vec<String> = (0..chunk.len())
+                .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string())
+                .collect();
             query_builder.push_str(&placeholders.join(", "));
-            query_builder.push_str(" ON DUPLICATE KEY UPDATE InstanceNumber = VALUES(InstanceNumber), ImageComments = VALUES(ImageComments), ContentDate = VALUES(ContentDate), ContentTime = VALUES(ContentTime), AcquisitionDateTime = VALUES(AcquisitionDateTime), ImageType = VALUES(ImageType), ImageOrientationPatient = VALUES(ImageOrientationPatient), ImagePositionPatient = VALUES(ImagePositionPatient), SliceThickness = VALUES(SliceThickness), SpacingBetweenSlices = VALUES(SpacingBetweenSlices), SliceLocation = VALUES(SliceLocation), SamplesPerPixel = VALUES(SamplesPerPixel), PhotometricInterpretation = VALUES(PhotometricInterpretation), Width = VALUES(Width), Columns = VALUES(Columns), BitsAllocated = VALUES(BitsAllocated), BitsStored = VALUES(BitsStored), HighBit = VALUES(HighBit), PixelRepresentation = VALUES(PixelRepresentation), RescaleIntercept = VALUES(RescaleIntercept), RescaleSlope = VALUES(RescaleSlope), RescaleType = VALUES(RescaleType), AcquisitionDeviceProcessingDescription = VALUES(AcquisitionDeviceProcessingDescription), AcquisitionDeviceProcessingCode = VALUES(AcquisitionDeviceProcessingCode), DeviceSerialNumber = VALUES(DeviceSerialNumber), SoftwareVersions = VALUES(SoftwareVersions), TransferSyntaxUID = VALUES(TransferSyntaxUID)");
+            query_builder.push_str(" ON DUPLICATE KEY UPDATE InstanceNumber = VALUES(InstanceNumber), ImageComments = VALUES(ImageComments), ContentDate = VALUES(ContentDate), ContentTime = VALUES(ContentTime), AcquisitionDateTime = VALUES(AcquisitionDateTime), ImageType = VALUES(ImageType), ImageOrientationPatient = VALUES(ImageOrientationPatient), ImagePositionPatient = VALUES(ImagePositionPatient), SliceThickness = VALUES(SliceThickness), SpacingBetweenSlices = VALUES(SpacingBetweenSlices), SliceLocation = VALUES(SliceLocation), SamplesPerPixel = VALUES(SamplesPerPixel), PhotometricInterpretation = VALUES(PhotometricInterpretation), Width = VALUES(Width), Columns = VALUES(Columns), BitsAllocated = VALUES(BitsAllocated), BitsStored = VALUES(BitsStored), HighBit = VALUES(HighBit), PixelRepresentation = VALUES(PixelRepresentation), RescaleIntercept = VALUES(RescaleIntercept), RescaleSlope = VALUES(RescaleSlope), RescaleType = VALUES(RescaleType), AcquisitionDeviceProcessingDescription = VALUES(AcquisitionDeviceProcessingDescription), AcquisitionDeviceProcessingCode = VALUES(AcquisitionDeviceProcessingCode), DeviceSerialNumber = VALUES(DeviceSerialNumber), SoftwareVersions = VALUES(SoftwareVersions), TransferSyntaxUID = VALUES(TransferSyntaxUID), NumberOfFrames = VALUES(NumberOfFrames), SpaceSize = VALUES(SpaceSize)");
 
             let mut query = sqlx::query(&query_builder);
 
@@ -478,7 +523,9 @@ impl DbProvider for MySqlProvider {
                     .bind(&image.device_serial_number)
                     .bind(&image.software_versions)
                     .bind(&image.transfer_syntax_uid)
-                    .bind(&image.sop_class_uid);
+                    .bind(&image.sop_class_uid)
+                    .bind(&image.number_of_frames)
+                    .bind(&image.space_size);
             }
 
             match query.execute(&pool).await {
@@ -624,6 +671,7 @@ impl DbProvider for MySqlProvider {
             }
         }
     }
+
     async fn patient_series_exists(
         &self,
         tenant_id: &str,
@@ -635,8 +683,8 @@ impl DbProvider for MySqlProvider {
 
         match sqlx::query(
             "SELECT COUNT(*) FROM SeriesEntity
-         INNER JOIN StudyEntity ON SeriesEntity.StudyInstanceUID = StudyEntity.StudyInstanceUID
-         WHERE SeriesEntity.tenant_id = ? AND StudyEntity.PatientID = ? AND SeriesEntity.StudyInstanceUID = ? AND SeriesEntity.SeriesInstanceUID = ?"
+             INNER JOIN StudyEntity ON SeriesEntity.StudyInstanceUID = StudyEntity.StudyInstanceUID
+             WHERE SeriesEntity.tenant_id = ? AND StudyEntity.PatientID = ? AND SeriesEntity.StudyInstanceUID = ? AND SeriesEntity.SeriesInstanceUID = ?"
         )
             .bind(tenant_id)
             .bind(patient_id)
@@ -668,8 +716,8 @@ impl DbProvider for MySqlProvider {
 
         match sqlx::query(
             "SELECT COUNT(*) FROM ImageEntity
-         INNER JOIN StudyEntity ON ImageEntity.StudyInstanceUID = StudyEntity.StudyInstanceUID
-         WHERE ImageEntity.tenant_id = ? AND StudyEntity.PatientID = ? AND ImageEntity.StudyInstanceUID = ? AND ImageEntity.SeriesInstanceUID = ? AND ImageEntity.SOPInstanceUID = ?"
+             INNER JOIN StudyEntity ON ImageEntity.StudyInstanceUID = StudyEntity.StudyInstanceUID
+             WHERE ImageEntity.tenant_id = ? AND StudyEntity.PatientID = ? AND ImageEntity.StudyInstanceUID = ? AND ImageEntity.SeriesInstanceUID = ? AND ImageEntity.SOPInstanceUID = ?"
         )
             .bind(tenant_id)
             .bind(patient_id)
@@ -736,6 +784,7 @@ impl DbProvider for MySqlProvider {
         Some(true)
     }
 }
+
 
 #[cfg(test)]
 mod tests {
