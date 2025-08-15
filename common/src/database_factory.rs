@@ -1,4 +1,4 @@
-use crate::db_provider::DbProvider;
+use crate::database_provider::DbProvider;
 use crate::mysql_provider::MySqlProvider;
 use crate::server_config;
 use sqlx::MySqlPool;

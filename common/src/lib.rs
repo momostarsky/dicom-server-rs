@@ -1,13 +1,14 @@
 use serde::{Deserialize, Serialize};
 
-pub mod db_provider;
+pub mod database_provider;
 pub mod mysql_provider;
 pub mod server_config;
 pub mod kafka_producer_factory;
-pub mod entities;
+pub mod database_entities;
 pub mod utils;
 pub mod database_factory;
- 
+pub mod cornerstonejs;
+pub mod dicom_utils;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DicomMessage {

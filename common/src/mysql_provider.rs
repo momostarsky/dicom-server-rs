@@ -1,5 +1,5 @@
-use crate::db_provider::DbProvider;
-use crate::entities::{DbProviderBase, ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
+use crate::database_provider::DbProvider;
+use crate::database_entities::{DbProviderBase, ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
 use async_trait::async_trait;
 use dicom_object::DefaultDicomObject;
 use sqlx::{MySqlPool, Row};
@@ -915,13 +915,13 @@ mod tests {
             match dicom_obj {
                 Ok(dcmobj) => {
                     let patient_entity =
-                        crate::entities::DbProviderBase::extract_patient_entity(tenant_id, &dcmobj);
+                        crate::database_entities::DbProviderBase::extract_patient_entity(tenant_id, &dcmobj);
                     // 修复：正确检查 patient_name 是否存在
                     let patient_id = patient_entity.patient_id.clone();
                     if !patient_list.contains_key(&patient_entity.patient_id) {
                         patient_list.insert(patient_id.clone(), patient_entity);
                     }
-                    let study_entity = crate::entities::DbProviderBase::extract_study_entity(
+                    let study_entity = crate::database_entities::DbProviderBase::extract_study_entity(
                         tenant_id,
                         &dcmobj,
                         &patient_id, // 使用 clone 后的值，避免 move
@@ -930,7 +930,7 @@ mod tests {
                     if !study_list.contains_key(study_uid.as_str()) {
                         study_list.insert(study_uid.clone(), study_entity);
                     }
-                    let series_entity = crate::entities::DbProviderBase::extract_series_entity(
+                    let series_entity = crate::database_entities::DbProviderBase::extract_series_entity(
                         tenant_id,
                         &dcmobj,
                         study_uid.as_str(), // 使用 clone 后的值，避免 move
@@ -939,7 +939,7 @@ mod tests {
                     if !series_list.contains_key(series_id.as_str()) {
                         series_list.insert(series_id.clone(), series_entity);
                     }
-                    let image_entity = crate::entities::DbProviderBase::extract_image_entity(
+                    let image_entity = crate::database_entities::DbProviderBase::extract_image_entity(
                         tenant_id,
                         &dcmobj,
                         study_uid.as_str(), // 使用 clone 后的值，避免 move

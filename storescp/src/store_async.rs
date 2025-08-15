@@ -1,11 +1,8 @@
-use common::kafka_producer_factory::KafkaProducer;
-
 use crate::{
     create_cecho_response, create_cstore_response, dicom_file_handler, transfer::ABSTRACT_SYNTAXES,
     App,
 };
-use common::entities::DicomObjectMeta;
-use dicom_core::chrono::Local;
+use common::kafka_producer_factory;
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
@@ -13,7 +10,6 @@ use dicom_ul::{pdu::PDataValueType, Pdu};
 use snafu::{OptionExt, Report, ResultExt, Whatever};
 use tracing::log::error;
 use tracing::{debug, info, warn};
-use common::kafka_producer_factory;
 
 pub async fn run_store_async(
     scu_stream: tokio::net::TcpStream,
@@ -80,8 +76,8 @@ pub async fn run_store_async(
         association.presentation_contexts()
     );
     let base_dir = out_dir.to_str().unwrap();
-    let kafka_producer =kafka_producer_factory::create_main_kafka_producer();
-    let mut dicom_message_lists: Vec<common::entities::DicomObjectMeta> = vec![];
+    let kafka_producer = kafka_producer_factory::create_main_kafka_producer();
+    let mut dicom_message_lists: Vec<common::database_entities::DicomObjectMeta> = vec![];
     loop {
         match association.receive().await {
             Ok(mut pdu) => {
@@ -219,7 +215,7 @@ pub async fn run_store_async(
                                 }
                                 if dicom_message_lists.len() >= 10 {
                                     match kafka_producer
-                                        .send_batch_messages(  &dicom_message_lists)
+                                        .send_batch_messages(&dicom_message_lists)
                                         .await
                                     {
                                         Ok(_) => {

@@ -1,4 +1,4 @@
-use crate::entities::{DicomObjectMeta, ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
+use crate::database_entities::{DicomObjectMeta, ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
 use std::collections::{HashMap, HashSet};
 
 pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {

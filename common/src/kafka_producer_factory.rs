@@ -1,4 +1,4 @@
-use crate::entities::DicomObjectMeta;
+use crate::database_entities::DicomObjectMeta;
 use crate::server_config;
 use futures::future::join_all;
 use rdkafka::ClientConfig;

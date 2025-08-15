@@ -1,14 +1,13 @@
-use common::entities::{DbProviderBase, DicomObjectMeta};
-use common::DicomMessage;
-use dicom_core::chrono::Local;
+use common::dicom_utils;
+use common::database_entities::{DbProviderBase, DicomObjectMeta};
+use common::kafka_producer_factory::KafkaProducer;
 use dicom_dictionary_std::tags;
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use snafu::{whatever, ResultExt, Whatever};
+use tracing::info;
 use tracing::log::warn;
-use tracing::{error, info};
-use common::kafka_producer_factory::KafkaProducer;
 
 pub(crate) async fn process_dicom_file(
     instance_buffer: &[u8],    //DICOM文件的字节数组或是二进制流
@@ -16,7 +15,7 @@ pub(crate) async fn process_dicom_file(
     issue_patient_id: &String, // 机构ID,或是医院ID, 用于区分多个医院.
     ts: &String,               // 传输语法
     sop_instance_uid: &String, //当前文件的SOP实例ID
-    lst: &mut Vec<common::entities::DicomObjectMeta>,
+    lst: &mut Vec<common::database_entities::DicomObjectMeta>,
 ) -> Result<(), Whatever> {
     let obj = InMemDicomObject::read_dataset_with_ts(
         instance_buffer,
@@ -53,6 +52,9 @@ pub(crate) async fn process_dicom_file(
         .whatever_context("could not retrieve ACCESSION_NUMBER")?
         .trim_end_matches("\0")
         .to_string();
+
+    let number_of_frames = dicom_utils::get_tag_value(tags::NUMBER_OF_FRAMES, &obj, 1);
+
     info!(
         "Issur:{} ,PatientID: {}, StudyUID: {}, SeriesUID: {}, AccessionNumber: {}",
         issue_patient_id, pat_id, study_uid, series_uid, accession_number
@@ -134,7 +136,7 @@ pub(crate) async fn process_dicom_file(
         Ok(fs) => fs.len() as u64,
         Err(_) => 0,
     };
-    lst.push(common::entities::DicomObjectMeta {
+    lst.push(common::database_entities::DicomObjectMeta {
         patient_info: pat,
         study_info: study,
         series_info: series,
@@ -142,6 +144,8 @@ pub(crate) async fn process_dicom_file(
         file_path: file_path.to_string(),
         file_size,
         tenant_id: issue_patient_id.to_string(),
+        transfer_synatx_uid: ts.to_string(),
+        number_of_frames,
     });
     Ok(())
 }
@@ -160,10 +164,7 @@ pub(crate) async fn sendmessage_to_kafka(
         dicom_message_lists.len()
     );
 
-    match kafka_producer
-        .send_messages( dicom_message_lists)
-        .await
-    {
+    match kafka_producer.send_messages(dicom_message_lists).await {
         Ok(_) => {
             info!(
                 "Successfully sent {} messages to Kafka",
@@ -175,34 +176,6 @@ pub(crate) async fn sendmessage_to_kafka(
                 "Failed to send messages to Kafka: {}. Writing to disk backup.",
                 e
             );
-        }
-    }
-}
-
-// 备份失败消息到磁盘文件
-async fn backup_failed_messages(messages: &[DicomObjectMeta], backup_filename: &str) {
-    // 将消息列表序列化为 JSON
-    match serde_json::to_string_pretty(messages) {
-        Ok(json_data) => {
-            // 写入磁盘文件
-            match std::fs::write(backup_filename, json_data) {
-                Ok(_) => {
-                    info!(
-                        "Successfully wrote {} messages to backup file: {}",
-                        messages.len(),
-                        backup_filename
-                    );
-                }
-                Err(write_err) => {
-                    error!(
-                        "Failed to write backup file {}: {}",
-                        backup_filename, write_err
-                    );
-                }
-            }
-        }
-        Err(serialize_err) => {
-            error!("Failed to serialize messages: {}", serialize_err);
         }
     }
 }

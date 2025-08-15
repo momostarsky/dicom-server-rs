@@ -1,4 +1,4 @@
-use common::entities::{DicomObjectMeta};
+use common::database_entities::{DicomObjectMeta};
 use common::mysql_provider::MySqlProvider;
 use common::utils::{get_unique_tenant_ids, group_dicom_messages, setup_logging};
 use common::{database_factory, server_config};

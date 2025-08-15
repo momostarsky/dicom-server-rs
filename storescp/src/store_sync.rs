@@ -3,7 +3,7 @@ use crate::{
     create_cecho_response, create_cstore_response, dicom_file_handler, transfer::ABSTRACT_SYNTAXES,
     App,
 };
-use dicom_core::chrono::Local;
+
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
@@ -13,7 +13,6 @@ use std::net::TcpStream;
 use tracing::log::error;
 use tracing::{debug, info, warn};
 use common::kafka_producer_factory;
-use common::kafka_producer_factory::KafkaProducer;
 
 pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Whatever> {
     let App {

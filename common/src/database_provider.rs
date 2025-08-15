@@ -1,4 +1,4 @@
-use crate::entities::{ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
+use crate::database_entities::{ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
 use async_trait::async_trait;
 use dicom_object::DefaultDicomObject;
 
