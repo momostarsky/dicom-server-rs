@@ -3,7 +3,7 @@ use crate::{
     App,
 };
 
-use common::kafka_producer_factory;
+use common::producer_factory;
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
@@ -66,11 +66,10 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         association.presentation_contexts()
     );
     let base_dir = out_dir.to_str().unwrap();
-    let main_kafka_producer = kafka_producer_factory::create_main_kafka_producer();
-    let chgts_kafka_producer =
-        kafka_producer_factory::create_change_transfersyntax_kafka_producer();
-    let multi_frames_kafka_producer =
-        kafka_producer_factory::create_extract_frames_kafka_producer();
+    let main_kafka_producer = producer_factory::create_main_kafka_producer();
+    let chgts_producer =
+        producer_factory::create_change_transfersyntax_kafka_producer();
+    let multi_frames_producer = producer_factory::create_multi_frames_kafka_producer();
     let mut dicom_message_lists = vec![];
     loop {
         match association.receive() {
@@ -211,8 +210,8 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                 if dicom_message_lists.len() >= 10 {
                                     match dicom_file_handler::publish_messages(
                                         &main_kafka_producer,
-                                        Some(&multi_frames_kafka_producer),
-                                        Some(&chgts_kafka_producer),
+                                        Some(&multi_frames_producer),
+                                        Some(&chgts_producer),
                                         &dicom_message_lists,
                                     )
                                     .await
@@ -306,8 +305,8 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
     if dicom_message_lists.len() > 0 {
         match dicom_file_handler::publish_messages(
             &main_kafka_producer,
-            Some(&multi_frames_kafka_producer),
-            Some(&chgts_kafka_producer),
+            Some(&multi_frames_producer),
+            Some(&chgts_producer),
             &dicom_message_lists,
         )
         .await

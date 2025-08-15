@@ -104,12 +104,12 @@ pub struct ImageEntity {
     pub rescale_intercept: Option<f64>,
     pub rescale_slope: Option<f64>,
     pub rescale_type: Option<String>,
-    pub number_of_frames: Option<i32>,
+    pub number_of_frames: i32,
     pub acquisition_device_processing_description: Option<String>,
     pub acquisition_device_processing_code: Option<String>,
     pub device_serial_number: Option<String>,
     pub software_versions: Option<String>,
-    pub transfer_syntax_uid: Option<String>,
+    pub transfer_syntax_uid: String,
     pub pixel_data_location: Option<String>,
     pub thumbnail_location: Option<String>,
     pub sop_class_uid: String,
@@ -245,7 +245,7 @@ impl DbProviderBase {
             dicom_utils::get_text_value(dicom_obj, tags::ACQUISITION_DATE_TIME);
         let acquisition_date_time_parsed =
             acquisition_date_time.and_then(|dt| if !dt.is_empty() { Some(dt) } else { None });
-
+        let img_number_of_frames = dicom_utils::get_tag_value(tags::NUMBER_OF_FRAMES, dicom_obj, 1);
         ImageEntity {
             tenant_id: tenant_id.to_string(),
             sop_instance_uid: dicom_utils::get_text_value(dicom_obj, tags::SOP_INSTANCE_UID)
@@ -287,7 +287,7 @@ impl DbProviderBase {
             rescale_intercept: dicom_utils::get_decimal_value(dicom_obj, tags::RESCALE_INTERCEPT),
             rescale_slope: dicom_utils::get_decimal_value(dicom_obj, tags::RESCALE_SLOPE),
             rescale_type: dicom_utils::get_text_value(dicom_obj, tags::RESCALE_TYPE),
-            number_of_frames: dicom_utils::get_int_value(dicom_obj, tags::NUMBER_OF_FRAMES),
+            number_of_frames:  img_number_of_frames,
             acquisition_device_processing_description: dicom_utils::get_text_value(
                 dicom_obj,
                 tags::ACQUISITION_DEVICE_PROCESSING_DESCRIPTION,
@@ -301,7 +301,7 @@ impl DbProviderBase {
                 tags::DEVICE_SERIAL_NUMBER,
             ),
             software_versions: dicom_utils::get_text_value(dicom_obj, tags::SOFTWARE_VERSIONS),
-            transfer_syntax_uid: dicom_utils::get_text_value(dicom_obj, tags::TRANSFER_SYNTAX_UID),
+            transfer_syntax_uid: dicom_utils::get_text_value(dicom_obj, tags::TRANSFER_SYNTAX_UID).unwrap_or_default(),
             pixel_data_location: None,
             thumbnail_location: None,
             sop_class_uid: dicom_utils::get_text_value(dicom_obj, tags::SOP_CLASS_UID)

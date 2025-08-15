@@ -48,7 +48,7 @@ pub struct KafkaConfig {
     pub compression_codec: String,
     pub topic_main: String,
     pub topic_change_transfer_syntax: String,
-    pub topic_extract_dicom: String,
+    pub topic_multi_frames: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -155,7 +155,7 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
                 "kafka:topic_change_transfer_syntax {:?}",
                 kafka.topic_change_transfer_syntax
             );
-            println!("kafka:topic_extract_dicom {:?}", kafka.topic_extract_dicom); 
+            println!("kafka:topic_multi_frames {:?}", kafka.topic_multi_frames);
         }
         _ => {
             println!("other config {:?}", app_config);

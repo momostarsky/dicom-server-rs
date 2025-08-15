@@ -184,7 +184,7 @@ pub fn create_main_kafka_producer() -> KafkaProducer {
     }
 }
 
-pub fn create_extract_frames_kafka_producer() -> KafkaProducer {
+pub fn create_multi_frames_kafka_producer() -> KafkaProducer {
     let kafka_config = get_kafka_config();
     let brokers = kafka_config.brokers;
     let producer = ClientConfig::new()
@@ -217,7 +217,7 @@ pub fn create_extract_frames_kafka_producer() -> KafkaProducer {
         .expect("Failed to create Kafka producer");
     KafkaProducer {
         producer,
-        topic: kafka_config.topic_extract_dicom,
+        topic: kafka_config.topic_multi_frames,
     }
 }
 

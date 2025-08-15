@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 pub mod database_provider;
 pub mod mysql_provider;
 pub mod server_config;
-pub mod kafka_producer_factory;
+pub mod producer_factory;
 pub mod database_entities;
 pub mod utils;
 pub mod database_factory;

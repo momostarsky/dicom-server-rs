@@ -16,7 +16,7 @@ impl MySqlProvider {
         Self { pool }
     }
 }
-
+static BATCH_SIZE: usize = 10;
 #[async_trait]
 impl DbProvider for MySqlProvider {
     async fn save_dicom_info(
@@ -316,7 +316,7 @@ impl DbProvider for MySqlProvider {
         let pool = self.pool.clone();
 
         // 分批处理，避免SQL参数限制
-        const BATCH_SIZE: usize = 100;
+
         for chunk in patient_lists.chunks(BATCH_SIZE) {
             // 构建批量插入语句，确保字段顺序与表结构完全一致
             let mut query_builder = "INSERT INTO PatientEntity (tenant_id, PatientID, PatientName, PatientBirthDate, PatientSex, PatientBirthTime, EthnicGroup) VALUES ".to_string();
@@ -358,7 +358,6 @@ impl DbProvider for MySqlProvider {
         let pool = self.pool.clone();
 
         // 分批处理，避免SQL参数限制
-        const BATCH_SIZE: usize = 100;
         for chunk in study_lists.chunks(BATCH_SIZE) {
             // 构建批量插入语句，确保字段顺序与表结构完全一致
             let mut query_builder = "INSERT INTO StudyEntity (tenant_id, StudyInstanceUID, PatientID, StudyDate, StudyTime, AccessionNumber, StudyID, StudyDescription, ReferringPhysicianName, PatientAge, PatientSize, PatientWeight, MedicalAlerts, Allergies, PregnancyStatus, Occupation, AdditionalPatientHistory, PatientComments, AdmissionID, PatientAgeAtStudy, PerformingPhysicianName, ProcedureCodeSequence, ReceivedInstances, SpaceSize) VALUES ".to_string();
@@ -423,7 +422,7 @@ impl DbProvider for MySqlProvider {
         let pool = self.pool.clone();
 
         // 分批处理，避免SQL参数限制
-        const BATCH_SIZE: usize = 100;
+
         for chunk in series_lists.chunks(BATCH_SIZE) {
             // 构建批量插入语句，确保字段顺序与表结构完全一致
             let mut query_builder = "INSERT INTO SeriesEntity (tenant_id, SeriesInstanceUID, StudyInstanceUID, Modality, SeriesNumber, SeriesDate, SeriesTime, SeriesDescription, BodyPartExamined, ProtocolName, ImageType, AcquisitionNumber, AcquisitionTime, AcquisitionDate, PerformingPhysicianName, OperatorsName, NumberOfSeriesRelatedInstances, ReceivedInstances, SpaceSize) VALUES ".to_string();
@@ -477,7 +476,7 @@ impl DbProvider for MySqlProvider {
         let pool = self.pool.clone();
 
         // 分批处理，避免SQL参数限制
-        const BATCH_SIZE: usize = 100;
+
         for (batch_index, chunk) in dicom_obj.chunks(BATCH_SIZE).enumerate() {
             // 构建批量插入语句，确保字段顺序与表结构完全一致
             let mut query_builder = "INSERT INTO ImageEntity (tenant_id, SOPInstanceUID, SeriesInstanceUID, StudyInstanceUID, PatientID, InstanceNumber, ImageComments, ContentDate, ContentTime, AcquisitionDateTime, ImageType, ImageOrientationPatient, ImagePositionPatient, SliceThickness, SpacingBetweenSlices, SliceLocation, SamplesPerPixel, PhotometricInterpretation, Width, Columns, BitsAllocated, BitsStored, HighBit, PixelRepresentation, RescaleIntercept, RescaleSlope, RescaleType, AcquisitionDeviceProcessingDescription, AcquisitionDeviceProcessingCode, DeviceSerialNumber, SoftwareVersions, TransferSyntaxUID, SOPClassUID, NumberOfFrames, SpaceSize) VALUES ".to_string();

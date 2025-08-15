@@ -1,6 +1,5 @@
 use common::database_entities::{DbProviderBase, DicomObjectMeta};
-use common::dicom_utils;
-use common::kafka_producer_factory::KafkaProducer;
+use common::producer_factory::KafkaProducer;
 use dicom_dictionary_std::tags;
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
@@ -53,7 +52,7 @@ pub(crate) async fn process_dicom_file(
         .trim_end_matches("\0")
         .to_string();
 
-    let number_of_frames = dicom_utils::get_tag_value(tags::NUMBER_OF_FRAMES, &obj, 1);
+
 
     info!(
         "Issur:{} ,PatientID: {}, StudyUID: {}, SeriesUID: {}, AccessionNumber: {}",
@@ -123,7 +122,7 @@ pub(crate) async fn process_dicom_file(
         DbProviderBase::extract_study_entity(issue_patient_id, &file_obj, pat.patient_id.as_str());
     let series =
         DbProviderBase::extract_series_entity(issue_patient_id, &file_obj, study_uid.as_str());
-    let image = DbProviderBase::extract_image_entity(
+    let mut image = DbProviderBase::extract_image_entity(
         issue_patient_id,
         &file_obj,
         study_uid.as_str(),
@@ -136,16 +135,18 @@ pub(crate) async fn process_dicom_file(
         Ok(fs) => fs.len() as u64,
         Err(_) => 0,
     };
-    lst.push(common::database_entities::DicomObjectMeta {
+    image.space_size = Option::from(file_size);
+    image.transfer_syntax_uid = ts.to_string();
+    lst.push(DicomObjectMeta {
         patient_info: pat,
         study_info: study,
         series_info: series,
-        image_info: image,
+        image_info: image.clone(),
         file_path: file_path.to_string(),
         file_size,
         tenant_id: issue_patient_id.to_string(),
         transfer_synatx_uid: ts.to_string(),
-        number_of_frames,
+        number_of_frames: image.number_of_frames
     });
     Ok(())
 }
@@ -182,16 +183,16 @@ pub(crate) async fn publish_messages(
             //----多帧会进行CHGTS转换
             let chgts_messages: Vec<_> = dicom_message_lists
                 .iter()
-                .filter(|msg| msg.number_of_frames == 1 &&  common::cornerstonejs::SUPPORTED_TRANSFER_SYNTAXES.contains(&msg.transfer_synatx_uid.as_str()))
+                .filter(|msg| msg.number_of_frames == 1 && !common::cornerstonejs::SUPPORTED_TRANSFER_SYNTAXES.contains(&msg.transfer_synatx_uid.as_str()))
                 .cloned()
                 .collect();
             if chgts_messages.len() > 0 {
                 match producer.send_batch_messages(&chgts_messages).await {
                     Ok(_) => {
-                        info!("Successfully sent messages to Kafka");
+                        info!("Successfully sent messages to topic-change transfersynatx ");
                     }
                     Err(e) => {
-                        error!("Failed to send messages to Kafka: {}", e);
+                        error!("Failed to send messages to topic-change transfersynatx : {}", e);
                     }
                 }
             }
@@ -215,10 +216,10 @@ pub(crate) async fn publish_messages(
             if multi_frame_messages.len() > 0 {
                 match producer.send_batch_messages(&multi_frame_messages).await {
                     Ok(_) => {
-                        info!("Successfully sent messages to Kafka");
+                        info!("Successfully sent messages to topic_multi_frames");
                     }
                     Err(e) => {
-                        error!("Failed to send messages to Kafka: {}", e);
+                        error!("Failed to send messages to topic_multi_frames: {}", e);
                     }
                 }
             }

@@ -2,7 +2,7 @@ use crate::{
     create_cecho_response, create_cstore_response, dicom_file_handler, transfer::ABSTRACT_SYNTAXES,
     App,
 };
-use common::kafka_producer_factory;
+use common::producer_factory;
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
@@ -76,11 +76,11 @@ pub async fn run_store_async(
         association.presentation_contexts()
     );
     let base_dir = out_dir.to_str().unwrap();
-    let main_kafka_producer = kafka_producer_factory::create_main_kafka_producer();
+    let main_kafka_producer = producer_factory::create_main_kafka_producer();
     let chgts_kafka_producer =
-        kafka_producer_factory::create_change_transfersyntax_kafka_producer();
+        producer_factory::create_change_transfersyntax_kafka_producer();
     let multi_frames_kafka_producer =
-        kafka_producer_factory::create_extract_frames_kafka_producer();
+        producer_factory::create_multi_frames_kafka_producer();
     let mut dicom_message_lists: Vec<common::database_entities::DicomObjectMeta> = vec![];
     loop {
         match association.receive().await {

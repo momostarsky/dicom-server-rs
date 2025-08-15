@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS SeriesEntity
     SeriesTime                     VARCHAR(15) COMMENT '序列时间 (0008,0031) - TM',
     SeriesDescription              VARCHAR(64) COMMENT '序列描述 (0008,103E) - LO, VM=1, max 64 chars',
     -- 成像参数
-    BodyPartExamined               VARCHAR(16) COMMENT '检查部位 (0018,0015) - CS, VM=1, max 16 chars',
+    BodyPartExamined               VARCHAR(64) COMMENT '检查部位 (0018,0015) - CS, VM=1, max 16 chars',
     ProtocolName                   VARCHAR(64) COMMENT '协议名称 (0018,1030) - LO, VM=1, max 64 chars',
     ImageType                      VARCHAR(64) COMMENT '图像类型 (0008,0008) - CS, VM=1-n, max 16×n → 取64',
     AcquisitionNumber              INT COMMENT '采集号 (0020,0012) - IS, VM=1, max 12 chars → INT',

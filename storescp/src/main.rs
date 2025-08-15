@@ -116,7 +116,7 @@ async fn main() {
     let config = match config {
         Ok(config) => config,
         Err(e) => {
-            error!("{:?}", e);
+            println!("{:?}", e);
             std::process::exit(-2);
         }
     };
@@ -142,7 +142,7 @@ async fn main() {
     let out_dir = std::fs::exists(&app.out_dir);
     if out_dir.unwrap() == false {
         std::fs::create_dir_all(&app.out_dir).unwrap_or_else(|e| {
-            error!("Could not create output directory: {}", e);
+            println!("Could not create output directory: {}", e);
             std::process::exit(-2);
         });
     }
@@ -150,7 +150,7 @@ async fn main() {
     let json_dir = std::fs::exists(&app.json_store_path);
     if json_dir.unwrap() == false {
         std::fs::create_dir_all(&app.json_store_path).unwrap_or_else(|e| {
-            error!("Could not create output directory: {}", e);
+            println!("Could not create output directory: {}", e);
             std::process::exit(-2);
         });
     }
@@ -161,13 +161,13 @@ async fn main() {
             .unwrap()
             .block_on(async move {
                 run_async(app).await.unwrap_or_else(|e| {
-                    error!("{:?}", e);
+                    println!("{:?}", e);
                     std::process::exit(-2);
                 });
             });
     } else {
         run_sync(app).await.unwrap_or_else(|e| {
-            error!("{:?}", e);
+            println!("{:?}", e);
             std::process::exit(-2);
         });
     }
