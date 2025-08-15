@@ -42,6 +42,8 @@ pub struct StudyEntity {
     pub patient_age_at_study: Option<String>,
     pub performing_physician_name: Option<String>,
     pub procedure_code_sequence: Option<String>,
+    pub received_instances: Option<u32>, // 新增字段
+    pub space_size: Option<u64>,         // 新增字段
     pub created_time: Option<String>,
     pub updated_time: Option<String>,
 }
@@ -66,6 +68,8 @@ pub struct SeriesEntity {
     pub performing_physician_name: Option<String>,
     pub operators_name: Option<String>,
     pub number_of_series_related_instances: Option<i32>,
+    pub received_instances: Option<u32>, // 新增字段
+    pub space_size: Option<u64>,         // 新增字段
     pub created_time: Option<String>,
     pub updated_time: Option<String>,
 }
@@ -100,6 +104,7 @@ pub struct ImageEntity {
     pub rescale_intercept: Option<f64>,
     pub rescale_slope: Option<f64>,
     pub rescale_type: Option<String>,
+    pub number_of_frames: Option<i32>,
     pub acquisition_device_processing_description: Option<String>,
     pub acquisition_device_processing_code: Option<String>,
     pub device_serial_number: Option<String>,
@@ -109,6 +114,7 @@ pub struct ImageEntity {
     pub thumbnail_location: Option<String>,
     pub sop_class_uid: String,
     pub image_status: Option<String>,
+    pub space_size: Option<u64>, // 新增字段
     pub created_time: Option<String>,
     pub updated_time: Option<String>,
 }
@@ -127,15 +133,11 @@ pub struct DicomObjectMeta {
 }
 pub struct DbProviderBase {}
 impl DbProviderBase {
-
-
-    pub fn extract_patient_entity(
-        tenant_id: &str,
-        dicom_obj: &InMemDicomObject,
-    ) -> PatientEntity {
+    pub fn extract_patient_entity(tenant_id: &str, dicom_obj: &InMemDicomObject) -> PatientEntity {
         PatientEntity {
             tenant_id: tenant_id.to_string(),
-            patient_id: dicom_utils::get_text_value(dicom_obj, tags::PATIENT_ID).unwrap_or_default(),
+            patient_id: dicom_utils::get_text_value(dicom_obj, tags::PATIENT_ID)
+                .unwrap_or_default(),
             patient_name: dicom_utils::get_text_value(dicom_obj, tags::PATIENT_NAME),
             patient_birth_date: dicom_utils::get_date_value(dicom_obj, tags::PATIENT_BIRTH_DATE),
             patient_sex: dicom_utils::get_text_value(dicom_obj, tags::PATIENT_SEX),
@@ -183,7 +185,13 @@ impl DbProviderBase {
                 dicom_obj,
                 tags::PERFORMING_PHYSICIAN_NAME,
             ),
-            procedure_code_sequence: dicom_utils::get_text_value(dicom_obj, tags::PROCEDURE_CODE_SEQUENCE),
+
+            received_instances: Some(0),
+            space_size: Some(0),
+            procedure_code_sequence: dicom_utils::get_text_value(
+                dicom_obj,
+                tags::PROCEDURE_CODE_SEQUENCE,
+            ),
             created_time: None,
             updated_time: None,
         }
@@ -219,6 +227,8 @@ impl DbProviderBase {
                 dicom_obj,
                 tags::NUMBER_OF_SERIES_RELATED_INSTANCES,
             ),
+            received_instances: Some(0),
+            space_size: Some(0),
             created_time: None,
             updated_time: None,
         }
@@ -231,7 +241,8 @@ impl DbProviderBase {
         series_uid: &str,
         patient_id: &str,
     ) -> ImageEntity {
-        let acquisition_date_time = dicom_utils::get_text_value(dicom_obj, tags::ACQUISITION_DATE_TIME);
+        let acquisition_date_time =
+            dicom_utils::get_text_value(dicom_obj, tags::ACQUISITION_DATE_TIME);
         let acquisition_date_time_parsed =
             acquisition_date_time.and_then(|dt| if !dt.is_empty() { Some(dt) } else { None });
 
@@ -252,7 +263,10 @@ impl DbProviderBase {
                 dicom_obj,
                 tags::IMAGE_ORIENTATION_PATIENT,
             ),
-            image_position_patient: dicom_utils::get_text_value(dicom_obj, tags::IMAGE_POSITION_PATIENT),
+            image_position_patient: dicom_utils::get_text_value(
+                dicom_obj,
+                tags::IMAGE_POSITION_PATIENT,
+            ),
             slice_thickness: dicom_utils::get_decimal_value(dicom_obj, tags::SLICE_THICKNESS),
             spacing_between_slices: dicom_utils::get_decimal_value(
                 dicom_obj,
@@ -273,6 +287,7 @@ impl DbProviderBase {
             rescale_intercept: dicom_utils::get_decimal_value(dicom_obj, tags::RESCALE_INTERCEPT),
             rescale_slope: dicom_utils::get_decimal_value(dicom_obj, tags::RESCALE_SLOPE),
             rescale_type: dicom_utils::get_text_value(dicom_obj, tags::RESCALE_TYPE),
+            number_of_frames: dicom_utils::get_int_value(dicom_obj, tags::NUMBER_OF_FRAMES),
             acquisition_device_processing_description: dicom_utils::get_text_value(
                 dicom_obj,
                 tags::ACQUISITION_DEVICE_PROCESSING_DESCRIPTION,
@@ -281,13 +296,18 @@ impl DbProviderBase {
                 dicom_obj,
                 tags::ACQUISITION_DEVICE_PROCESSING_CODE,
             ),
-            device_serial_number: dicom_utils::get_text_value(dicom_obj, tags::DEVICE_SERIAL_NUMBER),
+            device_serial_number: dicom_utils::get_text_value(
+                dicom_obj,
+                tags::DEVICE_SERIAL_NUMBER,
+            ),
             software_versions: dicom_utils::get_text_value(dicom_obj, tags::SOFTWARE_VERSIONS),
             transfer_syntax_uid: dicom_utils::get_text_value(dicom_obj, tags::TRANSFER_SYNTAX_UID),
             pixel_data_location: None,
             thumbnail_location: None,
-            sop_class_uid: dicom_utils::get_text_value(dicom_obj, tags::SOP_CLASS_UID).unwrap_or_default(),
+            sop_class_uid: dicom_utils::get_text_value(dicom_obj, tags::SOP_CLASS_UID)
+                .unwrap_or_default(),
             image_status: Some("ACTIVE".to_string()),
+            space_size: None,
             created_time: None,
             updated_time: None,
         }

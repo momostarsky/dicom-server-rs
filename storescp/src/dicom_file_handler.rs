@@ -7,7 +7,7 @@ use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use snafu::{whatever, ResultExt, Whatever};
 use tracing::info;
-use tracing::log::{error, warn};
+use tracing::log::{error};
 
 pub(crate) async fn process_dicom_file(
     instance_buffer: &[u8],    //DICOM文件的字节数组或是二进制流

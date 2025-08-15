@@ -1,7 +1,7 @@
 DROP TABLE IF EXISTS PatientEntity;
 DROP TABLE IF EXISTS StudyEntity;
 DROP TABLE IF EXISTS SeriesEntity;
-DROP TABLE IF  EXISTS ImageEntity;
+DROP TABLE IF EXISTS ImageEntity;
 
 CREATE TABLE IF NOT EXISTS PatientEntity
 (
@@ -34,40 +34,42 @@ CREATE TABLE IF NOT EXISTS PatientEntity
 
 CREATE TABLE IF NOT EXISTS StudyEntity
 (
-    tenant_id               VARCHAR(64) NOT NULL COMMENT '租户ID',
+    tenant_id                VARCHAR(64) NOT NULL COMMENT '租户ID',
     -- 主键：检查唯一标识符
-    StudyInstanceUID        VARCHAR(64) NOT NULL COMMENT '检查实例UID (0020,000D)',
+    StudyInstanceUID         VARCHAR(64) NOT NULL COMMENT '检查实例UID (0020,000D)',
     -- 外键：关联患者
-    PatientID               VARCHAR(64) NOT NULL COMMENT '患者ID (外键，关联 PatientEntity) (0010,0020)',
+    PatientID                VARCHAR(64) NOT NULL COMMENT '患者ID (外键，关联 PatientEntity) (0010,0020)',
     -- 检查时的病人基本 信息
-    PatientAge       VARCHAR(10) COMMENT '患者年龄 (0010,1010)',
-    PatientSize      DECIMAL(5, 2) COMMENT '患者身高 (m)',
-    PatientWeight    DECIMAL(5, 2) COMMENT '患者体重 (kg)',
-    MedicalAlerts    VARCHAR(1024) COMMENT '医疗警报 (0010,2000)',
-    Allergies        VARCHAR(1024) COMMENT '过敏史 (0010,2110)',
-    PregnancyStatus  SMALLINT COMMENT '妊娠状态 (0010,21C0)',
-    Occupation             VARCHAR(32) COMMENT '职业 (0010,2180)',
+    PatientAge               VARCHAR(10) COMMENT '患者年龄 (0010,1010)',
+    PatientSize              DECIMAL(5, 2) COMMENT '患者身高 (m)',
+    PatientWeight            DECIMAL(5, 2) COMMENT '患者体重 (kg)',
+    MedicalAlerts            VARCHAR(1024) COMMENT '医疗警报 (0010,2000)',
+    Allergies                VARCHAR(1024) COMMENT '过敏史 (0010,2110)',
+    PregnancyStatus          SMALLINT COMMENT '妊娠状态 (0010,21C0)',
+    Occupation               VARCHAR(32) COMMENT '职业 (0010,2180)',
     AdditionalPatientHistory TEXT COMMENT '附加患者历史 (0010,21B0)',
     PatientComments          TEXT COMMENT '患者注释 (0010,4000)',
     -- 检查基本信息
-    StudyDate               DATE COMMENT '检查日期 (0008,0020) - DA',
-    StudyTime               VARCHAR(15) COMMENT '检查时间 (0008,0030) - TM',
-    AccessionNumber         VARCHAR(16) COMMENT '检查号 (0008,0050) - SH, VM=1, max 16 chars',
-    StudyID                 VARCHAR(16) COMMENT '检查ID (0020,0010) - SH, VM=1, max 16 chars',
-    StudyDescription        VARCHAR(64) COMMENT '检查描述 (0008,1030) - LO, VM=1, max 64 chars',
+    StudyDate                DATE COMMENT '检查日期 (0008,0020) - DA',
+    StudyTime                VARCHAR(15) COMMENT '检查时间 (0008,0030) - TM',
+    AccessionNumber          VARCHAR(16) COMMENT '检查号 (0008,0050) - SH, VM=1, max 16 chars',
+    StudyID                  VARCHAR(16) COMMENT '检查ID (0020,0010) - SH, VM=1, max 16 chars',
+    StudyDescription         VARCHAR(64) COMMENT '检查描述 (0008,1030) - LO, VM=1, max 64 chars',
     -- 检查类型与目的
 
-    ReferringPhysicianName  VARCHAR(192) COMMENT '转诊医生姓名 (0008,0090) - PN, VM=1, max 64×3',
-    AdmissionID             VARCHAR(16) COMMENT '住院号 (0038,0010) - LO, VM=1, max 64 chars → 取16',
-    PatientAgeAtStudy       VARCHAR(10) COMMENT '检查时患者年龄 (0010,1010) - AS, 来自图像或计算',
+    ReferringPhysicianName   VARCHAR(192) COMMENT '转诊医生姓名 (0008,0090) - PN, VM=1, max 64×3',
+    AdmissionID              VARCHAR(16) COMMENT '住院号 (0038,0010) - LO, VM=1, max 64 chars → 取16',
+    PatientAgeAtStudy        VARCHAR(10) COMMENT '检查时患者年龄 (0010,1010) - AS, 来自图像或计算',
     -- 其他信息
-    PerformingPhysicianName VARCHAR(192) COMMENT '执行医生姓名 (0008,1050) - PN, VM=1-n',
-    ProcedureCodeSequence   TEXT COMMENT '检查过程代码序列 (0008,1032) - SQ, 复杂结构，暂存为JSON或文本',
+    PerformingPhysicianName  VARCHAR(192) COMMENT '执行医生姓名 (0008,1050) - PN, VM=1-n',
+    ProcedureCodeSequence    TEXT COMMENT '检查过程代码序列 (0008,1032) - SQ, 复杂结构，暂存为JSON或文本',
+    ReceivedInstances        INT      DEFAULT 0 COMMENT '接收实例数量 (业务扩展)',
+    SpaceSize                BIGINT   DEFAULT 0 COMMENT '占用空间大小 (字节，业务扩展)',
 
 
     -- 时间戳（去掉 ON UPDATE，由应用层设置）
-    CreatedTime      DATETIME DEFAULT '1970-01-01 00:00:00' COMMENT '记录创建时间',
-    UpdatedTime      DATETIME DEFAULT '1970-01-01 00:00:00' COMMENT '记录更新时间'
+    CreatedTime              DATETIME DEFAULT '1970-01-01 00:00:00' COMMENT '记录创建时间',
+    UpdatedTime              DATETIME DEFAULT '1970-01-01 00:00:00' COMMENT '记录更新时间'
 )
     ENGINE = OLAP
     UNIQUE KEY(tenant_id, StudyInstanceUID)
@@ -107,9 +109,11 @@ CREATE TABLE IF NOT EXISTS SeriesEntity
 
     -- 图像统计（可选）
     NumberOfSeriesRelatedInstances INT COMMENT '该序列关联的图像数量 (0020,1209) - IS',
+    ReceivedInstances              INT      DEFAULT 0 COMMENT '已接收实例数 (业务扩展)',
+    SpaceSize                      BIGINT   DEFAULT 0 COMMENT '占用空间大小 (字节，业务扩展)',
     -- 时间戳（去掉 ON UPDATE，由应用层设置）
-    CreatedTime      DATETIME DEFAULT '1970-01-01 00:00:00' COMMENT '记录创建时间',
-    UpdatedTime      DATETIME DEFAULT '1970-01-01 00:00:00' COMMENT '记录更新时间'
+    CreatedTime                    DATETIME DEFAULT '1970-01-01 00:00:00' COMMENT '记录创建时间',
+    UpdatedTime                    DATETIME DEFAULT '1970-01-01 00:00:00' COMMENT '记录更新时间'
 )
     ENGINE = OLAP
     UNIQUE KEY(tenant_id, SeriesInstanceUID)
@@ -121,11 +125,7 @@ CREATE TABLE IF NOT EXISTS SeriesEntity
 
 
 
-
-
-
-
-CREATE TABLE IF NOT EXISTS  ImageEntity
+CREATE TABLE IF NOT EXISTS ImageEntity
 (
     tenant_id                              VARCHAR(64) NOT NULL COMMENT '租户ID',
     -- 主键：图像唯一实例标识符 (SOP Instance UID)
@@ -152,7 +152,7 @@ CREATE TABLE IF NOT EXISTS  ImageEntity
     -- 像素与图像参数
     SamplesPerPixel                        TINYINT COMMENT '每像素样本数 (0028,0002) - US, VM=1, e.g., 1=灰度, 3=彩色',
     PhotometricInterpretation              VARCHAR(16) COMMENT '光度学解释 (0028,0004) - CS, VM=1, e.g., MONOCHROME2, RGB',
-    Widths                                   SMALLINT COMMENT '行数 (0028,0010) - US, VM=1, max 65535',
+    Widths                                 SMALLINT COMMENT '行数 (0028,0010) - US, VM=1, max 65535',
     Columns                                SMALLINT COMMENT '列数 (0028,0011) - US, VM=1, max 65535',
     BitsAllocated                          TINYINT COMMENT '分配位数 (0028,0100) - US, VM=1, e.g., 8, 16',
     BitsStored                             TINYINT COMMENT '存储位数 (0028,0101) - US, VM=1',
@@ -161,6 +161,7 @@ CREATE TABLE IF NOT EXISTS  ImageEntity
     RescaleIntercept                       DECIMAL(8, 4) COMMENT '重缩放截距 (0028,1052) - DS, VM=1',
     RescaleSlope                           DECIMAL(8, 4) COMMENT '重缩放斜率 (0028,1053) - DS, VM=1',
     RescaleType                            VARCHAR(16) COMMENT '重缩放类型 (0028,1054) - LO, VM=1, e.g., "HU" for CT',
+    NumberOfFrames                         INT COMMENT '帧数 (0028,0008) - IS, VM=1, max 8 chars → INT',
 
     -- 图像来源与设备
     AcquisitionDeviceProcessingDescription VARCHAR(64) COMMENT '采集设备处理描述 (0018,1010) - LO, VM=1',
@@ -171,13 +172,14 @@ CREATE TABLE IF NOT EXISTS  ImageEntity
     -- 存储与引用信息
     TransferSyntaxUID                      VARCHAR(64) COMMENT '传输语法UID (0002,0010) - UI, e.g., 压缩或未压缩格式',
     -- 状态与元信息
+    SpaceSize                              BIGINT      DEFAULT 0 COMMENT '占用空间大小 (字节，业务扩展)',
     SOPClassUID                            VARCHAR(64) NOT NULL COMMENT 'SOP类UID (0008,0016) - UI, e.g., CT Image Storage',
     ImageStatus                            VARCHAR(16) DEFAULT 'ACTIVE' COMMENT '图像状态 (业务扩展: ACTIVE/ARCHIVED/DELETED)',
     PixelDataLocation                      VARCHAR(255) COMMENT '像素数据存储路径/URL (非DICOM Tag，业务扩展)',
     ThumbnailLocation                      VARCHAR(255) COMMENT '缩略图路径 (业务扩展)',
     -- 时间戳（去掉 ON UPDATE，由应用层设置）
-    CreatedTime      DATETIME DEFAULT '1970-01-01 00:00:00' COMMENT '记录创建时间',
-    UpdatedTime      DATETIME DEFAULT '1970-01-01 00:00:00' COMMENT '记录更新时间'
+    CreatedTime                            DATETIME    DEFAULT '1970-01-01 00:00:00' COMMENT '记录创建时间',
+    UpdatedTime                            DATETIME    DEFAULT '1970-01-01 00:00:00' COMMENT '记录更新时间'
 )
     ENGINE = OLAP
     UNIQUE KEY(tenant_id, SOPInstanceUID)

@@ -60,7 +60,8 @@ CREATE TABLE StudyEntity
     -- 其他信息
     PerformingPhysicianName VARCHAR(192) COMMENT '执行医生姓名 (0008,1050) - PN, VM=1-n',
     ProcedureCodeSequence   TEXT COMMENT '检查过程代码序列 (0008,1032) - SQ, 复杂结构，暂存为JSON或文本',
-
+    ReceivedInstances       INT DEFAULT 0 COMMENT '接收实例数量 (业务扩展)',
+    SpaceSize               BIGINT DEFAULT 0 COMMENT '占用空间大小 (字节，业务扩展)',
     -- 时间戳
     CreatedTime             DATETIME DEFAULT CURRENT_TIMESTAMP,
     UpdatedTime             DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -99,7 +100,9 @@ CREATE TABLE SeriesEntity
     OperatorsName                  VARCHAR(192) COMMENT '操作员姓名 (0008,1070) - PN, VM=1-n',
 
     -- 图像统计（可选）
-    NumberOfSeriesRelatedInstances INT COMMENT '该序列关联的图像数量 (0020,1209) - IS',
+    NumberOfSeriesRelatedInstances  INT COMMENT '该序列关联的图像数量 (0020,1209) - IS',
+    ReceivedInstances               INT DEFAULT 0 COMMENT '已接收实例数 (业务扩展)',
+    SpaceSize                       BIGINT DEFAULT 0 COMMENT '占用空间大小 (字节，业务扩展)',
     -- 时间戳
     CreatedTime                    DATETIME DEFAULT CURRENT_TIMESTAMP,
     UpdatedTime                    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -149,7 +152,7 @@ CREATE TABLE ImageEntity
     RescaleIntercept                       DECIMAL(8, 4) COMMENT '重缩放截距 (0028,1052) - DS, VM=1',
     RescaleSlope                           DECIMAL(8, 4) COMMENT '重缩放斜率 (0028,1053) - DS, VM=1',
     RescaleType                            VARCHAR(16) COMMENT '重缩放类型 (0028,1054) - LO, VM=1, e.g., "HU" for CT',
-
+    NumberOfFrames                         INT COMMENT '帧数 (0028,0008) - IS, VM=1, max 8 chars → INT',
     -- 图像来源与设备
     AcquisitionDeviceProcessingDescription VARCHAR(64) COMMENT '采集设备处理描述 (0018,1010) - LO, VM=1',
     AcquisitionDeviceProcessingCode        VARCHAR(16) COMMENT '采集设备处理代码 (0018,1012) - SH, VM=1',
@@ -164,6 +167,7 @@ CREATE TABLE ImageEntity
     -- 状态与元信息
     SOPClassUID                            VARCHAR(64) NOT NULL COMMENT 'SOP类UID (0008,0016) - UI, e.g., CT Image Storage',
     ImageStatus                            VARCHAR(16) DEFAULT 'ACTIVE' COMMENT '图像状态 (业务扩展: ACTIVE/ARCHIVED/DELETED)',
+    SpaceSize                              BIGINT DEFAULT 0 COMMENT '占用空间大小 (字节，业务扩展)',
 
     -- 时间戳
     CreatedTime                            DATETIME    DEFAULT CURRENT_TIMESTAMP,
