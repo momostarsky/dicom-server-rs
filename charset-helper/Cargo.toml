@@ -1,0 +1,28 @@
+[package]
+name = "charset-helper"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.5.43", features = ["derive"] }
+dicom-core = { git = "https://github.com/momostarsky/dicom-rs.git", tag = "v0.8.2"  }
+dicom-ul = { git = "https://github.com/momostarsky/dicom-rs.git", tag = "v0.8.2"  }
+dicom-object = { git = "https://github.com/momostarsky/dicom-rs.git", tag = "v0.8.2" }
+dicom-encoding = { git = "https://github.com/momostarsky/dicom-rs.git", tag = "v0.8.2" }
+dicom-dictionary-std = { git = "https://github.com/momostarsky/dicom-rs.git", tag = "v0.8.2" }
+dicom-transfer-syntax-registry = { git = "https://github.com/momostarsky/dicom-rs.git", tag = "v0.8.2" }
+snafu = "0.8"
+tracing = "0.1.36"
+tracing-subscriber = "0.3.19"
+tokio = { version = "1.47.1", features = ["full"] }
+
+rdkafka = "0.34"
+serde = { version = "1.0.219", features = ["derive"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "mysql"] }
+common = { path = "../common" }
+serde_json = "1.0.142"
+config = "0.13"  # 配置文件解析
+dotenv = "0.15"  # 加载 .env 文件
+futures = "0.3.31"
+futures-util = "0.3.31"
+encoding_rs = "0.8.35"
