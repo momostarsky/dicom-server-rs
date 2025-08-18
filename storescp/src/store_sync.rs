@@ -8,8 +8,9 @@ use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dicom_ul::{pdu::PDataValueType, Pdu};
-use snafu::{OptionExt, Report, ResultExt, Whatever};
+use dicom_encoding::snafu::{OptionExt, Report, ResultExt, Whatever};
 use std::net::TcpStream;
+
 use tracing::log::error;
 use tracing::{debug, info, warn};
 

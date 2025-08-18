@@ -9,6 +9,7 @@ use clap::Parser;
 use common::server_config;
 use dicom_core::{dicom_value, DataElement, VR};
 use dicom_dictionary_std::tags;
+use dicom_encoding::snafu;
 use dicom_object::{InMemDicomObject, StandardDataDictionary};
 use snafu::Report;
 use tracing::{error, info, Level};

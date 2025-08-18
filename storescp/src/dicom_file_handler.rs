@@ -1,10 +1,11 @@
 use common::database_entities::{DbProviderBase, DicomObjectMeta};
 use common::producer_factory::KafkaProducer;
 use dicom_dictionary_std::tags;
+ 
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
-use snafu::{whatever, ResultExt, Whatever};
+use dicom_encoding::snafu::{whatever, ResultExt, Whatever};
 use tracing::info;
 use tracing::log::{error};
 
