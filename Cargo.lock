@@ -510,6 +510,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9555578bc9e57714c812a1f84e4fc5b4d21fcb063490c624de019f7464c91268"
 
 [[package]]
+name = "charset-helper"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "common",
+ "config",
+ "dicom-core",
+ "dicom-dictionary-std",
+ "dicom-encoding",
+ "dicom-object",
+ "dicom-transfer-syntax-registry",
+ "dicom-ul",
+ "dotenv",
+ "encoding_rs",
+ "futures",
+ "futures-util",
+ "rdkafka",
+ "serde",
+ "serde_json",
+ "snafu",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "chrono"
 version = "0.4.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
