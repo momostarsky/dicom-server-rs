@@ -9,12 +9,12 @@ serde = { version = "1.0.219", features = ["derive"] }
 config = "0.13"  # 配置文件解析
 dotenv = "0.15"
 clap = { version = "4.5.43", features = ["derive"] }
-dicom-core = { git = "https://github.com/momostarsky/dicom-rs.git", tag = "v0.8.2" }
-dicom-ul = {  git = "https://github.com/momostarsky/dicom-rs.git", tag = "v0.8.2", features = ["async"] }
-dicom-object = {  git = "https://github.com/momostarsky/dicom-rs.git", tag = "v0.8.2" }
-dicom-encoding = {  git = "https://github.com/momostarsky/dicom-rs.git", tag = "v0.8.2" }
-dicom-dictionary-std = {  git = "https://github.com/momostarsky/dicom-rs.git", tag = "v0.8.2" }
-dicom-transfer-syntax-registry = {  git = "https://github.com/momostarsky/dicom-rs.git", tag = "v0.8.2" }
+dicom-core = { git = "https://github.com/momostarsky/dicom-rs.git", tag = "v0.8.2.2" }
+dicom-ul = {  git = "https://github.com/momostarsky/dicom-rs.git", tag = "v0.8.2.2", features = ["async"] }
+dicom-object = {  git = "https://github.com/momostarsky/dicom-rs.git", tag = "v0.8.2.2" }
+dicom-encoding = {  git = "https://github.com/momostarsky/dicom-rs.git", tag = "v0.8.2.2" }
+dicom-dictionary-std = {  git = "https://github.com/momostarsky/dicom-rs.git", tag = "v0.8.2.2" }
+dicom-transfer-syntax-registry = {  git = "https://github.com/momostarsky/dicom-rs.git", tag = "v0.8.2.2" }
 async-trait = "0.1"
 sqlx = { version = "0.7.4", features = ["mysql", "runtime-tokio-native-tls"] }
 tracing = "0.1.41"
