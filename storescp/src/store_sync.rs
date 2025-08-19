@@ -152,15 +152,15 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                             "could not retrieve Affected SOP Instance UID",
                                         )?
                                         .to_string();
-
-                                    issue_patient_id = obj
-                                        .element(tags::ISSUER_OF_PATIENT_ID)
-                                        .whatever_context("missing ISSUER_OF_PATIENT_ID")?
-                                        .to_str()
-                                        .whatever_context(
-                                            "could not retrieve ISSUER_OF_PATIENT_ID",
-                                        )?
-                                        .to_string();
+                                    issue_patient_id ="1234567890".to_string();
+                                    // issue_patient_id = obj
+                                    //     .element(tags::ISSUER_OF_PATIENT_ID)
+                                    //     .whatever_context("missing ISSUER_OF_PATIENT_ID")?
+                                    //     .to_str()
+                                    //     .whatever_context(
+                                    //         "could not retrieve ISSUER_OF_PATIENT_ID",
+                                    //     )?
+                                    //     .to_string();
                                 }
                                 instance_buffer.clear();
                             } else if data_value.value_type == PDataValueType::Data

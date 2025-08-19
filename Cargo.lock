@@ -847,7 +847,8 @@ checksum = "3c877555693c14d2f84191cfd3ad8582790fc52b5e2274b40b59cf5f5cea25c7"
 [[package]]
 name = "dicom-core"
 version = "0.8.2"
-source = "git+https://github.com/momostarsky/dicom-rs.git?tag=v0.8.2.2#45c0ed354ccca7c0699468e82ad991548bc831d2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31a670b9d4c5f43ff38fa09255827df8feab04f6d074d0e3b8700c5deeda0c5e"
 dependencies = [
  "chrono",
  "itertools",
@@ -860,7 +861,8 @@ dependencies = [
 [[package]]
 name = "dicom-dictionary-std"
 version = "0.8.1"
-source = "git+https://github.com/momostarsky/dicom-rs.git?tag=v0.8.2.2#45c0ed354ccca7c0699468e82ad991548bc831d2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb8bff24f681377e7b8595e17ed82828decfbcec9c69d09f9dbb8f1c3e8081eb"
 dependencies = [
  "dicom-core",
  "once_cell",
@@ -869,7 +871,8 @@ dependencies = [
 [[package]]
 name = "dicom-encoding"
 version = "0.8.2"
-source = "git+https://github.com/momostarsky/dicom-rs.git?tag=v0.8.2.2#45c0ed354ccca7c0699468e82ad991548bc831d2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9664d8c8de377e29b1e5b8fe8efa7c3cc3ea848ee6a70247f906fa5e00fdc97"
 dependencies = [
  "byteordered",
  "dicom-core",
@@ -881,7 +884,8 @@ dependencies = [
 [[package]]
 name = "dicom-object"
 version = "0.8.2"
-source = "git+https://github.com/momostarsky/dicom-rs.git?tag=v0.8.2.2#45c0ed354ccca7c0699468e82ad991548bc831d2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f460ce81c9a0c2d958888cce45243846845b5447a0023f144d8164e822989fe6"
 dependencies = [
  "byteordered",
  "dicom-core",
@@ -898,7 +902,8 @@ dependencies = [
 [[package]]
 name = "dicom-parser"
 version = "0.8.2"
-source = "git+https://github.com/momostarsky/dicom-rs.git?tag=v0.8.2.2#45c0ed354ccca7c0699468e82ad991548bc831d2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7986f989ccdf19c71a742690e20c66b02f5751964876076ce69d2fc43f6eaff"
 dependencies = [
  "dicom-core",
  "dicom-dictionary-std",
@@ -911,7 +916,8 @@ dependencies = [
 [[package]]
 name = "dicom-transfer-syntax-registry"
 version = "0.8.2"
-source = "git+https://github.com/momostarsky/dicom-rs.git?tag=v0.8.2.2#45c0ed354ccca7c0699468e82ad991548bc831d2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62672d33f29f7c049a92a662c4bd7ef34e85b5eaea379627d335d93b5d25edf6"
 dependencies = [
  "byteordered",
  "dicom-core",
@@ -926,7 +932,8 @@ dependencies = [
 [[package]]
 name = "dicom-ul"
 version = "0.8.2"
-source = "git+https://github.com/momostarsky/dicom-rs.git?tag=v0.8.2.2#45c0ed354ccca7c0699468e82ad991548bc831d2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96af12961f5e98687dba1b452f6facd3d5322d2440f5b6f6954859ff940b9ba0"
 dependencies = [
  "byteordered",
  "bytes",
@@ -3220,7 +3227,7 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 
 [[package]]
 name = "storescp"
-version = "0.8.1"
+version = "0.1.0"
 dependencies = [
  "clap",
  "common",

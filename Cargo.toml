@@ -2,7 +2,9 @@
 members = [
     "wado-server",
     "storescp",
-    "common", "consumer", "charset-helper"]
+    "common",
+    "consumer",
+    "charset-helper"]
 
 # use edition 2021 resolver
 resolver = "2"
