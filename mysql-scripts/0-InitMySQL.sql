@@ -56,7 +56,7 @@ CREATE TABLE StudyEntity
     -- 检查类型与目的
     ReferringPhysicianName  VARCHAR(192) COMMENT '转诊医生姓名 (0008,0090) - PN, VM=1, max 64×3',
     AdmissionID             VARCHAR(16) COMMENT '住院号 (0038,0010) - LO, VM=1, max 64 chars → 取16',
-    PatientAgeAtStudy       VARCHAR(10) COMMENT '检查时患者年龄 (0010,1010) - AS, 来自图像或计算',
+
     -- 其他信息
     PerformingPhysicianName VARCHAR(192) COMMENT '执行医生姓名 (0008,1050) - PN, VM=1-n',
     ProcedureCodeSequence   TEXT COMMENT '检查过程代码序列 (0008,1032) - SQ, 复杂结构，暂存为JSON或文本',

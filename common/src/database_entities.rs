@@ -1,26 +1,25 @@
-use dicom_core::chrono::{NaiveDateTime};
 use crate::dicom_utils;
+use dicom_core::chrono::NaiveDateTime;
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
 
 // patient.rs
-#[derive(Debug, Clone, Serialize, Deserialize,FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PatientEntity {
     pub tenant_id: String,
     pub patient_id: String,
     pub patient_name: Option<String>,
-    pub patient_birth_date: Option<String>,
     pub patient_sex: Option<String>,
-    pub patient_birth_time: Option<String>,
+    pub patient_birth_date: Option<dicom_core::chrono::NaiveDate>,
+    pub patient_birth_time: Option<dicom_core::chrono::NaiveTime>,
     pub ethnic_group: Option<String>,
     pub created_time: Option<NaiveDateTime>,
     pub updated_time: Option<NaiveDateTime>,
 }
 
 // study.rs
-#[derive(Debug, Clone, Serialize, Deserialize,FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StudyEntity {
     pub tenant_id: String,
     pub study_instance_uid: String,
@@ -41,7 +40,6 @@ pub struct StudyEntity {
     pub study_description: Option<String>,
     pub referring_physician_name: Option<String>,
     pub admission_id: Option<String>,
-    pub patient_age_at_study: Option<String>,
     pub performing_physician_name: Option<String>,
     pub procedure_code_sequence: Option<String>,
     pub received_instances: Option<i32>, // 新增字段
@@ -51,7 +49,7 @@ pub struct StudyEntity {
 }
 
 // series.rs
-#[derive(Debug, Clone, Serialize, Deserialize,FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SeriesEntity {
     pub tenant_id: String,
     pub series_instance_uid: String,
@@ -77,7 +75,7 @@ pub struct SeriesEntity {
 }
 
 // image.rs
-#[derive(Debug, Clone, Serialize, Deserialize,FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImageEntity {
     pub tenant_id: String,
     pub sop_instance_uid: String,
@@ -141,9 +139,15 @@ impl DbProviderBase {
             patient_id: dicom_utils::get_text_value(dicom_obj, tags::PATIENT_ID)
                 .unwrap_or_default(),
             patient_name: dicom_utils::get_text_value(dicom_obj, tags::PATIENT_NAME),
-            patient_birth_date: dicom_utils::get_date_value(dicom_obj, tags::PATIENT_BIRTH_DATE),
             patient_sex: dicom_utils::get_text_value(dicom_obj, tags::PATIENT_SEX),
-            patient_birth_time: dicom_utils::get_time_value(dicom_obj, tags::PATIENT_BIRTH_TIME),
+            patient_birth_date: dicom_utils::get_date_value_dicom(
+                dicom_obj,
+                tags::PATIENT_BIRTH_DATE,
+            ),
+            patient_birth_time: dicom_utils::get_time_value_dicom(
+                dicom_obj,
+                tags::PATIENT_BIRTH_TIME,
+            ),
             ethnic_group: dicom_utils::get_text_value(dicom_obj, tags::ETHNIC_GROUP),
             created_time: None,
             updated_time: None,
@@ -182,7 +186,7 @@ impl DbProviderBase {
                 tags::REFERRING_PHYSICIAN_NAME,
             ),
             admission_id: dicom_utils::get_text_value(dicom_obj, tags::ADMISSION_ID),
-            patient_age_at_study: dicom_utils::get_text_value(dicom_obj, tags::PATIENT_AGE),
+
             performing_physician_name: dicom_utils::get_text_value(
                 dicom_obj,
                 tags::PERFORMING_PHYSICIAN_NAME,
@@ -289,7 +293,7 @@ impl DbProviderBase {
             rescale_intercept: dicom_utils::get_decimal_value(dicom_obj, tags::RESCALE_INTERCEPT),
             rescale_slope: dicom_utils::get_decimal_value(dicom_obj, tags::RESCALE_SLOPE),
             rescale_type: dicom_utils::get_text_value(dicom_obj, tags::RESCALE_TYPE),
-            number_of_frames:  img_number_of_frames,
+            number_of_frames: img_number_of_frames,
             acquisition_device_processing_description: dicom_utils::get_text_value(
                 dicom_obj,
                 tags::ACQUISITION_DEVICE_PROCESSING_DESCRIPTION,
@@ -303,7 +307,8 @@ impl DbProviderBase {
                 tags::DEVICE_SERIAL_NUMBER,
             ),
             software_versions: dicom_utils::get_text_value(dicom_obj, tags::SOFTWARE_VERSIONS),
-            transfer_syntax_uid: dicom_utils::get_text_value(dicom_obj, tags::TRANSFER_SYNTAX_UID).unwrap_or_default(),
+            transfer_syntax_uid: dicom_utils::get_text_value(dicom_obj, tags::TRANSFER_SYNTAX_UID)
+                .unwrap_or_default(),
             pixel_data_location: None,
             thumbnail_location: None,
             sop_class_uid: dicom_utils::get_text_value(dicom_obj, tags::SOP_CLASS_UID)

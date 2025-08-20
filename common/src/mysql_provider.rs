@@ -89,9 +89,9 @@ impl DbProvider for MySqlProvider {
                 AccessionNumber, StudyID, StudyDescription, ReferringPhysicianName,
                 PatientAge, PatientSize, PatientWeight, MedicalAlerts, Allergies,
                 PregnancyStatus, Occupation, AdditionalPatientHistory, PatientComments,
-                AdmissionID, PatientAgeAtStudy,
+                AdmissionID,
                 PerformingPhysicianName, ProcedureCodeSequence, ReceivedInstances, SpaceSize
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 StudyDate = VALUES(StudyDate),
                 StudyTime = VALUES(StudyTime),
@@ -109,7 +109,6 @@ impl DbProvider for MySqlProvider {
                 AdditionalPatientHistory = VALUES(AdditionalPatientHistory),
                 PatientComments = VALUES(PatientComments),
                 AdmissionID = VALUES(AdmissionID),
-                PatientAgeAtStudy = VALUES(PatientAgeAtStudy),
                 PerformingPhysicianName = VALUES(PerformingPhysicianName),
                 ProcedureCodeSequence = VALUES(ProcedureCodeSequence),
                 ReceivedInstances = VALUES(ReceivedInstances),
@@ -134,7 +133,6 @@ impl DbProvider for MySqlProvider {
         .bind(&study_entity.additional_patient_history)
         .bind(&study_entity.patient_comments)
         .bind(&study_entity.admission_id)
-        .bind(&study_entity.patient_age_at_study)
         .bind(&study_entity.performing_physician_name)
         .bind(&study_entity.procedure_code_sequence)
         .bind(&study_entity.received_instances.unwrap_or(0))
@@ -361,14 +359,23 @@ impl DbProvider for MySqlProvider {
         // 分批处理，避免SQL参数限制
         for chunk in study_lists.chunks(BATCH_SIZE) {
             // 构建批量插入语句，确保字段顺序与表结构完全一致
-            let mut query_builder = "INSERT INTO StudyEntity (tenant_id, StudyInstanceUID, PatientID, StudyDate, StudyTime, AccessionNumber, StudyID, StudyDescription, ReferringPhysicianName, PatientAge, PatientSize, PatientWeight, MedicalAlerts, Allergies, PregnancyStatus, Occupation, AdditionalPatientHistory, PatientComments, AdmissionID, PatientAgeAtStudy, PerformingPhysicianName, ProcedureCodeSequence, ReceivedInstances, SpaceSize) VALUES ".to_string();
+            let mut query_builder = "INSERT INTO StudyEntity (tenant_id, StudyInstanceUID, PatientID, StudyDate, StudyTime, AccessionNumber, StudyID, StudyDescription, \
+            ReferringPhysicianName, PatientAge, PatientSize, PatientWeight, MedicalAlerts, \
+            Allergies, PregnancyStatus, Occupation, AdditionalPatientHistory, PatientComments, \
+            AdmissionID, PerformingPhysicianName, ProcedureCodeSequence, ReceivedInstances, SpaceSize) VALUES ".to_string();
             let placeholders: Vec<String> = (0..chunk.len())
                 .map(|_| {
-                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string()
+                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string()
                 })
                 .collect();
             query_builder.push_str(&placeholders.join(", "));
-            query_builder.push_str(" ON DUPLICATE KEY UPDATE StudyDate = VALUES(StudyDate), StudyTime = VALUES(StudyTime), AccessionNumber = VALUES(AccessionNumber), StudyID = VALUES(StudyID), StudyDescription = VALUES(StudyDescription), ReferringPhysicianName = VALUES(ReferringPhysicianName), PatientAge = VALUES(PatientAge), PatientSize = VALUES(PatientSize), PatientWeight = VALUES(PatientWeight), MedicalAlerts = VALUES(MedicalAlerts), Allergies = VALUES(Allergies), PregnancyStatus = VALUES(PregnancyStatus), Occupation = VALUES(Occupation), AdditionalPatientHistory = VALUES(AdditionalPatientHistory), PatientComments = VALUES(PatientComments), AdmissionID = VALUES(AdmissionID), PatientAgeAtStudy = VALUES(PatientAgeAtStudy), PerformingPhysicianName = VALUES(PerformingPhysicianName), ProcedureCodeSequence = VALUES(ProcedureCodeSequence), ReceivedInstances = VALUES(ReceivedInstances), SpaceSize = VALUES(SpaceSize)");
+            query_builder.push_str(" ON DUPLICATE KEY UPDATE StudyDate = VALUES(StudyDate), StudyTime = VALUES(StudyTime), AccessionNumber = VALUES(AccessionNumber), StudyID = VALUES(StudyID),\
+            StudyDescription = VALUES(StudyDescription), ReferringPhysicianName = VALUES(ReferringPhysicianName), PatientAge = VALUES(PatientAge),\
+            PatientSize = VALUES(PatientSize), PatientWeight = VALUES(PatientWeight), MedicalAlerts = VALUES(MedicalAlerts), Allergies = VALUES(Allergies),\
+             PregnancyStatus = VALUES(PregnancyStatus), Occupation = VALUES(Occupation), AdditionalPatientHistory = VALUES(AdditionalPatientHistory), \
+             PatientComments = VALUES(PatientComments), AdmissionID = VALUES(AdmissionID), \
+             PerformingPhysicianName = VALUES(PerformingPhysicianName), ProcedureCodeSequence = VALUES(ProcedureCodeSequence), \
+             ReceivedInstances = VALUES(ReceivedInstances), SpaceSize = VALUES(SpaceSize)");
 
             let mut query = sqlx::query(&query_builder);
             for study in chunk {
@@ -392,7 +399,6 @@ impl DbProvider for MySqlProvider {
                     .bind(&study.additional_patient_history)
                     .bind(&study.patient_comments)
                     .bind(&study.admission_id)
-                    .bind(&study.patient_age_at_study)
                     .bind(&study.performing_physician_name)
                     .bind(&study.procedure_code_sequence)
                     .bind(&study.received_instances)
@@ -795,7 +801,7 @@ impl DbProvider for MySqlProvider {
                   AccessionNumber, StudyID, StudyDescription, ReferringPhysicianName,
                   PatientAge, PatientSize, PatientWeight, MedicalAlerts, Allergies,
                   PregnancyStatus, Occupation, AdditionalPatientHistory, PatientComments,
-                  AdmissionID, PatientAgeAtStudy, PerformingPhysicianName, ProcedureCodeSequence,
+                  AdmissionID, PerformingPhysicianName, ProcedureCodeSequence,
                   ReceivedInstances,
                   SpaceSize,CreatedTime, UpdatedTime
            FROM StudyEntity 
@@ -827,7 +833,6 @@ impl DbProvider for MySqlProvider {
                 additional_patient_history: row.get("AdditionalPatientHistory"),
                 patient_comments: row.get("PatientComments"),
                 admission_id: row.get("AdmissionID"),
-                patient_age_at_study: row.get("PatientAgeAtStudy"),
                 performing_physician_name: row.get("PerformingPhysicianName"),
                 procedure_code_sequence: row.get("ProcedureCodeSequence"),
                 received_instances: row.get("ReceivedInstances"),
