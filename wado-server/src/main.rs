@@ -7,12 +7,12 @@ use crate::wado_rs_controller::{
     retrieve_series, retrieve_series_metadata, retrieve_study, retrieve_study_metadata,
 };
 use actix_cors::Cors;
-use actix_web::{App, HttpServer, web};
+use actix_web::{web, App, HttpServer};
 use common::database_provider::DbProvider;
 use common::server_config::LocalStorageConfig;
 use common::{database_factory, server_config};
 use slog;
-use slog::{Drain, Logger, error, info, o};
+use slog::{error, info, o, Drain, Logger};
 use slog_async;
 use slog_term;
 

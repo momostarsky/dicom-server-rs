@@ -616,6 +616,7 @@ dependencies = [
  "futures-util",
  "log",
  "log4rs",
+ "rayon",
  "rdkafka",
  "serde",
  "serde_json",

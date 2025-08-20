@@ -27,3 +27,4 @@ rdkafka = "0.34"
 futures = "0.3.31"
 futures-util = "0.3.31"
 chrono = { version = "0.4", features = ["serde"] }
+rayon = "1.10.0"

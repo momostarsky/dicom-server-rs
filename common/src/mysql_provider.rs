@@ -1,7 +1,6 @@
 use crate::database_provider::DbProvider;
 use crate::database_entities::{DbProviderBase, ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
 use async_trait::async_trait;
-use chrono::{NaiveDate, NaiveTime};
 use dicom_object::DefaultDicomObject;
 use sqlx::{MySqlPool, Row};
 use tracing::{error, info};

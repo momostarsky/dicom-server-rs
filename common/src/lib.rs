@@ -9,6 +9,7 @@ pub mod utils;
 pub mod database_factory;
 pub mod cornerstonejs;
 pub mod dicom_utils;
+pub mod dicom_json_helper;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DicomMessage {

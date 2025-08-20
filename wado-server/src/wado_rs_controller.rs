@@ -1,9 +1,11 @@
+use crate::common_utils::{get_param_case_insensitive, parse_query_string_case_insensitive};
+use crate::{AppState, common_utils};
 use actix_web::http::header::ACCEPT;
 use actix_web::{HttpRequest, HttpResponse, Responder, get, web, web::Path};
+use common::dicom_json_helper;
 use serde::Deserialize;
-use slog::{info};
-use crate::{common_utils, AppState};
-use crate::common_utils::{get_param_case_insensitive, parse_query_string_case_insensitive};
+use slog::info;
+use std::path::PathBuf;
 
 #[derive(Deserialize, Debug)]
 struct StudyQueryParams {
@@ -28,7 +30,7 @@ static ACCEPT_DICOM_TYPE: &str = "application/dicom";
 async fn retrieve_study(
     study_instance_uid: Path<String>,
     req: HttpRequest,
-    app_state : web::Data<AppState>,
+    app_state: web::Data<AppState>,
 ) -> impl Responder {
     let study_uid = study_instance_uid.into_inner();
     let log = app_state.log.clone();
@@ -87,42 +89,77 @@ async fn retrieve_study(
 async fn retrieve_study_metadata(
     study_instance_uid: Path<String>,
     req: HttpRequest,
-    app_state : web::Data<AppState>,
+    app_state: web::Data<AppState>,
 ) -> impl Responder {
     let log = app_state.log.clone();
     let study_uid = study_instance_uid.into_inner();
     let tenant_id = common_utils::get_tenant_from_handler(&req);
-    info!(log, "retrieve_study_metadata Tenant ID: {}  and StudyUID:{} ", tenant_id, study_uid);
+    info!(
+        log,
+        "retrieve_study_metadata Tenant ID: {}  and StudyUID:{} ", tenant_id, study_uid
+    );
     let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
 
     if accept != Some(ACCEPT_MIME_TYPE) {
-        return HttpResponse::NotAcceptable()
-            .body(format!("retrieve_study_metadata Accept header must be {}", ACCEPT_MIME_TYPE));
+        return HttpResponse::NotAcceptable().body(format!(
+            "retrieve_study_metadata Accept header must be {}",
+            ACCEPT_MIME_TYPE
+        ));
     }
 
     let study_info = match app_state.db.get_study_info(&tenant_id, &study_uid).await {
         Some(info) => info,
         None => {
-            return HttpResponse::NotFound().body(format!("retrieve_study_metadata not found: {},{}",tenant_id, study_uid));
+            return HttpResponse::NotFound().body(format!(
+                "retrieve_study_metadata not found: {},{}",
+                tenant_id, study_uid
+            ));
         }
     };
     info!(log, "Study Info: {:?}", study_info);
+    let dicom_dir = format!(
+        "{}/{}/{}/{}",
+        app_state.local_storage_config.dicom_store_path,
+        tenant_id,
+        study_info.patient_id,
+        study_uid
+    );
+    if !std::path::Path::new(&dicom_dir).exists() {
+        return HttpResponse::NotFound().body(format!("DICOM directory not found: {}", dicom_dir));
+    }
 
-    let json_file = format!("/home/dhz/jpdata/CDSS/89269/{}.json", study_uid);
-    let json_text = match std::fs::read_to_string(&json_file) {
-        Ok(text) => text,
-        Err(_) => {
-            return HttpResponse::NotFound().body(format!("JSON file not found: {}", json_file));
-        }
-    };
+    let json_dir = format!(
+        "{}/{}/{:?}",
+        app_state.local_storage_config.json_store_path, tenant_id, study_info.study_date
+    );
+    if !std::path::Path::new(&json_dir).exists() {
+        std::fs::create_dir_all(&json_dir).expect("create_dir_all failed for JSON directory");
+    }
+    let json_path = format!("{}/{}.json", json_dir, study_uid);
 
-    HttpResponse::Ok()
-        .content_type(ACCEPT_MIME_TYPE)
-        .body(json_text)
+    if !std::path::Path::new(&json_path).exists() {
+        let dicom_path = PathBuf::from(&dicom_dir);
+        let json_path = PathBuf::from(&json_path);
+        info!(log, "DICOM directory: {:?}", dicom_path);
+        dicom_json_helper::generate_json_file(&dicom_path, &json_path)
+            .expect("generate_json_file failed");
+    }
+    match std::fs::read_to_string(&json_path) {
+        Ok(content) => HttpResponse::Ok()
+            .content_type(ACCEPT_MIME_TYPE)
+            .body(content),
+        Err(e) => HttpResponse::InternalServerError().body(format!(
+            "retrieve_study_metadata Failed to read JSON file: {}: {}",
+            json_path, e
+        )),
+    }
 }
 
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}")]
-async fn retrieve_series(path: Path<(String, String)>,  app_state : web::Data<AppState>,) -> impl Responder {
+async fn retrieve_series(
+    path: Path<(String, String)>,
+    app_state: web::Data<AppState>,
+) -> impl Responder {
     let log = app_state.log.clone();
     let (study_uid, series_uid) = path.into_inner();
     info!(
@@ -136,7 +173,7 @@ async fn retrieve_series(path: Path<(String, String)>,  app_state : web::Data<Ap
 async fn retrieve_series_metadata(
     path: Path<(String, String)>,
     req: HttpRequest,
-    app_state : web::Data<AppState>,
+    app_state: web::Data<AppState>,
 ) -> impl Responder {
     let log = app_state.log.clone();
     let (study_uid, series_uid) = path.into_inner();
@@ -160,7 +197,7 @@ async fn retrieve_series_metadata(
 async fn retrieve_instance(
     path: Path<(String, String, String)>,
     req: HttpRequest,
-    app_state : web::Data<AppState>,
+    app_state: web::Data<AppState>,
 ) -> impl Responder {
     let log = app_state.log.clone();
     let (study_uid, series_uid, sop_uid) = path.into_inner();
@@ -171,16 +208,35 @@ async fn retrieve_instance(
         series_uid,
         sop_uid
     );
-    // 检查 Accept 头
-    // let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
-    //
-    // if accept != Some(ACCEPT_DICOM_TYPE) {
-    //     return HttpResponse::NotAcceptable()
-    //         .body(format!("Accept header must be {}", ACCEPT_DICOM_TYPE));
-    // }
+    let tenant_id = common_utils::get_tenant_from_handler(&req);
+    info!(
+        log,
+        "retrieve_study_metadata Tenant ID: {}  and StudyUID:{} ", tenant_id, study_uid
+    );
+    let study_info = match app_state.db.get_study_info(&tenant_id, &study_uid).await {
+        Some(info) => info,
+        None => {
+            return HttpResponse::NotFound().body(format!(
+                "retrieve_study_metadata not found: {},{}",
+                tenant_id, study_uid
+            ));
+        }
+    };
+    info!(log, "Study Info: {:?}", study_info);
+    let dicom_dir = format!(
+        "{}/{}/{}/{}",
+        app_state.local_storage_config.dicom_store_path,
+        tenant_id,
+        study_info.patient_id,
+        study_uid
+    );
+    if !std::path::Path::new(&dicom_dir).exists() {
+        return HttpResponse::NotFound().body(format!("DICOM directory not found: {}", dicom_dir));
+    }
+
     let dicom_file = format!(
-        "/home/dhz/jpdata/CDSS/89269/{}/{}/{}.dcm",
-        study_uid, series_uid, sop_uid
+        "{}/{}/{}.dcm",
+        dicom_dir, series_uid, sop_uid
     );
     let dicom_bytes = match std::fs::read(&dicom_file) {
         Ok(bytes) => bytes,
@@ -199,7 +255,7 @@ async fn retrieve_instance(
 async fn retrieve_instance_metadata(
     path: Path<(String, String, String)>,
     req: HttpRequest,
-    app_state : web::Data<AppState>,
+    app_state: web::Data<AppState>,
 ) -> impl Responder {
     let log = app_state.log.clone();
     let (study_uid, series_uid, sop_uid) = path.into_inner();
@@ -228,7 +284,7 @@ async fn retrieve_instance_metadata(
 )]
 async fn retrieve_instance_frames(
     path: Path<(String, String, String, String)>,
-    app_state : web::Data<AppState>,
+    app_state: web::Data<AppState>,
 ) -> impl Responder {
     let log = app_state.log.clone();
     let (study_uid, series_uid, sop_uid, frames) = path.into_inner();
