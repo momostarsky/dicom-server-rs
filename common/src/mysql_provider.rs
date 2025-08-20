@@ -1,9 +1,11 @@
 use crate::database_provider::DbProvider;
 use crate::database_entities::{DbProviderBase, ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
 use async_trait::async_trait;
+use chrono::{NaiveDate, NaiveTime};
 use dicom_object::DefaultDicomObject;
 use sqlx::{MySqlPool, Row};
 use tracing::{error, info};
+use crate::dicom_utils::{parse_date_from_sql, parse_time_from_sql};
 
 pub struct MySqlProvider {
     pub pool: MySqlPool,
@@ -782,6 +784,71 @@ impl DbProvider for MySqlProvider {
 
         Some(true)
     }
+
+
+     async fn get_study_info(&self, tenant_id: &str, study_uid: &str) -> Option<StudyEntity> {
+    let pool = self.pool.clone();
+
+    match sqlx::query(
+        r#"SELECT tenant_id, StudyInstanceUID, PatientID,
+                  COALESCE(StudyDate, '') as StudyDate,
+                  COALESCE(StudyTime, '') as StudyTime,
+                  AccessionNumber, StudyID, StudyDescription, ReferringPhysicianName,
+                  PatientAge, PatientSize, PatientWeight, MedicalAlerts, Allergies,
+                  PregnancyStatus, Occupation, AdditionalPatientHistory, PatientComments,
+                  AdmissionID, PatientAgeAtStudy, PerformingPhysicianName, ProcedureCodeSequence,
+                  ReceivedInstances,
+                  SpaceSize,CreatedTime, UpdatedTime
+           FROM StudyEntity 
+           WHERE tenant_id = ? AND StudyInstanceUID = ?"#
+    )
+    .bind(tenant_id)
+    .bind(study_uid)
+    .fetch_optional(&pool)
+    .await
+    {
+        Ok(Some(row)) => {
+            let study = StudyEntity {
+                tenant_id: row.get("tenant_id"),
+                study_instance_uid: row.get("StudyInstanceUID"),
+                patient_id: row.get("PatientID"),
+                study_date: parse_date_from_sql( row.get("StudyDate")),
+                study_time: parse_time_from_sql( row.get("StudyTime")),
+                accession_number: row.get("AccessionNumber"),
+                study_id: row.get("StudyID"),
+                study_description: row.get("StudyDescription"),
+                referring_physician_name: row.get("ReferringPhysicianName"),
+                patient_age: row.get("PatientAge"),
+                patient_size: row.get("PatientSize"),
+                patient_weight: row.get("PatientWeight"),
+                medical_alerts: row.get("MedicalAlerts"),
+                allergies: row.get("Allergies"),
+                pregnancy_status: row.get("PregnancyStatus"),
+                occupation: row.get("Occupation"),
+                additional_patient_history: row.get("AdditionalPatientHistory"),
+                patient_comments: row.get("PatientComments"),
+                admission_id: row.get("AdmissionID"),
+                patient_age_at_study: row.get("PatientAgeAtStudy"),
+                performing_physician_name: row.get("PerformingPhysicianName"),
+                procedure_code_sequence: row.get("ProcedureCodeSequence"),
+                received_instances: row.get("ReceivedInstances"),
+                space_size: row.get("SpaceSize"),
+                created_time: row.get("CreatedTime"),
+                updated_time: row.get("UpdatedTime"),
+            };
+            Some(study)
+        },
+        Ok(None) => {
+            info!("Study not found for tenant_id: {}, study_uid: {}", tenant_id, study_uid);
+            None
+        }
+        Err(e) => {
+            error!("Failed to get study info: {}", e);
+            None
+        }
+    }
+}
+
 }
 
 

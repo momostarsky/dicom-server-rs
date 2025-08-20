@@ -24,7 +24,7 @@ pub struct ServerConfig {
 // "dicom_store_path": "/home/dhz/jpdata/CDSS",
 // "json_store_path": "/home/dhz/jpdata/CDSS/store"
 // }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct LocalStorageConfig {
     pub dicom_store_path: String,
     pub json_store_path: String,

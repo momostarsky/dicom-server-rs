@@ -1,9 +1,10 @@
 use crate::database_entities::{ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
 use async_trait::async_trait;
+use chrono::NaiveDate;
 use dicom_object::DefaultDicomObject;
 
 #[async_trait]
-pub trait DbProvider {
+pub trait DbProvider :Send + Sync  {
     // 保存DICOM信息
     // 返回值：Some(true) 表示成功保存，Some(false) 表示已存在，None 表示保存失败
     async fn save_dicom_info(
@@ -99,4 +100,11 @@ pub trait DbProvider {
         series_list: &[SeriesEntity],
         images_list: &[ImageEntity],
     ) -> Option<bool>;
+    
+    // 获取患者信息
+    async fn get_study_info(
+        &self,
+        tenant_id: &str,
+        study_uid: &str,
+    ) -> Option<StudyEntity>;
 }

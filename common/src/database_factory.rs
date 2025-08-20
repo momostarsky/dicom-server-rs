@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::database_provider::DbProvider;
 use crate::mysql_provider::MySqlProvider;
 use crate::server_config;
@@ -6,7 +7,7 @@ use tracing::error;
 
 // common/src/database_factory.rs
 // 根据配置文件生成数据库实例
-pub async fn create_db_instance() -> Option<Box<dyn DbProvider>> {
+pub async fn create_db_instance() ->  Option<Arc<dyn DbProvider>>  {
     let config = server_config::load_config();
     let config = match config {
         Ok(config) => config,
@@ -34,7 +35,7 @@ pub async fn create_db_instance() -> Option<Box<dyn DbProvider>> {
                     None
                 } else {
                     let db_provider = MySqlProvider::new(pool.unwrap());
-                    Some(Box::new(db_provider))
+                    Some(Arc::new(db_provider)) // 返回 Arc 而不是 Box
                 }
             }
             Err(e) => {

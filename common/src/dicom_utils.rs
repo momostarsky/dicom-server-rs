@@ -1,3 +1,4 @@
+use chrono::{NaiveDate, NaiveTime};
 use dicom_core::Tag;
 use dicom_object::InMemDicomObject;
 
@@ -19,6 +20,52 @@ pub fn get_date_value(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<String> 
         }
     })
 }
+
+pub fn get_date_value_dicom(
+    dicom_obj: &InMemDicomObject,
+    tag: Tag,
+) -> Option<dicom_core::chrono::NaiveDate> {
+    get_text_value(dicom_obj, tag).and_then(|s| {
+        // 尝试解析DICOM日期格式 (YYYYMMDD)
+        if s.len() == 8 && s.chars().all(|c| c.is_ascii_digit()) {
+            match NaiveDate::parse_from_str(&s[..], "%Y%m%d") {
+                Ok(date) => Some(date),
+                Err(_) => None,
+            }
+            // Some(format!("{}-{}-{}", &s[0..4], &s[4..6], &s[6..8]))
+        } else {
+            None
+        }
+    })
+}
+pub fn get_time_value_dicom(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<NaiveTime> {
+    get_text_value(dicom_obj, tag).and_then(|s| {
+        // 简单处理时间格式，实际可能需要更复杂的解析
+        if !s.is_empty() {
+            match NaiveTime::parse_from_str(&s[..], "%H:%M:%S%.6f") {
+                Ok(date) => Some(date),
+                Err(_) => None,
+            }
+        } else {
+            None
+        }
+    })
+}
+
+pub fn  parse_date_from_sql(s: &str) -> Option<NaiveDate> {
+    match NaiveDate::parse_from_str(&s[..], "%Y-%m-%d") {
+        Ok(date) => Some(date),
+        Err(_) => None,
+    }
+}
+
+pub  fn  parse_time_from_sql(s: &str) -> Option<NaiveTime> {
+    match NaiveTime::parse_from_str(&s[..], "%H:%M:%S%.6f") {
+        Ok(date) => Some(date),
+        Err(_) => None,
+    }
+}
+
 
 pub fn get_time_value(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<String> {
     get_text_value(dicom_obj, tag).and_then(|s| {

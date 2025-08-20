@@ -1,7 +1,8 @@
 use actix_web::http::header::ACCEPT;
 use actix_web::{HttpRequest, HttpResponse, Responder, get, web, web::Path};
 use serde::Deserialize;
-use slog::{Logger, info};
+use slog::{info};
+use crate::{common_utils, AppState};
 use crate::common_utils::{get_param_case_insensitive, parse_query_string_case_insensitive};
 
 #[derive(Deserialize, Debug)]
@@ -27,9 +28,10 @@ static ACCEPT_DICOM_TYPE: &str = "application/dicom";
 async fn retrieve_study(
     study_instance_uid: Path<String>,
     req: HttpRequest,
-    log: web::Data<Logger>,
+    app_state : web::Data<AppState>,
 ) -> impl Responder {
     let study_uid = study_instance_uid.into_inner();
+    let log = app_state.log.clone();
     info!(log, "retrieve_study: study_instance_uid {}", study_uid);
     let query_string = req.query_string();
     info!(log, "retrieve_study: query_string {}", query_string);
@@ -85,20 +87,27 @@ async fn retrieve_study(
 async fn retrieve_study_metadata(
     study_instance_uid: Path<String>,
     req: HttpRequest,
-    log: web::Data<Logger>,
+    app_state : web::Data<AppState>,
 ) -> impl Responder {
+    let log = app_state.log.clone();
     let study_uid = study_instance_uid.into_inner();
-    info!(
-        log,
-        "retrieve_study_metadata: study_instance_uid={}", study_uid
-    );
-    // 检查 Accept 头
+    let tenant_id = common_utils::get_tenant_from_handler(&req);
+    info!(log, "retrieve_study_metadata Tenant ID: {}  and StudyUID:{} ", tenant_id, study_uid);
     let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
 
     if accept != Some(ACCEPT_MIME_TYPE) {
         return HttpResponse::NotAcceptable()
-            .body(format!("Accept header must be {}", ACCEPT_MIME_TYPE));
+            .body(format!("retrieve_study_metadata Accept header must be {}", ACCEPT_MIME_TYPE));
     }
+
+    let study_info = match app_state.db.get_study_info(&tenant_id, &study_uid).await {
+        Some(info) => info,
+        None => {
+            return HttpResponse::NotFound().body(format!("retrieve_study_metadata not found: {},{}",tenant_id, study_uid));
+        }
+    };
+    info!(log, "Study Info: {:?}", study_info);
+
     let json_file = format!("/home/dhz/jpdata/CDSS/89269/{}.json", study_uid);
     let json_text = match std::fs::read_to_string(&json_file) {
         Ok(text) => text,
@@ -113,7 +122,8 @@ async fn retrieve_study_metadata(
 }
 
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}")]
-async fn retrieve_series(path: Path<(String, String)>, log: web::Data<Logger>) -> impl Responder {
+async fn retrieve_series(path: Path<(String, String)>,  app_state : web::Data<AppState>,) -> impl Responder {
+    let log = app_state.log.clone();
     let (study_uid, series_uid) = path.into_inner();
     info!(
         log,
@@ -126,8 +136,9 @@ async fn retrieve_series(path: Path<(String, String)>, log: web::Data<Logger>) -
 async fn retrieve_series_metadata(
     path: Path<(String, String)>,
     req: HttpRequest,
-    log: web::Data<Logger>,
+    app_state : web::Data<AppState>,
 ) -> impl Responder {
+    let log = app_state.log.clone();
     let (study_uid, series_uid) = path.into_inner();
     info!(
         log,
@@ -149,8 +160,9 @@ async fn retrieve_series_metadata(
 async fn retrieve_instance(
     path: Path<(String, String, String)>,
     req: HttpRequest,
-    log: web::Data<Logger>,
+    app_state : web::Data<AppState>,
 ) -> impl Responder {
+    let log = app_state.log.clone();
     let (study_uid, series_uid, sop_uid) = path.into_inner();
     info!(
         log,
@@ -187,8 +199,9 @@ async fn retrieve_instance(
 async fn retrieve_instance_metadata(
     path: Path<(String, String, String)>,
     req: HttpRequest,
-    log: web::Data<Logger>,
+    app_state : web::Data<AppState>,
 ) -> impl Responder {
+    let log = app_state.log.clone();
     let (study_uid, series_uid, sop_uid) = path.into_inner();
     info!(
         log,
@@ -215,8 +228,9 @@ async fn retrieve_instance_metadata(
 )]
 async fn retrieve_instance_frames(
     path: Path<(String, String, String, String)>,
-    log: web::Data<Logger>,
+    app_state : web::Data<AppState>,
 ) -> impl Responder {
+    let log = app_state.log.clone();
     let (study_uid, series_uid, sop_uid, frames) = path.into_inner();
     info!(
         log,
