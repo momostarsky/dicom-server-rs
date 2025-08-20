@@ -52,26 +52,18 @@ pub fn get_time_value_dicom(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<Na
     })
 }
 
-pub fn  parse_date_from_sql(s: &str) -> Option<NaiveDate> {
+pub fn parse_dicom_date_from_sql(s: &str) -> Option<NaiveDate> {
     match NaiveDate::parse_from_str(&s[..], "%Y-%m-%d") {
         Ok(date) => Some(date),
         Err(_) => None,
     }
 }
 
-pub  fn  parse_time_from_sql(s: &str) -> Option<NaiveTime> {
+pub  fn parse_dicom_time_from_sql(s: &str) -> Option<NaiveTime> {
     match NaiveTime::parse_from_str(&s[..], "%H:%M:%S%.6f") {
         Ok(date) => Some(date),
         Err(_) => None,
     }
-}
-
-
-pub fn get_time_value(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<String> {
-    get_text_value(dicom_obj, tag).and_then(|s| {
-        // 简单处理时间格式，实际可能需要更复杂的解析
-        if !s.is_empty() { Some(s) } else { None }
-    })
 }
 
 pub fn get_int_value(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<i32> {

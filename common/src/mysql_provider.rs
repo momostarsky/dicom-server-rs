@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use dicom_object::DefaultDicomObject;
 use sqlx::{MySqlPool, Row};
 use tracing::{error, info};
-use crate::dicom_utils::{parse_date_from_sql, parse_time_from_sql};
+use crate::dicom_utils::{parse_dicom_date_from_sql, parse_dicom_time_from_sql};
 
 pub struct MySqlProvider {
     pub pool: MySqlPool,
@@ -817,8 +817,8 @@ impl DbProvider for MySqlProvider {
                 tenant_id: row.get("tenant_id"),
                 study_instance_uid: row.get("StudyInstanceUID"),
                 patient_id: row.get("PatientID"),
-                study_date: parse_date_from_sql( row.get("StudyDate")),
-                study_time: parse_time_from_sql( row.get("StudyTime")),
+                study_date: parse_dicom_date_from_sql( row.get("StudyDate")),
+                study_time: parse_dicom_time_from_sql( row.get("StudyTime")),
                 accession_number: row.get("AccessionNumber"),
                 study_id: row.get("StudyID"),
                 study_description: row.get("StudyDescription"),
