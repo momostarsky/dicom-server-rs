@@ -81,7 +81,7 @@ CREATE TABLE SeriesEntity
     SeriesInstanceUID              VARCHAR(64) NOT NULL COMMENT '序列实例UID (0020,000E)',
     -- 外键：关联检查
     StudyInstanceUID               VARCHAR(64) NOT NULL COMMENT '检查实例UID (外键) (0020,000D)',
-
+    PatientID                      VARCHAR(64) NOT NULL COMMENT '患者ID (外键，关联 PatientEntity) (0010,0020)',
     -- 序列基本信息
     Modality                       VARCHAR(16) NOT NULL COMMENT '模态 (0008,0060) - CS, VM=1, max 16 chars (如 CT, MR, XR)',
     SeriesNumber                   INT COMMENT '序列号 (0020,0011) - IS, VM=1, max 12 chars → 用 INT',
@@ -91,7 +91,7 @@ CREATE TABLE SeriesEntity
     -- 成像参数
     BodyPartExamined               VARCHAR(64) COMMENT '检查部位 (0018,0015) - CS, VM=1, max 16 chars',
     ProtocolName                   VARCHAR(64) COMMENT '协议名称 (0018,1030) - LO, VM=1, max 64 chars',
-    ImageType                      VARCHAR(64) COMMENT '图像类型 (0008,0008) - CS, VM=1-n, max 16×n → 取64',
+
     AcquisitionNumber              INT COMMENT '采集号 (0020,0012) - IS, VM=1, max 12 chars → INT',
     AcquisitionTime                TIME COMMENT '采集时间 (0008,0032) - TM',
     AcquisitionDate                DATE COMMENT '采集日期 (0008,0022) - DA',

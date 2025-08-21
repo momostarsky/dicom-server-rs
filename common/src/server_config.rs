@@ -196,5 +196,6 @@ pub fn generate_database_connection(app_config: &AppConfig) -> std::result::Resu
         "mysql://{}:{}@{}:{}/{}",
         cfg.username, password, cfg.host, cfg.port, cfg.database
     );
+    println!("database connection string: {}", db_conn);
     Ok(db_conn)
 }

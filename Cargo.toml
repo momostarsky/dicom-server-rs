@@ -4,7 +4,7 @@ members = [
     "storescp",
     "common",
     "consumer",
-    "charset-helper"]
+    "charset-helper", "mysql-demo"]
 
 # use edition 2021 resolver
 resolver = "2"
