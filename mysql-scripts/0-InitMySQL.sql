@@ -130,6 +130,10 @@ CREATE TABLE ImageEntity
     ImageComments                          TEXT COMMENT '图像注释 (0020,4000) - LT, VM=1, max 10240 chars',
     ContentDate                            DATE COMMENT '内容日期 (0008,0023) - DA',
     ContentTime                            TIME COMMENT '内容时间 (0008,0033) - TM',
+
+
+    AcquisitionDate                        DATE COMMENT '内容日期 (0008,0022) - DA',
+    AcquisitionTime                        TIME COMMENT '内容时间 (0008,0032) - TM',
     AcquisitionDateTime                    DATETIME COMMENT '采集日期时间 (0008,002A) - DT, 合并 DA+TM',
 
     -- 图像类型与分类

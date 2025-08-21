@@ -1,10 +1,11 @@
+use crate::database_entities::{ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
 use crate::database_provider::DbProvider;
-use crate::database_entities::{DbProviderBase, ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
+use crate::database_provider_base::DbProviderBase;
+use crate::dicom_utils::{parse_dicom_date_from_sql, parse_dicom_time_from_sql};
 use async_trait::async_trait;
 use dicom_object::DefaultDicomObject;
 use sqlx::{MySqlPool, Row};
 use tracing::{error, info};
-use crate::dicom_utils::{parse_dicom_date_from_sql, parse_dicom_time_from_sql};
 
 pub struct MySqlProvider {
     pub pool: MySqlPool,
@@ -29,21 +30,49 @@ impl DbProvider for MySqlProvider {
         let pool = self.pool.clone();
 
         // 使用 DbProviderBase 提取实体信息
-        let patient_entity = DbProviderBase::extract_patient_entity(&tenant_id, dicom_obj);
-        let study_entity =
-            DbProviderBase::extract_study_entity(&tenant_id, dicom_obj, &patient_entity.patient_id);
-        let series_entity = DbProviderBase::extract_series_entity(
+        let patient_entity = match DbProviderBase::extract_patient_entity(&tenant_id, dicom_obj) {
+            Some(patient_entity) => patient_entity,
+            None => {
+                error!("Failed to extract patient entity.");
+                return None;
+            }
+        };
+
+        let study_entity = match DbProviderBase::extract_study_entity(
+            &tenant_id,
+            dicom_obj,
+            &patient_entity.patient_id,
+        ) {
+            Some(study_entity) => study_entity,
+            None => {
+                error!("Failed to extract study entity.");
+                return None;
+            }
+        };
+        let series_entity = match DbProviderBase::extract_series_entity(
             &tenant_id,
             dicom_obj,
             &study_entity.study_instance_uid,
-        );
-        let image_entity = DbProviderBase::extract_image_entity(
+        ) {
+            Some(series_entity) => series_entity,
+            None => {
+                error!("Failed to extract series entity.");
+                return None;
+            }
+        };
+        let image_entity = match DbProviderBase::extract_image_entity(
             &tenant_id,
             dicom_obj,
             &series_entity.series_instance_uid,
             &study_entity.study_instance_uid,
             &patient_entity.patient_id,
-        );
+        ) {
+            Some(image_entity) => image_entity,
+            None => {
+                error!("Failed to extract image entity.");
+                return None;
+            }
+        };
 
         // 开始事务
         let mut tx = match pool.begin().await {
@@ -65,7 +94,7 @@ impl DbProvider for MySqlProvider {
                 PatientBirthDate = VALUES(PatientBirthDate),
                 PatientSex = VALUES(PatientSex),
                 PatientBirthTime = VALUES(PatientBirthTime),
-                EthnicGroup = VALUES(EthnicGroup)"
+                EthnicGroup = VALUES(EthnicGroup)",
         )
         .bind(&patient_entity.tenant_id)
         .bind(&patient_entity.patient_id)
@@ -112,7 +141,7 @@ impl DbProvider for MySqlProvider {
                 PerformingPhysicianName = VALUES(PerformingPhysicianName),
                 ProcedureCodeSequence = VALUES(ProcedureCodeSequence),
                 ReceivedInstances = VALUES(ReceivedInstances),
-                SpaceSize = VALUES(SpaceSize)"
+                SpaceSize = VALUES(SpaceSize)",
         )
         .bind(&study_entity.tenant_id)
         .bind(&study_entity.study_instance_uid)
@@ -170,7 +199,7 @@ impl DbProvider for MySqlProvider {
                 OperatorsName = VALUES(OperatorsName),
                 NumberOfSeriesRelatedInstances = VALUES(NumberOfSeriesRelatedInstances),
                 ReceivedInstances = VALUES(ReceivedInstances),
-                SpaceSize = VALUES(SpaceSize)"
+                SpaceSize = VALUES(SpaceSize)",
         )
         .bind(&series_entity.tenant_id)
         .bind(&series_entity.series_instance_uid)
@@ -204,7 +233,7 @@ impl DbProvider for MySqlProvider {
             r"INSERT INTO ImageEntity (
                 tenant_id, SOPInstanceUID, SeriesInstanceUID, StudyInstanceUID,
                 PatientID, InstanceNumber, ImageComments, ContentDate, ContentTime,
-                AcquisitionDateTime, ImageType, ImageOrientationPatient,
+                AcquisitionDate, AcquisitionTime,ImageType, ImageOrientationPatient,
                 ImagePositionPatient, SliceThickness, SpacingBetweenSlices,
                 SliceLocation, SamplesPerPixel, PhotometricInterpretation,
                 Width, Columns, BitsAllocated, BitsStored, HighBit,
@@ -212,13 +241,14 @@ impl DbProvider for MySqlProvider {
                 RescaleType, AcquisitionDeviceProcessingDescription,
                 AcquisitionDeviceProcessingCode, DeviceSerialNumber,
                 SoftwareVersions, TransferSyntaxUID, SOPClassUID, NumberOfFrames, SpaceSize
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 InstanceNumber = VALUES(InstanceNumber),
                 ImageComments = VALUES(ImageComments),
                 ContentDate = VALUES(ContentDate),
                 ContentTime = VALUES(ContentTime),
-                AcquisitionDateTime = VALUES(AcquisitionDateTime),
+                AcquisitionDate = VALUES(AcquisitionDate),
+                AcquisitionTime = VALUES(AcquisitionTime),
                 ImageType = VALUES(ImageType),
                 ImageOrientationPatient = VALUES(ImageOrientationPatient),
                 ImagePositionPatient = VALUES(ImagePositionPatient),
@@ -253,7 +283,8 @@ impl DbProvider for MySqlProvider {
         .bind(&image_entity.image_comments)
         .bind(&image_entity.content_date)
         .bind(&image_entity.content_time)
-        .bind(&image_entity.acquisition_date_time)
+        .bind(&image_entity.acquisition_date)
+        .bind(&image_entity.acquisition_time)
         .bind(&image_entity.image_type)
         .bind(&image_entity.image_orientation_patient)
         .bind(&image_entity.image_position_patient)
@@ -365,7 +396,8 @@ impl DbProvider for MySqlProvider {
             AdmissionID, PerformingPhysicianName, ProcedureCodeSequence, ReceivedInstances, SpaceSize) VALUES ".to_string();
             let placeholders: Vec<String> = (0..chunk.len())
                 .map(|_| {
-                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string()
+                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                        .to_string()
                 })
                 .collect();
             query_builder.push_str(&placeholders.join(", "));
@@ -483,15 +515,21 @@ impl DbProvider for MySqlProvider {
         let pool = self.pool.clone();
 
         // 分批处理，避免SQL参数限制
-
         for (batch_index, chunk) in dicom_obj.chunks(BATCH_SIZE).enumerate() {
             // 构建批量插入语句，确保字段顺序与表结构完全一致
-            let mut query_builder = "INSERT INTO ImageEntity (tenant_id, SOPInstanceUID, SeriesInstanceUID, StudyInstanceUID, PatientID, InstanceNumber, ImageComments, ContentDate, ContentTime, AcquisitionDateTime, ImageType, ImageOrientationPatient, ImagePositionPatient, SliceThickness, SpacingBetweenSlices, SliceLocation, SamplesPerPixel, PhotometricInterpretation, Width, Columns, BitsAllocated, BitsStored, HighBit, PixelRepresentation, RescaleIntercept, RescaleSlope, RescaleType, AcquisitionDeviceProcessingDescription, AcquisitionDeviceProcessingCode, DeviceSerialNumber, SoftwareVersions, TransferSyntaxUID, SOPClassUID, NumberOfFrames, SpaceSize) VALUES ".to_string();
+            let mut query_builder = "INSERT INTO ImageEntity (tenant_id, SOPInstanceUID, SeriesInstanceUID, StudyInstanceUID, PatientID, InstanceNumber, ImageComments, ContentDate, ContentTime, \
+        AcquisitionDate, AcquisitionTime, AcquisitionDateTime, \
+        ImageType, ImageOrientationPatient, ImagePositionPatient, SliceThickness, SpacingBetweenSlices, SliceLocation, SamplesPerPixel, PhotometricInterpretation, Width, Columns, BitsAllocated, BitsStored, HighBit, PixelRepresentation, RescaleIntercept, RescaleSlope, RescaleType, AcquisitionDeviceProcessingDescription, AcquisitionDeviceProcessingCode, DeviceSerialNumber, SoftwareVersions, TransferSyntaxUID, SOPClassUID, NumberOfFrames, SpaceSize) VALUES ".to_string();
             let placeholders: Vec<String> = (0..chunk.len())
-                .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string())
-                .collect();
+            .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string())
+            .collect();
             query_builder.push_str(&placeholders.join(", "));
-            query_builder.push_str(" ON DUPLICATE KEY UPDATE InstanceNumber = VALUES(InstanceNumber), ImageComments = VALUES(ImageComments), ContentDate = VALUES(ContentDate), ContentTime = VALUES(ContentTime), AcquisitionDateTime = VALUES(AcquisitionDateTime), ImageType = VALUES(ImageType), ImageOrientationPatient = VALUES(ImageOrientationPatient), ImagePositionPatient = VALUES(ImagePositionPatient), SliceThickness = VALUES(SliceThickness), SpacingBetweenSlices = VALUES(SpacingBetweenSlices), SliceLocation = VALUES(SliceLocation), SamplesPerPixel = VALUES(SamplesPerPixel), PhotometricInterpretation = VALUES(PhotometricInterpretation), Width = VALUES(Width), Columns = VALUES(Columns), BitsAllocated = VALUES(BitsAllocated), BitsStored = VALUES(BitsStored), HighBit = VALUES(HighBit), PixelRepresentation = VALUES(PixelRepresentation), RescaleIntercept = VALUES(RescaleIntercept), RescaleSlope = VALUES(RescaleSlope), RescaleType = VALUES(RescaleType), AcquisitionDeviceProcessingDescription = VALUES(AcquisitionDeviceProcessingDescription), AcquisitionDeviceProcessingCode = VALUES(AcquisitionDeviceProcessingCode), DeviceSerialNumber = VALUES(DeviceSerialNumber), SoftwareVersions = VALUES(SoftwareVersions), TransferSyntaxUID = VALUES(TransferSyntaxUID), NumberOfFrames = VALUES(NumberOfFrames), SpaceSize = VALUES(SpaceSize)");
+            query_builder.push_str(" ON DUPLICATE KEY UPDATE InstanceNumber = VALUES(InstanceNumber), ImageComments = VALUES(ImageComments), ContentDate = VALUES(ContentDate), \
+        ContentTime = VALUES(ContentTime), \
+        AcquisitionDate = VALUES(AcquisitionDate), \
+        AcquisitionTime = VALUES(AcquisitionTime), \
+        AcquisitionDateTime = VALUES(AcquisitionDateTime), \
+        ImageType = VALUES(ImageType), ImageOrientationPatient = VALUES(ImageOrientationPatient), ImagePositionPatient = VALUES(ImagePositionPatient), SliceThickness = VALUES(SliceThickness), SpacingBetweenSlices = VALUES(SpacingBetweenSlices), SliceLocation = VALUES(SliceLocation), SamplesPerPixel = VALUES(SamplesPerPixel), PhotometricInterpretation = VALUES(PhotometricInterpretation), Width = VALUES(Width), Columns = VALUES(Columns), BitsAllocated = VALUES(BitsAllocated), BitsStored = VALUES(BitsStored), HighBit = VALUES(HighBit), PixelRepresentation = VALUES(PixelRepresentation), RescaleIntercept = VALUES(RescaleIntercept), RescaleSlope = VALUES(RescaleSlope), RescaleType = VALUES(RescaleType), AcquisitionDeviceProcessingDescription = VALUES(AcquisitionDeviceProcessingDescription), AcquisitionDeviceProcessingCode = VALUES(AcquisitionDeviceProcessingCode), DeviceSerialNumber = VALUES(DeviceSerialNumber), SoftwareVersions = VALUES(SoftwareVersions), TransferSyntaxUID = VALUES(TransferSyntaxUID), NumberOfFrames = VALUES(NumberOfFrames), SpaceSize = VALUES(SpaceSize)");
 
             let mut query = sqlx::query(&query_builder);
 
@@ -506,6 +544,8 @@ impl DbProvider for MySqlProvider {
                     .bind(&image.image_comments)
                     .bind(&image.content_date)
                     .bind(&image.content_time)
+                    .bind(&image.acquisition_date)
+                    .bind(&image.acquisition_time)
                     .bind(&image.acquisition_date_time)
                     .bind(&image.image_type)
                     .bind(&image.image_orientation_patient)
@@ -790,12 +830,11 @@ impl DbProvider for MySqlProvider {
         Some(true)
     }
 
+    async fn get_study_info(&self, tenant_id: &str, study_uid: &str) -> Option<StudyEntity> {
+        let pool = self.pool.clone();
 
-     async fn get_study_info(&self, tenant_id: &str, study_uid: &str) -> Option<StudyEntity> {
-    let pool = self.pool.clone();
-
-    match sqlx::query(
-        r#"SELECT tenant_id, StudyInstanceUID, PatientID,
+        match sqlx::query(
+            r#"SELECT tenant_id, StudyInstanceUID, PatientID,
                   COALESCE(StudyDate, '') as StudyDate,
                   COALESCE(StudyTime, '') as StudyTime,
                   AccessionNumber, StudyID, StudyDescription, ReferringPhysicianName,
@@ -805,56 +844,57 @@ impl DbProvider for MySqlProvider {
                   ReceivedInstances,
                   SpaceSize,CreatedTime, UpdatedTime
            FROM StudyEntity 
-           WHERE tenant_id = ? AND StudyInstanceUID = ?"#
-    )
-    .bind(tenant_id)
-    .bind(study_uid)
-    .fetch_optional(&pool)
-    .await
-    {
-        Ok(Some(row)) => {
-            let study = StudyEntity {
-                tenant_id: row.get("tenant_id"),
-                study_instance_uid: row.get("StudyInstanceUID"),
-                patient_id: row.get("PatientID"),
-                study_date: parse_dicom_date_from_sql( row.get("StudyDate")),
-                study_time: parse_dicom_time_from_sql( row.get("StudyTime")),
-                accession_number: row.get("AccessionNumber"),
-                study_id: row.get("StudyID"),
-                study_description: row.get("StudyDescription"),
-                referring_physician_name: row.get("ReferringPhysicianName"),
-                patient_age: row.get("PatientAge"),
-                patient_size: row.get("PatientSize"),
-                patient_weight: row.get("PatientWeight"),
-                medical_alerts: row.get("MedicalAlerts"),
-                allergies: row.get("Allergies"),
-                pregnancy_status: row.get("PregnancyStatus"),
-                occupation: row.get("Occupation"),
-                additional_patient_history: row.get("AdditionalPatientHistory"),
-                patient_comments: row.get("PatientComments"),
-                admission_id: row.get("AdmissionID"),
-                performing_physician_name: row.get("PerformingPhysicianName"),
-                procedure_code_sequence: row.get("ProcedureCodeSequence"),
-                received_instances: row.get("ReceivedInstances"),
-                space_size: row.get("SpaceSize"),
-                created_time: row.get("CreatedTime"),
-                updated_time: row.get("UpdatedTime"),
-            };
-            Some(study)
-        },
-        Ok(None) => {
-            info!("Study not found for tenant_id: {}, study_uid: {}", tenant_id, study_uid);
-            None
-        }
-        Err(e) => {
-            error!("Failed to get study info: {}", e);
-            None
+           WHERE tenant_id = ? AND StudyInstanceUID = ?"#,
+        )
+        .bind(tenant_id)
+        .bind(study_uid)
+        .fetch_optional(&pool)
+        .await
+        {
+            Ok(Some(row)) => {
+                let study = StudyEntity {
+                    tenant_id: row.get("tenant_id"),
+                    study_instance_uid: row.get("StudyInstanceUID"),
+                    patient_id: row.get("PatientID"),
+                    study_date: parse_dicom_date_from_sql(row.get("StudyDate")),
+                    study_time: parse_dicom_time_from_sql(row.get("StudyTime")),
+                    accession_number: row.get("AccessionNumber"),
+                    study_id: row.get("StudyID"),
+                    study_description: row.get("StudyDescription"),
+                    referring_physician_name: row.get("ReferringPhysicianName"),
+                    patient_age: row.get("PatientAge"),
+                    patient_size: row.get("PatientSize"),
+                    patient_weight: row.get("PatientWeight"),
+                    medical_alerts: row.get("MedicalAlerts"),
+                    allergies: row.get("Allergies"),
+                    pregnancy_status: row.get("PregnancyStatus"),
+                    occupation: row.get("Occupation"),
+                    additional_patient_history: row.get("AdditionalPatientHistory"),
+                    patient_comments: row.get("PatientComments"),
+                    admission_id: row.get("AdmissionID"),
+                    performing_physician_name: row.get("PerformingPhysicianName"),
+                    procedure_code_sequence: row.get("ProcedureCodeSequence"),
+                    received_instances: row.get("ReceivedInstances"),
+                    space_size: row.get("SpaceSize"),
+                    created_time: row.get("CreatedTime"),
+                    updated_time: row.get("UpdatedTime"),
+                };
+                Some(study)
+            }
+            Ok(None) => {
+                info!(
+                    "Study not found for tenant_id: {}, study_uid: {}",
+                    tenant_id, study_uid
+                );
+                None
+            }
+            Err(e) => {
+                error!("Failed to get study info: {}", e);
+                None
+            }
         }
     }
 }
-
-}
-
 
 #[cfg(test)]
 mod tests {
@@ -1034,7 +1074,7 @@ mod tests {
             match dicom_obj {
                 Ok(dcmobj) => {
                     let patient_entity =
-                        DbProviderBase::extract_patient_entity(tenant_id, &dcmobj);
+                        DbProviderBase::extract_patient_entity(tenant_id, &dcmobj).unwrap();
                     // 修复：正确检查 patient_name 是否存在
                     let patient_id = patient_entity.patient_id.clone();
                     if !patient_list.contains_key(&patient_entity.patient_id) {
@@ -1044,7 +1084,8 @@ mod tests {
                         tenant_id,
                         &dcmobj,
                         &patient_id, // 使用 clone 后的值，避免 move
-                    );
+                    )
+                    .unwrap();
                     let study_uid = study_entity.study_instance_uid.clone();
                     if !study_list.contains_key(study_uid.as_str()) {
                         study_list.insert(study_uid.clone(), study_entity);
@@ -1053,7 +1094,8 @@ mod tests {
                         tenant_id,
                         &dcmobj,
                         study_uid.as_str(), // 使用 clone 后的值，避免 move
-                    );
+                    )
+                    .unwrap();
                     let series_id = series_entity.series_instance_uid.clone();
                     if !series_list.contains_key(series_id.as_str()) {
                         series_list.insert(series_id.clone(), series_entity);
@@ -1064,7 +1106,8 @@ mod tests {
                         study_uid.as_str(), // 使用 clone 后的值，避免 move
                         series_id.as_str(), // 使用 clone 后的值，避免 move
                         &patient_id,        // 使用 clone 后的值，避免 move
-                    );
+                    )
+                    .unwrap();
                     let image_id = image_entity.sop_instance_uid.clone();
                     if !images_list.contains_key(image_id.as_str()) {
                         images_list.insert(image_id.clone(), image_entity);

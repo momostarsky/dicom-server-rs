@@ -1,4 +1,5 @@
-use common::database_entities::{DbProviderBase, DicomObjectMeta};
+use common::database_entities::{ DicomObjectMeta};
+
 use common::producer_factory::KafkaProducer;
 use dicom_dictionary_std::tags;
  
@@ -8,6 +9,7 @@ use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dicom_encoding::snafu::{whatever, ResultExt, Whatever};
 use tracing::info;
 use tracing::log::{error};
+use common::database_provider_base::DbProviderBase;
 
 pub(crate) async fn process_dicom_file(
     instance_buffer: &[u8],    //DICOM文件的字节数组或是二进制流
@@ -118,24 +120,44 @@ pub(crate) async fn process_dicom_file(
     }
 
     info!("Stored {}, {}", ts, sop_instance_uid);
-    let pat = DbProviderBase::extract_patient_entity(issue_patient_id, &file_obj);
-    let study =
-        DbProviderBase::extract_study_entity(issue_patient_id, &file_obj, pat.patient_id.as_str());
-    let series =
-        DbProviderBase::extract_series_entity(issue_patient_id, &file_obj, study_uid.as_str());
-    let mut image = DbProviderBase::extract_image_entity(
+    let pat = match DbProviderBase::extract_patient_entity(issue_patient_id, &file_obj){
+        Some(pat) => pat,
+        None => {
+            whatever!("extract patient entity failed");
+        }
+    };
+    let study = match DbProviderBase::extract_study_entity(issue_patient_id, &file_obj, pat.patient_id.as_str()) {
+        Some(study) => study,
+        None => {
+            whatever!("extract study entity failed");
+        }
+    };
+
+    let series = match  DbProviderBase::extract_series_entity(issue_patient_id, &file_obj, study_uid.as_str()) {
+        Some(series) => series,
+        None => {
+            whatever!("extract series entity failed");
+        }
+    };
+    let mut image =match   DbProviderBase::extract_image_entity(
         issue_patient_id,
         &file_obj,
         study_uid.as_str(),
         series_uid.as_str(),
         pat.patient_id.as_str(),
-    );
+    ){
+        Some(image) => image,
+        None => {
+            whatever!("extract image entity failed");
+        }
+    };
 
     let fs = std::fs::metadata(file_path.as_str());
     let file_size = match fs {
         Ok(fs) => fs.len() as u64,
         Err(_) => 0,
     };
+    println!("image is {:?}", image);
     image.space_size = Option::from(file_size);
     image.transfer_syntax_uid = ts.to_string();
     lst.push(DicomObjectMeta {
