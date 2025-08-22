@@ -1,11 +1,9 @@
-use common::database_entities::{DicomObjectMeta};
-use common::mysql_provider::MySqlProvider;
+use common::database_entities::DicomObjectMeta;
 use common::utils::{get_unique_tenant_ids, group_dicom_messages, setup_logging};
 use common::{database_factory, server_config};
 use futures::StreamExt;
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message};
-use sqlx::MySqlPool;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -26,19 +24,21 @@ pub async fn start_process() {
         }
     };
 
-    let mysql_url = match server_config::generate_database_connection(&config) {
-        Ok(url) => url,
-        Err(e) => {
-            error!("{:?}", e);
+    let db_provider = match database_factory::create_db_instance().await {
+        Some(provider) => provider,
+        None => {
+            tracing::error!("Failed to create database provider: provider is None");
             std::process::exit(-2);
         }
     };
-    // 使用 url crate 正确解析包含特殊字符的URL
-    tracing::info!("mysql_url: {}", mysql_url);
-    let pool = MySqlPool::connect(mysql_url.as_str())
-        .await
-        .expect("Failed to connect to MySQL");
-    let _db_provider = MySqlProvider { pool };
+
+    match db_provider.echo().await {
+        Ok(msg) => tracing::info!("Database provider echo: {}", msg),
+        Err(e) => {
+            tracing::error!("Failed to echo from database provider: {}", e);
+            std::process::exit(-2);
+        }
+    }
 
     let kafka_config_opt = config.kafka;
     let kafka_config = match kafka_config_opt {
@@ -229,6 +229,18 @@ async fn persist_message_loop(
         // 获取所有不同的 tenant_id
         let unique_tenant_ids = get_unique_tenant_ids(&messages_to_process);
         tracing::info!("Processing data for tenant IDs: {:?}", unique_tenant_ids);
+
+        // 创建数据库提供者
+        let db_provider = match database_factory::create_db_instance().await {
+            Some(provider) => provider,
+            None => {
+                tracing::error!("Failed to create database provider: provider is None");
+                // 休眠一段时间，等待下一次处理
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+        };
+
         for tenant_id in unique_tenant_ids {
             let tenant_msg = messages_to_process
                 .iter()
@@ -236,26 +248,17 @@ async fn persist_message_loop(
                 .cloned()
                 .collect::<Vec<_>>();
             let (patients, studies, series, images) = group_dicom_messages(&tenant_msg);
-            let db_provider = database_factory::create_db_instance().await;
-            if db_provider.is_none() {
-                tracing::error!("Failed to create database provider");
-                continue;
-            }
-            let db_provider = db_provider.unwrap();
-            let result = db_provider
+
+            match db_provider
                 .persist_to_database(tenant_id.as_str(), &patients, &studies, &series, &images)
-                .await;
-            match result {
-                None => {
-                    tracing::error!(
-                        "Failed to persist data for tenant {}: {:?}",
-                        tenant_id,
-                        result
-                    );
-                    continue;
-                }
-                Some(_) => {
+                .await
+            {
+                Ok(()) => {
                     tracing::info!("Successfully persisted data for tenant {}", tenant_id);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to persist data for tenant {}: {}", tenant_id, e);
+                    continue;
                 }
             }
         }

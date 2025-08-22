@@ -1,32 +1,60 @@
 use crate::database_entities::{ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
 use async_trait::async_trait;
 use dicom_object::DefaultDicomObject;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum DbError {
+    #[error("Database operation failed: {0}")]
+    DatabaseError(#[from] sqlx::Error),
+
+    #[error("Record already exists")]
+    AlreadyExists,
+
+    #[error("Entity extraction failed: {0}")]
+    ExtractionFailed(String),
+
+    #[error("Transaction failed: {0}")]
+    TransactionFailed(String),
+}
 
 #[async_trait]
-pub trait DbProvider :Send + Sync  {
+pub trait DbProvider: Send + Sync {
+
+
+    async fn echo(&self) -> Result<String, DbError>;
+
     // 保存DICOM信息
     // 返回值：Some(true) 表示成功保存，Some(false) 表示已存在，None 表示保存失败
     async fn save_dicom_info(
         &self,
         tenant_id: &str,
         dicom_obj: &DefaultDicomObject,
-    ) -> Option<bool>;
+    ) -> Result<(), DbError>;
     async fn save_patient_info(
         &self,
         tenant_id: &str,
         patient_lists: &[PatientEntity],
-    ) -> Option<bool>;
-    async fn save_study_info(&self, tenant_id: &str, study_lists: &[StudyEntity]) -> Option<bool>;
+    ) -> Result<(), DbError>;
+    async fn save_study_info(
+        &self,
+        tenant_id: &str,
+        study_lists: &[StudyEntity],
+    ) -> Result<(), DbError>;
     async fn save_series_info(
         &self,
         tenant_id: &str,
         series_lists: &[SeriesEntity],
-    ) -> Option<bool>;
+    ) -> Result<(), DbError>;
 
-    async fn save_instance_info(&self, tenant_id: &str, dicom_obj: &[ImageEntity]) -> Option<bool>;
+    async fn save_instance_info(
+        &self,
+        tenant_id: &str,
+        dicom_obj: &[ImageEntity],
+    ) -> Result<(), DbError>;
     // 根据DICOM对象的Study Instance UID、Series Instance UID、SOP Instance UID删除DICOM信息
     // 返回值：Some(true) 表示成功删除，Some(false) 表示未删除，None 表示删除失败
-    async fn delete_study_info(&self, tenant_id: &str, study_uid: &str) -> Option<bool>;
+    async fn delete_study_info(&self, tenant_id: &str, study_uid: &str) -> Result<bool, DbError>;
 
     // 根据DICOM对象的Study Instance UID、Series Instance UID删除DICOM信息
     // 返回值：Some(true) 表示成功删除，Some(false) 表示未删除，None 表示删除失败
@@ -35,7 +63,7 @@ pub trait DbProvider :Send + Sync  {
         tenant_id: &str,
         study_uid: &str,
         series_uid: &str,
-    ) -> Option<bool>;
+    ) -> Result<bool, DbError>;
     // 根据DICOM对象的Study Instance UID、Series Instance UID、SOP Instance UID删除DICOM信息
     // 返回值：Some(true) 表示成功删除，Some(false) 表示未删除，None 表示删除失败
     async fn delete_instance_info(
@@ -44,11 +72,11 @@ pub trait DbProvider :Send + Sync  {
         study_uid: &str,
         series_uid: &str,
         instance_uid: &str,
-    ) -> Option<bool>;
+    ) -> Result<bool, DbError>;
 
     // 判断DICOM对象是否存在
     // 返回值：Some(true) 表示存在，Some(false) 表示不存在，None 表示查询失败
-    async fn patient_exists(&self, tenant_id: &str, patient_id: &str) -> Option<bool>;
+    async fn patient_exists(&self, tenant_id: &str, patient_id: &str) ->Result<bool, DbError>;
     // 判断DICOM对象是否存在
     // 参数：
     //   - tenant_id: 租户ID
@@ -60,7 +88,7 @@ pub trait DbProvider :Send + Sync  {
         tenant_id: &str,
         patient_id: &str,
         study_uid: &str,
-    ) -> Option<bool>;
+    ) -> Result<bool, DbError>;
     // 判断DICOM对象是否存在
     // 参数：
     //   - tenant_id: 租户ID
@@ -74,7 +102,7 @@ pub trait DbProvider :Send + Sync  {
         patient_id: &str,
         study_uid: &str,
         series_uid: &str,
-    ) -> Option<bool>;
+    ) -> Result<bool, DbError>;
     // 判断DICOM对象是否存在
     // 参数：
     //   - tenant_id: 租户ID
@@ -89,7 +117,7 @@ pub trait DbProvider :Send + Sync  {
         study_uid: &str,
         series_uid: &str,
         instance_uid: &str,
-    ) -> Option<bool>;
+    ) -> Result<bool, DbError>;
 
     async fn persist_to_database(
         &self,
@@ -98,12 +126,8 @@ pub trait DbProvider :Send + Sync  {
         study_list: &[StudyEntity],
         series_list: &[SeriesEntity],
         images_list: &[ImageEntity],
-    ) -> Option<bool>;
+    ) -> Result<(), DbError>;
 
     // 获取患者信息
-    async fn get_study_info(
-        &self,
-        tenant_id: &str,
-        study_uid: &str,
-    ) -> Option<StudyEntity>;
+    async fn get_study_info(&self, tenant_id: &str, study_uid: &str) -> Result<Option<StudyEntity>, DbError>;
 }

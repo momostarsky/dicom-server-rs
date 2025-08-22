@@ -1,12 +1,11 @@
 use crate::database_entities::{ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
-use crate::database_provider::DbProvider;
+use crate::database_provider::{DbError, DbProvider};
 use crate::database_provider_base::DbProviderBase;
 use crate::dicom_utils::{parse_dicom_date_from_sql, parse_dicom_time_from_sql};
 use async_trait::async_trait;
 use dicom_object::DefaultDicomObject;
 use sqlx::{MySql, MySqlPool, Row, Transaction};
 use tracing::{error, info};
-
 
 #[async_trait]
 trait DbEntity {
@@ -32,7 +31,9 @@ impl DbEntity for PatientEntity {
     where
         Self: Sized,
     {
-        provider.save_patient_info_impl(tenant_id, entities, tx).await
+        provider
+            .save_patient_info_impl(tenant_id, entities, tx)
+            .await
     }
 }
 
@@ -62,7 +63,9 @@ impl DbEntity for SeriesEntity {
     where
         Self: Sized,
     {
-        provider.save_series_info_impl(tenant_id, entities, tx).await
+        provider
+            .save_series_info_impl(tenant_id, entities, tx)
+            .await
     }
 }
 
@@ -77,7 +80,9 @@ impl DbEntity for ImageEntity {
     where
         Self: Sized,
     {
-        provider.save_instance_info_impl(tenant_id, entities, tx).await
+        provider
+            .save_instance_info_impl(tenant_id, entities, tx)
+            .await
     }
 }
 
@@ -88,7 +93,6 @@ pub struct MySqlProvider {
 impl MySqlProvider {
     pub fn new(pool: MySqlPool) -> Self {
         info!("MySqlProvider created with pool: {:?}", pool);
-
 
         Self { pool }
     }
@@ -317,17 +321,12 @@ ImageType = VALUES(ImageType), ImageOrientationPatient = VALUES(ImageOrientation
         Ok(())
     }
 
-
-    async fn save_entities<T>(
-        &self,
-        tenant_id: &str,
-        entities: &[T],
-    ) -> Option<bool>
+    async fn save_entities<T>(&self, tenant_id: &str, entities: &[T]) -> Result<(), DbError>
     where
         T: DbEntity + Send + Sync,
     {
         if entities.is_empty() {
-            return Some(true);
+            return Ok(());
         }
 
         let pool = self.pool.clone();
@@ -335,7 +334,10 @@ ImageType = VALUES(ImageType), ImageOrientationPatient = VALUES(ImageOrientation
             Ok(tx) => tx,
             Err(e) => {
                 error!("Failed to start transaction: {}", e);
-                return None;
+                return Err(DbError::TransactionFailed(format!(
+                    "Failed to start transaction: {}",
+                    e
+                )));
             }
         };
 
@@ -344,10 +346,10 @@ ImageType = VALUES(ImageType), ImageOrientationPatient = VALUES(ImageOrientation
                 Ok(_) => {}
                 Err(e) => {
                     error!("Failed to save entities: {}", e);
-                    tx.rollback()
-                        .await
-                        .expect("Failed to rollback transaction.");
-                    return None;
+                    if let Err(rollback_err) = tx.rollback().await {
+                        error!("Failed to rollback transaction: {}", rollback_err);
+                    }
+                    return Err(DbError::DatabaseError(e));
                 }
             }
         }
@@ -355,29 +357,46 @@ ImageType = VALUES(ImageType), ImageOrientationPatient = VALUES(ImageOrientation
         match tx.commit().await {
             Ok(_) => {
                 info!(
-                "Successfully saved entities: {}, {}",
-                tenant_id,
-                entities.len()
-            );
-                Some(true)
+                    "Successfully saved entities: {}, {}",
+                    tenant_id,
+                    entities.len()
+                );
+                Ok(())
             }
             Err(e) => {
                 error!("Failed to commit transaction: {}", e);
-                Some(false)
+                Err(DbError::TransactionFailed(format!(
+                    "Failed to commit transaction: {}",
+                    e
+                )))
             }
         }
     }
-
 }
 
 static BATCH_SIZE: usize = 10;
 #[async_trait]
 impl DbProvider for MySqlProvider {
+    async fn echo(&self) -> Result<String, DbError> {
+        let pool = self.pool.clone();
+        let result = sqlx::query("SELECT 'Hello, world!'").fetch_one(&pool).await;
+        match result {
+            Ok(row) => {
+                let message: String = row.get(0);
+                Ok(message)
+            }
+            Err(e) => {
+                error!("Failed to execute query: {}", e);
+                Err(DbError::DatabaseError(e))
+            }
+        }
+    }
+
     async fn save_dicom_info(
         &self,
         tenant_id: &str,
         dicom_obj: &DefaultDicomObject,
-    ) -> Option<bool> {
+    ) -> Result<(), DbError> {
         let tenant_id = tenant_id.to_string();
 
         // 使用 DbProviderBase 提取实体信息
@@ -385,7 +404,9 @@ impl DbProvider for MySqlProvider {
             Some(patient_entity) => patient_entity,
             None => {
                 error!("Failed to extract patient entity.");
-                return None;
+                return Err(DbError::ExtractionFailed(
+                    "Failed to extract patient entity".to_string(),
+                ));
             }
         };
 
@@ -397,7 +418,9 @@ impl DbProvider for MySqlProvider {
             Some(study_entity) => study_entity,
             None => {
                 error!("Failed to extract study entity.");
-                return None;
+                return Err(DbError::ExtractionFailed(
+                    "Failed to extract study entity".to_string(),
+                ));
             }
         };
         let series_entity = match DbProviderBase::extract_series_entity(
@@ -408,7 +431,9 @@ impl DbProvider for MySqlProvider {
             Some(series_entity) => series_entity,
             None => {
                 error!("Failed to extract series entity.");
-                return None;
+                return Err(DbError::ExtractionFailed(
+                    "Failed to extract series entity".to_string(),
+                ));
             }
         };
         let image_entity = match DbProviderBase::extract_image_entity(
@@ -421,7 +446,9 @@ impl DbProvider for MySqlProvider {
             Some(image_entity) => image_entity,
             None => {
                 error!("Failed to extract image entity.");
-                return None;
+                return Err(DbError::ExtractionFailed(
+                    "Failed to extract image entity".to_string(),
+                ));
             }
         };
         let pool = self.pool.clone();
@@ -431,64 +458,58 @@ impl DbProvider for MySqlProvider {
             Ok(tx) => tx,
             Err(e) => {
                 error!("Failed to start transaction: {}", e);
-                return None;
+                return Err(DbError::TransactionFailed(
+                    "Failed to start transaction".to_string(),
+                ));
             }
         };
         let sop_uid = image_entity.sop_instance_uid.clone();
-        let pat_success = self
-            .save_patient_info_impl(&*tenant_id, &[patient_entity], &mut tx)
-            .await;
-        match pat_success {
-            Ok(_) => {}
-            Err(e) => {
-                error!("Failed to save patient info: {}", e);
-                tx.rollback()
-                    .await
-                    .expect("Failed to rollback transaction.");
-                return None;
+        // 保存患者信息
+        if let Err(e) = self
+            .save_patient_info_impl(&tenant_id, &[patient_entity], &mut tx)
+            .await
+        {
+            error!("Failed to save patient info: {}", e);
+            if let Err(rollback_err) = tx.rollback().await {
+                error!("Failed to rollback transaction: {}", rollback_err);
             }
+            return Err(DbError::DatabaseError(e));
         }
 
-        let study_success = self
-            .save_study_info_impl(&*tenant_id, &[study_entity], &mut tx)
-            .await;
-        match study_success {
-            Ok(_) => {}
-            Err(e) => {
-                error!("Failed to save study info: {}", e);
-                tx.rollback()
-                    .await
-                    .expect("Failed to rollback transaction.");
-                return None;
+        // 保存检查信息
+        if let Err(e) = self
+            .save_study_info_impl(&tenant_id, &[study_entity], &mut tx)
+            .await
+        {
+            error!("Failed to save study info: {}", e);
+            if let Err(rollback_err) = tx.rollback().await {
+                error!("Failed to rollback transaction: {}", rollback_err);
             }
+            return Err(DbError::DatabaseError(e));
         }
 
-        let series_success = self
-            .save_series_info_impl(&*tenant_id, &[series_entity], &mut tx)
-            .await;
-        match series_success {
-            Ok(_) => {}
-            Err(e) => {
-                error!("Failed to save series info: {}", e);
-                tx.rollback()
-                    .await
-                    .expect("Failed to rollback transaction.");
-
-                return None;
+        // 保存序列信息
+        if let Err(e) = self
+            .save_series_info_impl(&tenant_id, &[series_entity], &mut tx)
+            .await
+        {
+            error!("Failed to save series info: {}", e);
+            if let Err(rollback_err) = tx.rollback().await {
+                error!("Failed to rollback transaction: {}", rollback_err);
             }
+            return Err(DbError::DatabaseError(e));
         }
-        let sop_success = self
-            .save_instance_info_impl(&*tenant_id, &[image_entity], &mut tx)
-            .await;
-        match sop_success {
-            Ok(_) => {}
-            Err(e) => {
-                error!("Failed to save instance info: {}", e);
-                tx.rollback()
-                    .await
-                    .expect("Failed to rollback transaction.");
-                return None;
+
+        // 保存实例信息
+        if let Err(e) = self
+            .save_instance_info_impl(&tenant_id, &[image_entity], &mut tx)
+            .await
+        {
+            error!("Failed to save instance info: {}", e);
+            if let Err(rollback_err) = tx.rollback().await {
+                error!("Failed to rollback transaction: {}", rollback_err);
             }
+            return Err(DbError::DatabaseError(e));
         }
 
         // 提交事务
@@ -498,11 +519,14 @@ impl DbProvider for MySqlProvider {
                     "Successfully saved DICOM info for SOP Instance UID: {}",
                     sop_uid
                 );
-                Some(true)
+                Ok(())
             }
             Err(e) => {
                 error!("Failed to commit transaction: {}", e);
-                None
+                Err(DbError::TransactionFailed(format!(
+                    "Failed to commit transaction: {}",
+                    e
+                )))
             }
         }
     }
@@ -511,11 +535,15 @@ impl DbProvider for MySqlProvider {
         &self,
         tenant_id: &str,
         patient_lists: &[PatientEntity],
-    ) -> Option<bool> {
+    ) -> Result<(), DbError> {
         self.save_entities(tenant_id, patient_lists).await
     }
 
-    async fn save_study_info(&self, tenant_id: &str, study_lists: &[StudyEntity]) -> Option<bool> {
+    async fn save_study_info(
+        &self,
+        tenant_id: &str,
+        study_lists: &[StudyEntity],
+    ) -> Result<(), DbError> {
         self.save_entities(tenant_id, study_lists).await
     }
 
@@ -523,23 +551,19 @@ impl DbProvider for MySqlProvider {
         &self,
         tenant_id: &str,
         series_lists: &[SeriesEntity],
-    ) -> Option<bool> {
-         self.save_entities(tenant_id, series_lists).await
+    ) -> Result<(), DbError> {
+        self.save_entities(tenant_id, series_lists).await
     }
 
     async fn save_instance_info(
         &self,
         tenant_id: &str,
         image_lists: &[ImageEntity],
-    ) -> Option<bool> {
-        if image_lists.is_empty() {
-            return Some(true);
-        }
-
+    ) -> Result<(), DbError> {
         self.save_entities(tenant_id, image_lists).await
     }
 
-    async fn delete_study_info(&self, tenant_id: &str, study_uid: &str) -> Option<bool> {
+    async fn delete_study_info(&self, tenant_id: &str, study_uid: &str) -> Result<bool, DbError> {
         let tenant_id = tenant_id.to_string();
         let study_uid = study_uid.to_string();
         let pool = self.pool.clone();
@@ -550,10 +574,10 @@ impl DbProvider for MySqlProvider {
             .execute(&pool)
             .await
         {
-            Ok(_) => Some(true),
+            Ok(result) => Ok(result.rows_affected() > 0),
             Err(e) => {
                 error!("Failed to delete study info: {}", e);
-                None
+                Err(DbError::DatabaseError(e))
             }
         }
     }
@@ -563,7 +587,7 @@ impl DbProvider for MySqlProvider {
         tenant_id: &str,
         study_uid: &str,
         series_uid: &str,
-    ) -> Option<bool> {
+    ) -> Result<bool, DbError> {
         let tenant_id = tenant_id.to_string();
         let study_uid = study_uid.to_string();
         let series_uid = series_uid.to_string();
@@ -577,10 +601,10 @@ impl DbProvider for MySqlProvider {
             .bind(&series_uid)
             .execute(&pool)
             .await {
-            Ok(_) => Some(true),
+            Ok(result) => Ok(result.rows_affected() > 0),
             Err(e) => {
                 error!("Failed to delete series info: {}", e);
-                None
+                Err(DbError::DatabaseError(e))
             }
         }
     }
@@ -591,7 +615,7 @@ impl DbProvider for MySqlProvider {
         study_uid: &str,
         series_uid: &str,
         instance_uid: &str,
-    ) -> Option<bool> {
+    ) -> Result<bool, DbError> {
         let tenant_id = tenant_id.to_string();
         let study_uid = study_uid.to_string();
         let series_uid = series_uid.to_string();
@@ -607,15 +631,15 @@ impl DbProvider for MySqlProvider {
             .bind(&instance_uid)
             .execute(&pool)
             .await {
-            Ok(_) => Some(true),
+            Ok(result) => Ok(result.rows_affected() > 0),
             Err(e) => {
                 error!("Failed to delete instance info: {}", e);
-                None
+                Err(DbError::DatabaseError(e))
             }
         }
     }
 
-    async fn patient_exists(&self, tenant_id: &str, patient_id: &str) -> Option<bool> {
+    async fn patient_exists(&self, tenant_id: &str, patient_id: &str) -> Result<bool, DbError> {
         let pool = self.pool.clone();
 
         match sqlx::query(
@@ -628,11 +652,11 @@ impl DbProvider for MySqlProvider {
         {
             Ok(row) => {
                 let count: i64 = row.get(0);
-                Some(count > 0)
+                Ok(count > 0)
             }
             Err(e) => {
                 error!("Failed to check if patient exists: {}", e);
-                None
+                Err(DbError::DatabaseError(e))
             }
         }
     }
@@ -642,7 +666,7 @@ impl DbProvider for MySqlProvider {
         tenant_id: &str,
         patient_id: &str,
         study_uid: &str,
-    ) -> Option<bool> {
+    ) -> Result<bool, DbError> {
         let pool = self.pool.clone();
 
         match sqlx::query(
@@ -656,11 +680,11 @@ impl DbProvider for MySqlProvider {
         {
             Ok(row) => {
                 let count: i64 = row.get(0);
-                Some(count > 0)
+                Ok(count > 0)
             }
             Err(e) => {
-                error!("Failed to check if patient study exists: {}", e);
-                None
+                error!("Failed to check if patient exists: {}", e);
+                Err(DbError::DatabaseError(e))
             }
         }
     }
@@ -671,7 +695,7 @@ impl DbProvider for MySqlProvider {
         patient_id: &str,
         study_uid: &str,
         series_uid: &str,
-    ) -> Option<bool> {
+    ) -> Result<bool, DbError> {
         let pool = self.pool.clone();
 
         match sqlx::query(
@@ -687,11 +711,11 @@ impl DbProvider for MySqlProvider {
         {
             Ok(row) => {
                 let count: i64 = row.get(0);
-                Some(count > 0)
+                Ok(count > 0)
             }
             Err(e) => {
                 error!("Failed to check if patient series exists: {}", e);
-                None
+                Err(DbError::DatabaseError(e))
             }
         }
     }
@@ -703,7 +727,7 @@ impl DbProvider for MySqlProvider {
         study_uid: &str,
         series_uid: &str,
         instance_uid: &str,
-    ) -> Option<bool> {
+    ) -> Result<bool, DbError> {
         let pool = self.pool.clone();
 
         match sqlx::query(
@@ -721,11 +745,11 @@ impl DbProvider for MySqlProvider {
         {
             Ok(row) => {
                 let count: i64 = row.get(0);
-                Some(count > 0)
+                Ok(count > 0)
             }
             Err(e) => {
                 error!("Failed to check if patient instance exists: {}", e);
-                None
+                Err(DbError::DatabaseError(e))
             }
         }
     }
@@ -737,46 +761,36 @@ impl DbProvider for MySqlProvider {
         study_list: &[StudyEntity],
         series_list: &[SeriesEntity],
         images_list: &[ImageEntity],
-    ) -> Option<bool> {
+    ) -> Result<(), DbError> {
         // 批量插入到数据库，并处理结果
         if !patient_list.is_empty() {
-            match self.save_patient_info(tenant_id, &patient_list).await {
-                Some(true) => info!("成功保存 {} 条患者数据", patient_list.len()),
-                Some(false) => info!("患者数据已存在"),
-                None => error!("保存患者数据失败"),
-            }
+            self.save_patient_info(tenant_id, patient_list).await?;
+            info!("成功保存 {} 条患者数据", patient_list.len());
         }
 
         if !study_list.is_empty() {
-            match self.save_study_info(tenant_id, &study_list).await {
-                Some(true) => info!("成功保存 {} 条检查数据", study_list.len()),
-                Some(false) => info!("检查数据已存在"),
-                None => error!("保存检查数据失败"),
-            }
+            self.save_study_info(tenant_id, study_list).await?;
+            info!("成功保存 {} 条检查数据", study_list.len());
         }
 
         if !series_list.is_empty() {
-            match self.save_series_info(tenant_id, &series_list).await {
-                Some(true) => info!("成功保存 {} 条序列数据", series_list.len()),
-                Some(false) => info!("序列数据已存在"),
-                None => error!("保存序列数据失败"),
-            }
+            self.save_series_info(tenant_id, series_list).await?;
+            info!("成功保存 {} 条序列数据", series_list.len());
         }
 
         if !images_list.is_empty() {
-            match self.save_instance_info(tenant_id, &images_list).await {
-                Some(true) => info!("成功保存 {} 条图像数据", images_list.len()),
-                Some(false) => info!("图像数据已存在"),
-                None => {
-                    error!("保存图像数据失败");
-                }
-            }
+            self.save_instance_info(tenant_id, images_list).await?;
+            info!("成功保存 {} 条图像数据", images_list.len());
         }
 
-        Some(true)
+        Ok(())
     }
 
-    async fn get_study_info(&self, tenant_id: &str, study_uid: &str) -> Option<StudyEntity> {
+    async fn get_study_info(
+        &self,
+        tenant_id: &str,
+        study_uid: &str,
+    ) -> Result<Option<StudyEntity>, DbError> {
         let pool = self.pool.clone();
 
         match sqlx::query(
@@ -825,18 +839,18 @@ impl DbProvider for MySqlProvider {
                     created_time: row.get("CreatedTime"),
                     updated_time: row.get("UpdatedTime"),
                 };
-                Some(study)
+                Ok(Some(study))
             }
             Ok(None) => {
                 info!(
                     "Study not found for tenant_id: {}, study_uid: {}",
                     tenant_id, study_uid
                 );
-                None
+                Ok(None)
             }
             Err(e) => {
                 error!("Failed to get study info: {}", e);
-                None
+                Err(DbError::DatabaseError(e))
             }
         }
     }
@@ -1076,9 +1090,8 @@ mod tests {
                 )
                 .await
             {
-                Some(true) => println!("成功保存 {} 条患者数据", patient_list.len()),
-                Some(false) => println!("患者数据已存在"),
-                None => println!("保存患者数据失败"),
+                Ok(()) => println!("成功保存 {} 条患者数据", patient_list.len()),
+                Err(e) => println!("保存患者数据失败: {:?}", e),
             }
         }
 
@@ -1087,9 +1100,8 @@ mod tests {
                 .save_study_info(tenant_id, &study_list.values().cloned().collect::<Vec<_>>())
                 .await
             {
-                Some(true) => println!("成功保存 {} 条检查数据", study_list.len()),
-                Some(false) => println!("检查数据已存在"),
-                None => println!("保存检查数据失败"),
+                Ok(()) => println!("成功保存 {} 条检查数据", study_list.len()),
+                Err(e) => println!("保存检查数据失败: {:?}", e),
             }
         }
 
@@ -1101,9 +1113,8 @@ mod tests {
                 )
                 .await
             {
-                Some(true) => println!("成功保存 {} 条序列数据", series_list.len()),
-                Some(false) => println!("序列数据已存在"),
-                None => println!("保存序列数据失败"),
+                Ok(()) => println!("成功保存 {} 条序列数据", series_list.len()),
+                Err(e) => println!("保存序列数据失败: {:?}", e),
             }
         }
 
@@ -1115,10 +1126,9 @@ mod tests {
                 )
                 .await
             {
-                Some(true) => println!("成功保存 {} 条图像数据", images_list.len()),
-                Some(false) => println!("图像数据已存在"),
-                None => {
-                    println!("保存图像数据失败");
+                Ok(()) => println!("成功保存 {} 条图像数据", images_list.len()),
+                Err(e) => {
+                    println!("保存图像数据失败: {:?}", e);
                     // 添加更详细的调试信息
                     println!("图像数据详情:");
                     for (i, (id, image)) in images_list.iter().take(3).enumerate() {

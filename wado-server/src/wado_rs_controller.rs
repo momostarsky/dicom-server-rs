@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 #[derive(Deserialize, Debug)]
 struct StudyQueryParams {
+
     #[serde(rename = "charset")]
     charset: Option<String>,
     #[serde(rename = "anonymize")]
@@ -41,36 +42,36 @@ async fn retrieve_study(
     let query_params = parse_query_string_case_insensitive(query_string);
 
     // 处理 charset 参数
-    if let Some(charset) = get_param_case_insensitive(&query_params, WADO_CHARSET) {
-        if let Some(value) = charset.first() {
-            info!(log, "Charset: {}", value);
-        }
-    }
-
-    // 处理 anonymize 参数
-    if let Some(anonymize) = get_param_case_insensitive(&query_params, WADO_ANONYMIZE) {
-        if let Some(value) = anonymize.first() {
-            match value.to_lowercase().as_str() {
-                "true" => info!(log, "Anonymize: true"),
-                "false" => info!(log, "Anonymize: false"),
-                _ => info!(log, "Anonymize: invalid value"),
-            }
-        }
-    }
-
-    // 处理 includeField 参数
-    if let Some(include_fields) = get_param_case_insensitive(&query_params, WADO_INCLUDE_FIELD) {
-        if !include_fields.is_empty() {
-            info!(log, "Include Fields: {:?}", include_fields);
-        }
-    }
-
-    // 处理 excludeField 参数
-    if let Some(exclude_fields) = get_param_case_insensitive(&query_params, WADO_EXCLUDE_FIELD) {
-        if !exclude_fields.is_empty() {
-            info!(log, "Exclude Fields: {:?}", exclude_fields);
-        }
-    }
+    // if let Some(charset) = get_param_case_insensitive(&query_params, WADO_CHARSET) {
+    //     if let Some(value) = charset.first() {
+    //         info!(log, "Charset: {}", value);
+    //     }
+    // }
+    //
+    // // 处理 anonymize 参数
+    // if let Some(anonymize) = get_param_case_insensitive(&query_params, WADO_ANONYMIZE) {
+    //     if let Some(value) = anonymize.first() {
+    //         match value.to_lowercase().as_str() {
+    //             "true" => info!(log, "Anonymize: true"),
+    //             "false" => info!(log, "Anonymize: false"),
+    //             _ => info!(log, "Anonymize: invalid value"),
+    //         }
+    //     }
+    // }
+    //
+    // // 处理 includeField 参数
+    // if let Some(include_fields) = get_param_case_insensitive(&query_params, WADO_INCLUDE_FIELD) {
+    //     if !include_fields.is_empty() {
+    //         info!(log, "Include Fields: {:?}", include_fields);
+    //     }
+    // }
+    //
+    // // 处理 excludeField 参数
+    // if let Some(exclude_fields) = get_param_case_insensitive(&query_params, WADO_EXCLUDE_FIELD) {
+    //     if !exclude_fields.is_empty() {
+    //         info!(log, "Exclude Fields: {:?}", exclude_fields);
+    //     }
+    // }
 
     let params = StudyQueryParams {
         charset: get_param_case_insensitive(&query_params, WADO_CHARSET)
@@ -108,11 +109,17 @@ async fn retrieve_study_metadata(
     }
 
     let study_info = match app_state.db.get_study_info(&tenant_id, &study_uid).await {
-        Some(info) => info,
-        None => {
+        Ok(Some(info) )=> info,
+        Ok(None) => {
             return HttpResponse::NotFound().body(format!(
-                "retrieve_study_metadata not found: {},{}",
+                "retrieve_instance not found: {},{}",
                 tenant_id, study_uid
+            ));
+        },
+        Err(e) => {
+            return HttpResponse::InternalServerError().body(format!(
+                "retrieve_instance Failed to retrieve study info: {}",
+                e
             ));
         }
     };
@@ -211,14 +218,20 @@ async fn retrieve_instance(
     let tenant_id = common_utils::get_tenant_from_handler(&req);
     info!(
         log,
-        "retrieve_study_metadata Tenant ID: {}  and StudyUID:{} ", tenant_id, study_uid
+        "retrieve_instance Tenant ID: {}  and StudyUID:{} ", tenant_id, study_uid
     );
     let study_info = match app_state.db.get_study_info(&tenant_id, &study_uid).await {
-        Some(info) => info,
-        None => {
+        Ok(Some(info) )=> info,
+        Ok(None) => {
             return HttpResponse::NotFound().body(format!(
-                "retrieve_study_metadata not found: {},{}",
+                "retrieve_instance not found: {},{}",
                 tenant_id, study_uid
+            ));
+        },
+        Err(e) => {
+            return HttpResponse::InternalServerError().body(format!(
+                "retrieve_instance Failed to retrieve study info: {}",
+                e
             ));
         }
     };
