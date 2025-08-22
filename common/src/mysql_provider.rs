@@ -389,40 +389,45 @@ impl DbProvider for MySqlProvider {
             return Some(true);
         }
 
-        let pool = self.pool.clone();
         // 分批处理，避免SQL参数限制
+        let pool = self.pool.clone();
 
+        // 开始事务
+        let mut tx = match pool.begin().await {
+            Ok(tx) => tx,
+            Err(e) => {
+                error!("Failed to start transaction: {}", e);
+                return None;
+            }
+        };
         for chunk in patient_lists.chunks(BATCH_SIZE) {
             // 构建批量插入语句，确保字段顺序与表结构完全一致
-            let mut query_builder = "INSERT INTO PatientEntity (tenant_id, PatientID, PatientName, PatientBirthDate, PatientSex, PatientBirthTime, EthnicGroup) VALUES ".to_string();
-            let placeholders: Vec<String> = (0..chunk.len())
-                .map(|_| "(?, ?, ?, ?, ?, ?, ?)".to_string())
-                .collect();
-            query_builder.push_str(&placeholders.join(", "));
-            query_builder.push_str(" ON DUPLICATE KEY UPDATE PatientName = VALUES(PatientName), PatientBirthDate = VALUES(PatientBirthDate), PatientSex = VALUES(PatientSex), PatientBirthTime = VALUES(PatientBirthTime), EthnicGroup = VALUES(EthnicGroup)");
-
-            let mut query = sqlx::query(&query_builder);
-            for patient in chunk {
-                query = query
-                    .bind(tenant_id)
-                    .bind(&patient.patient_id)
-                    .bind(&patient.patient_name)
-                    .bind(&patient.patient_birth_date)
-                    .bind(&patient.patient_sex)
-                    .bind(&patient.patient_birth_time)
-                    .bind(&patient.ethnic_group);
-            }
-
-            match query.execute(&pool).await {
-                Ok(_) => continue,
+            match self.save_patient_info_impl(tenant_id, chunk, &mut tx).await {
+                Ok(_) => {}
                 Err(e) => {
                     error!("Failed to save patient info: {}", e);
+                    tx.rollback()
+                        .await
+                        .expect("Failed to rollback transaction.");
                     return None;
                 }
             }
         }
-
-        Some(true)
+        // 提交事务
+        match tx.commit().await {
+            Ok(_) => {
+                info!(
+                    "Successfully saved save_patient_info: {}, {}",
+                    tenant_id,
+                    patient_lists.len()
+                );
+                Some(true)
+            }
+            Err(e) => {
+                error!("Failed to commit transaction: {}", e);
+                Some(false)
+            }
+        }
     }
 
     async fn save_study_info(&self, tenant_id: &str, study_lists: &[StudyEntity]) -> Option<bool> {
@@ -431,67 +436,43 @@ impl DbProvider for MySqlProvider {
         }
 
         let pool = self.pool.clone();
-
+        // 开始事务
+        let mut tx = match pool.begin().await {
+            Ok(tx) => tx,
+            Err(e) => {
+                error!("Failed to start transaction: {}", e);
+                return None;
+            }
+        };
         // 分批处理，避免SQL参数限制
         for chunk in study_lists.chunks(BATCH_SIZE) {
             // 构建批量插入语句，确保字段顺序与表结构完全一致
-            let mut query_builder = "INSERT INTO StudyEntity (tenant_id, StudyInstanceUID, PatientID, StudyDate, StudyTime, AccessionNumber, StudyID, StudyDescription, \
-            ReferringPhysicianName, PatientAge, PatientSize, PatientWeight, MedicalAlerts, \
-            Allergies, PregnancyStatus, Occupation, AdditionalPatientHistory, PatientComments, \
-            AdmissionID, PerformingPhysicianName, ProcedureCodeSequence, ReceivedInstances, SpaceSize) VALUES ".to_string();
-            let placeholders: Vec<String> = (0..chunk.len())
-                .map(|_| {
-                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-                        .to_string()
-                })
-                .collect();
-            query_builder.push_str(&placeholders.join(", "));
-            query_builder.push_str(" ON DUPLICATE KEY UPDATE StudyDate = VALUES(StudyDate), StudyTime = VALUES(StudyTime), AccessionNumber = VALUES(AccessionNumber), StudyID = VALUES(StudyID),\
-            StudyDescription = VALUES(StudyDescription), ReferringPhysicianName = VALUES(ReferringPhysicianName), PatientAge = VALUES(PatientAge),\
-            PatientSize = VALUES(PatientSize), PatientWeight = VALUES(PatientWeight), MedicalAlerts = VALUES(MedicalAlerts), Allergies = VALUES(Allergies),\
-             PregnancyStatus = VALUES(PregnancyStatus), Occupation = VALUES(Occupation), AdditionalPatientHistory = VALUES(AdditionalPatientHistory), \
-             PatientComments = VALUES(PatientComments), AdmissionID = VALUES(AdmissionID), \
-             PerformingPhysicianName = VALUES(PerformingPhysicianName), ProcedureCodeSequence = VALUES(ProcedureCodeSequence), \
-             ReceivedInstances = VALUES(ReceivedInstances), SpaceSize = VALUES(SpaceSize)");
-
-            let mut query = sqlx::query(&query_builder);
-            for study in chunk {
-                query = query
-                    .bind(tenant_id)
-                    .bind(&study.study_instance_uid)
-                    .bind(&study.patient_id)
-                    .bind(&study.study_date)
-                    .bind(&study.study_time)
-                    .bind(&study.accession_number)
-                    .bind(&study.study_id)
-                    .bind(&study.study_description)
-                    .bind(&study.referring_physician_name)
-                    .bind(&study.patient_age)
-                    .bind(&study.patient_size)
-                    .bind(&study.patient_weight)
-                    .bind(&study.medical_alerts)
-                    .bind(&study.allergies)
-                    .bind(&study.pregnancy_status)
-                    .bind(&study.occupation)
-                    .bind(&study.additional_patient_history)
-                    .bind(&study.patient_comments)
-                    .bind(&study.admission_id)
-                    .bind(&study.performing_physician_name)
-                    .bind(&study.procedure_code_sequence)
-                    .bind(&study.received_instances)
-                    .bind(&study.space_size);
-            }
-
-            match query.execute(&pool).await {
-                Ok(_) => continue,
+            match self.save_study_info_impl(tenant_id, chunk, &mut tx).await {
+                Ok(_) => {}
                 Err(e) => {
-                    error!("Failed to save study info: {}", e);
+                    error!("Failed to invoke save_study_info: {}", e);
+                    tx.rollback()
+                        .await
+                        .expect("Failed to rollback transaction.");
                     return None;
                 }
             }
         }
-
-        Some(true)
+        // 提交事务
+        match tx.commit().await {
+            Ok(_) => {
+                info!(
+                    "Successfully invoke save_study_info: {}, {}",
+                    tenant_id,
+                    study_lists.len()
+                );
+                Some(true)
+            }
+            Err(e) => {
+                error!("Failed to commit transaction: {}", e);
+                Some(false)
+            }
+        }
     }
 
     async fn save_series_info(
@@ -504,137 +485,96 @@ impl DbProvider for MySqlProvider {
         }
 
         let pool = self.pool.clone();
-
+        // 开始事务
+        let mut tx = match pool.begin().await {
+            Ok(tx) => tx,
+            Err(e) => {
+                error!("Failed to start transaction: {}", e);
+                return None;
+            }
+        };
         // 分批处理，避免SQL参数限制
         for chunk in series_lists.chunks(BATCH_SIZE) {
             // 构建批量插入语句，确保字段顺序与表结构完全一致
-            let mut query_builder = "INSERT INTO SeriesEntity (tenant_id, SeriesInstanceUID, StudyInstanceUID, PatientID, Modality, SeriesNumber, SeriesDate, SeriesTime, SeriesDescription, BodyPartExamined, ProtocolName, AcquisitionNumber, AcquisitionTime, AcquisitionDate, PerformingPhysicianName, OperatorsName, NumberOfSeriesRelatedInstances, ReceivedInstances, SpaceSize) VALUES ".to_string();
-            let placeholders: Vec<String> = (0..chunk.len())
-                .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string())
-                .collect();
-            query_builder.push_str(&placeholders.join(", "));
-            query_builder.push_str(" ON DUPLICATE KEY UPDATE Modality = VALUES(Modality), SeriesNumber = VALUES(SeriesNumber), SeriesDate = VALUES(SeriesDate), SeriesTime = VALUES(SeriesTime), SeriesDescription = VALUES(SeriesDescription), BodyPartExamined = VALUES(BodyPartExamined), ProtocolName = VALUES(ProtocolName), AcquisitionNumber = VALUES(AcquisitionNumber), AcquisitionTime = VALUES(AcquisitionTime), AcquisitionDate = VALUES(AcquisitionDate), PerformingPhysicianName = VALUES(PerformingPhysicianName), OperatorsName = VALUES(OperatorsName), NumberOfSeriesRelatedInstances = VALUES(NumberOfSeriesRelatedInstances), ReceivedInstances = VALUES(ReceivedInstances), SpaceSize = VALUES(SpaceSize)");
-
-            let mut query = sqlx::query(&query_builder);
-            for series in chunk {
-                query = query
-                    .bind(tenant_id)
-                    .bind(&series.series_instance_uid)
-                    .bind(&series.study_instance_uid)
-                    .bind(&series.patient_id)
-                    .bind(&series.modality)
-                    .bind(&series.series_number)
-                    .bind(&series.series_date)
-                    .bind(&series.series_time)
-                    .bind(&series.series_description)
-                    .bind(&series.body_part_examined)
-                    .bind(&series.protocol_name)
-                    // 移除了 image_type 字段的绑定
-                    .bind(&series.acquisition_number)
-                    .bind(&series.acquisition_time)
-                    .bind(&series.acquisition_date)
-                    .bind(&series.performing_physician_name)
-                    .bind(&series.operators_name)
-                    .bind(&series.number_of_series_related_instances)
-                    .bind(&series.received_instances)
-                    .bind(&series.space_size);
-            }
-
-            match query.execute(&pool).await {
-                Ok(_) => continue,
+            match self.save_series_info_impl(tenant_id, chunk, &mut tx).await {
+                Ok(_) => {}
                 Err(e) => {
-                    error!("Failed to save series info: {}", e);
+                    error!("Failed to invoke save_series_info: {}", e);
+                    tx.rollback()
+                        .await
+                        .expect("Failed to rollback transaction.");
                     return None;
                 }
             }
         }
-
-        Some(true)
+        // 提交事务
+        match tx.commit().await {
+            Ok(_) => {
+                info!(
+                    "Successfully invoke save_study_info: {}, {}",
+                    tenant_id,
+                    series_lists.len()
+                );
+                Some(true)
+            }
+            Err(e) => {
+                error!("Failed to commit transaction: {}", e);
+                Some(false)
+            }
+        }
     }
 
-    async fn save_instance_info(&self, tenant_id: &str, dicom_obj: &[ImageEntity]) -> Option<bool> {
-        if dicom_obj.is_empty() {
+    async fn save_instance_info(
+        &self,
+        tenant_id: &str,
+        image_lists: &[ImageEntity],
+    ) -> Option<bool> {
+        if image_lists.is_empty() {
             return Some(true);
         }
 
         let pool = self.pool.clone();
+        // 开始事务
+        let mut tx = match pool.begin().await {
+            Ok(tx) => tx,
+            Err(e) => {
+                error!("Failed to start transaction: {}", e);
+                return None;
+            }
+        };
 
         // 分批处理，避免SQL参数限制
-        for (batch_index, chunk) in dicom_obj.chunks(BATCH_SIZE).enumerate() {
+        for (_batch_index, chunk) in image_lists.chunks(BATCH_SIZE).enumerate() {
             // 构建批量插入语句，确保字段顺序与表结构完全一致
-            let mut query_builder = "INSERT INTO ImageEntity (tenant_id, SOPInstanceUID, SeriesInstanceUID, StudyInstanceUID, PatientID, InstanceNumber, ImageComments, ContentDate, ContentTime, \
-        AcquisitionDate, AcquisitionTime, AcquisitionDateTime, \
-        ImageType, ImageOrientationPatient, ImagePositionPatient, SliceThickness, SpacingBetweenSlices, SliceLocation, SamplesPerPixel, PhotometricInterpretation, Width, Columns, BitsAllocated, BitsStored, HighBit, PixelRepresentation, RescaleIntercept, RescaleSlope, RescaleType, AcquisitionDeviceProcessingDescription, AcquisitionDeviceProcessingCode, DeviceSerialNumber, SoftwareVersions, TransferSyntaxUID, SOPClassUID, NumberOfFrames, SpaceSize) VALUES ".to_string();
-            let placeholders: Vec<String> = (0..chunk.len())
-                .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string())
-                .collect();
-            query_builder.push_str(&placeholders.join(", "));
-            query_builder.push_str(" ON DUPLICATE KEY UPDATE InstanceNumber = VALUES(InstanceNumber), ImageComments = VALUES(ImageComments), ContentDate = VALUES(ContentDate), \
-        ContentTime = VALUES(ContentTime), \
-        AcquisitionDate = VALUES(AcquisitionDate), \
-        AcquisitionTime = VALUES(AcquisitionTime), \
-        AcquisitionDateTime = VALUES(AcquisitionDateTime), \
-        ImageType = VALUES(ImageType), ImageOrientationPatient = VALUES(ImageOrientationPatient), ImagePositionPatient = VALUES(ImagePositionPatient), SliceThickness = VALUES(SliceThickness), SpacingBetweenSlices = VALUES(SpacingBetweenSlices), SliceLocation = VALUES(SliceLocation), SamplesPerPixel = VALUES(SamplesPerPixel), PhotometricInterpretation = VALUES(PhotometricInterpretation), Width = VALUES(Width), Columns = VALUES(Columns), BitsAllocated = VALUES(BitsAllocated), BitsStored = VALUES(BitsStored), HighBit = VALUES(HighBit), PixelRepresentation = VALUES(PixelRepresentation), RescaleIntercept = VALUES(RescaleIntercept), RescaleSlope = VALUES(RescaleSlope), RescaleType = VALUES(RescaleType), AcquisitionDeviceProcessingDescription = VALUES(AcquisitionDeviceProcessingDescription), AcquisitionDeviceProcessingCode = VALUES(AcquisitionDeviceProcessingCode), DeviceSerialNumber = VALUES(DeviceSerialNumber), SoftwareVersions = VALUES(SoftwareVersions), TransferSyntaxUID = VALUES(TransferSyntaxUID), NumberOfFrames = VALUES(NumberOfFrames), SpaceSize = VALUES(SpaceSize)");
-
-            let mut query = sqlx::query(&query_builder);
-
-            for image in chunk {
-                query = query
-                    .bind(tenant_id)
-                    .bind(&image.sop_instance_uid)
-                    .bind(&image.series_instance_uid)
-                    .bind(&image.study_instance_uid)
-                    .bind(&image.patient_id)
-                    .bind(&image.instance_number)
-                    .bind(&image.image_comments)
-                    .bind(&image.content_date)
-                    .bind(&image.content_time)
-                    .bind(&image.acquisition_date)
-                    .bind(&image.acquisition_time)
-                    .bind(&image.acquisition_date_time)
-                    .bind(&image.image_type)
-                    .bind(&image.image_orientation_patient)
-                    .bind(&image.image_position_patient)
-                    .bind(&image.slice_thickness)
-                    .bind(&image.spacing_between_slices)
-                    .bind(&image.slice_location)
-                    .bind(&image.samples_per_pixel)
-                    .bind(&image.photometric_interpretation)
-                    .bind(&image.width)
-                    .bind(&image.columns)
-                    .bind(&image.bits_allocated)
-                    .bind(&image.bits_stored)
-                    .bind(&image.high_bit)
-                    .bind(&image.pixel_representation)
-                    .bind(&image.rescale_intercept)
-                    .bind(&image.rescale_slope)
-                    .bind(&image.rescale_type)
-                    .bind(&image.acquisition_device_processing_description)
-                    .bind(&image.acquisition_device_processing_code)
-                    .bind(&image.device_serial_number)
-                    .bind(&image.software_versions)
-                    .bind(&image.transfer_syntax_uid)
-                    .bind(&image.sop_class_uid)
-                    .bind(&image.number_of_frames)
-                    .bind(&image.space_size);
-            }
-
-            match query.execute(&pool).await {
-                Ok(_) => {
-                    continue;
-                }
+            match self
+                .save_instance_info_impl(tenant_id, chunk, &mut tx)
+                .await
+            {
+                Ok(_) => {}
                 Err(e) => {
-                    error!(
-                        "Failed to save instance info in batch {}: {}",
-                        batch_index + 1,
-                        e
-                    );
+                    error!("Failed to invoke save_instance_info: {}", e);
+                    tx.rollback()
+                        .await
+                        .expect("Failed to rollback transaction.");
                     return None;
                 }
             }
         }
-
-        Some(true)
+        // 提交事务
+        match tx.commit().await {
+            Ok(_) => {
+                info!(
+                    "Successfully invoke save_study_info: {}, {}",
+                    tenant_id,
+                    image_lists.len()
+                );
+                Some(true)
+            }
+            Err(e) => {
+                error!("Failed to commit transaction: {}", e);
+                Some(false)
+            }
+        }
     }
 
     async fn delete_study_info(&self, tenant_id: &str, study_uid: &str) -> Option<bool> {
