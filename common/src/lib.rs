@@ -11,6 +11,7 @@ pub mod cornerstonejs;
 pub mod dicom_utils;
 pub mod dicom_json_helper;
 pub mod database_provider_base;
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DicomMessage {
     pub tenant: String,

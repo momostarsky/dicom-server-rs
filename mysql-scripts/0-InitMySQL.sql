@@ -18,8 +18,8 @@ CREATE TABLE PatientEntity
     PatientBirthTime         TIME COMMENT '患者出生时间 (0010,0032)',
     EthnicGroup              VARCHAR(16) COMMENT '民族 (0010,2160)',
     -- 时间戳
-    CreatedTime              DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间',
-    UpdatedTime              DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间',
+    CreatedTime                    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UpdatedTime                    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     -- ✅ 设置联合主键
     PRIMARY KEY (tenant_id, PatientID),
     -- ✅ 为单独查询 PatientID 时提供高效索引（可选）
@@ -63,8 +63,8 @@ CREATE TABLE StudyEntity
     ReceivedInstances       INT DEFAULT 0 COMMENT '接收实例数量 (业务扩展)',
     SpaceSize               BIGINT DEFAULT 0 COMMENT '占用空间大小 (字节，业务扩展)',
     -- 时间戳
-    CreatedTime             DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UpdatedTime             DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CreatedTime                    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UpdatedTime                    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (tenant_id, StudyInstanceUID),
     -- 索引
     INDEX                   idx_patient_id (PatientID),
@@ -174,8 +174,8 @@ CREATE TABLE ImageEntity
     SpaceSize                              BIGINT DEFAULT 0 COMMENT '占用空间大小 (字节，业务扩展)',
 
     -- 时间戳
-    CreatedTime                            DATETIME    DEFAULT CURRENT_TIMESTAMP,
-    UpdatedTime                            DATETIME    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CreatedTime                    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UpdatedTime                    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 -- Primary Key
     PRIMARY KEY (tenant_id, SOPInstanceUID),
     -- 索引：优化查询性能

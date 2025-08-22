@@ -7,6 +7,80 @@ use dicom_object::DefaultDicomObject;
 use sqlx::{MySql, MySqlPool, Row, Transaction};
 use tracing::{error, info};
 
+
+#[async_trait]
+trait DbEntity {
+    async fn save_impl(
+        provider: &MySqlProvider,
+        tenant_id: &str,
+        entities: &[Self],
+        tx: &mut Transaction<'_, MySql>,
+    ) -> Result<(), sqlx::Error>
+    where
+        Self: Sized;
+}
+
+// 为各个实体实现该 trait
+#[async_trait]
+impl DbEntity for PatientEntity {
+    async fn save_impl(
+        provider: &MySqlProvider,
+        tenant_id: &str,
+        entities: &[Self],
+        tx: &mut Transaction<'_, MySql>,
+    ) -> Result<(), sqlx::Error>
+    where
+        Self: Sized,
+    {
+        provider.save_patient_info_impl(tenant_id, entities, tx).await
+    }
+}
+
+#[async_trait]
+impl DbEntity for StudyEntity {
+    async fn save_impl(
+        provider: &MySqlProvider,
+        tenant_id: &str,
+        entities: &[Self],
+        tx: &mut Transaction<'_, MySql>,
+    ) -> Result<(), sqlx::Error>
+    where
+        Self: Sized,
+    {
+        provider.save_study_info_impl(tenant_id, entities, tx).await
+    }
+}
+
+#[async_trait]
+impl DbEntity for SeriesEntity {
+    async fn save_impl(
+        provider: &MySqlProvider,
+        tenant_id: &str,
+        entities: &[Self],
+        tx: &mut Transaction<'_, MySql>,
+    ) -> Result<(), sqlx::Error>
+    where
+        Self: Sized,
+    {
+        provider.save_series_info_impl(tenant_id, entities, tx).await
+    }
+}
+
+#[async_trait]
+impl DbEntity for ImageEntity {
+    async fn save_impl(
+        provider: &MySqlProvider,
+        tenant_id: &str,
+        entities: &[Self],
+        tx: &mut Transaction<'_, MySql>,
+    ) -> Result<(), sqlx::Error>
+    where
+        Self: Sized,
+    {
+        provider.save_instance_info_impl(tenant_id, entities, tx).await
+    }
+}
+
 pub struct MySqlProvider {
     pub pool: MySqlPool,
 }
@@ -15,10 +89,11 @@ impl MySqlProvider {
     pub fn new(pool: MySqlPool) -> Self {
         info!("MySqlProvider created with pool: {:?}", pool);
 
+
         Self { pool }
     }
 
-    async fn save_patient_info_impl(
+    pub(crate) async fn save_patient_info_impl(
         &self,
         tenant_id: &str,
         patient_lists: &[PatientEntity],
@@ -55,7 +130,7 @@ impl MySqlProvider {
         Ok(())
     }
 
-    async fn save_study_info_impl(
+    pub(crate) async fn save_study_info_impl(
         &self,
         tenant_id: &str,
         study_lists: &[StudyEntity],
@@ -120,7 +195,7 @@ impl MySqlProvider {
         Ok(())
     }
 
-    async fn save_series_info_impl(
+    pub(crate) async fn save_series_info_impl(
         &self,
         tenant_id: &str,
         series_lists: &[SeriesEntity],
@@ -168,7 +243,7 @@ impl MySqlProvider {
         Ok(())
     }
 
-    async fn save_instance_info_impl(
+    pub(crate) async fn save_instance_info_impl(
         &self,
         tenant_id: &str,
         dicom_obj: &[ImageEntity],
@@ -241,6 +316,58 @@ ImageType = VALUES(ImageType), ImageOrientationPatient = VALUES(ImageOrientation
 
         Ok(())
     }
+
+
+    async fn save_entities<T>(
+        &self,
+        tenant_id: &str,
+        entities: &[T],
+    ) -> Option<bool>
+    where
+        T: DbEntity + Send + Sync,
+    {
+        if entities.is_empty() {
+            return Some(true);
+        }
+
+        let pool = self.pool.clone();
+        let mut tx = match pool.begin().await {
+            Ok(tx) => tx,
+            Err(e) => {
+                error!("Failed to start transaction: {}", e);
+                return None;
+            }
+        };
+
+        for chunk in entities.chunks(BATCH_SIZE) {
+            match T::save_impl(self, tenant_id, chunk, &mut tx).await {
+                Ok(_) => {}
+                Err(e) => {
+                    error!("Failed to save entities: {}", e);
+                    tx.rollback()
+                        .await
+                        .expect("Failed to rollback transaction.");
+                    return None;
+                }
+            }
+        }
+
+        match tx.commit().await {
+            Ok(_) => {
+                info!(
+                "Successfully saved entities: {}, {}",
+                tenant_id,
+                entities.len()
+            );
+                Some(true)
+            }
+            Err(e) => {
+                error!("Failed to commit transaction: {}", e);
+                Some(false)
+            }
+        }
+    }
+
 }
 
 static BATCH_SIZE: usize = 10;
@@ -385,94 +512,11 @@ impl DbProvider for MySqlProvider {
         tenant_id: &str,
         patient_lists: &[PatientEntity],
     ) -> Option<bool> {
-        if patient_lists.is_empty() {
-            return Some(true);
-        }
-
-        // 分批处理，避免SQL参数限制
-        let pool = self.pool.clone();
-
-        // 开始事务
-        let mut tx = match pool.begin().await {
-            Ok(tx) => tx,
-            Err(e) => {
-                error!("Failed to start transaction: {}", e);
-                return None;
-            }
-        };
-        for chunk in patient_lists.chunks(BATCH_SIZE) {
-            // 构建批量插入语句，确保字段顺序与表结构完全一致
-            match self.save_patient_info_impl(tenant_id, chunk, &mut tx).await {
-                Ok(_) => {}
-                Err(e) => {
-                    error!("Failed to save patient info: {}", e);
-                    tx.rollback()
-                        .await
-                        .expect("Failed to rollback transaction.");
-                    return None;
-                }
-            }
-        }
-        // 提交事务
-        match tx.commit().await {
-            Ok(_) => {
-                info!(
-                    "Successfully saved save_patient_info: {}, {}",
-                    tenant_id,
-                    patient_lists.len()
-                );
-                Some(true)
-            }
-            Err(e) => {
-                error!("Failed to commit transaction: {}", e);
-                Some(false)
-            }
-        }
+        self.save_entities(tenant_id, patient_lists).await
     }
 
     async fn save_study_info(&self, tenant_id: &str, study_lists: &[StudyEntity]) -> Option<bool> {
-        if study_lists.is_empty() {
-            return Some(true);
-        }
-
-        let pool = self.pool.clone();
-        // 开始事务
-        let mut tx = match pool.begin().await {
-            Ok(tx) => tx,
-            Err(e) => {
-                error!("Failed to start transaction: {}", e);
-                return None;
-            }
-        };
-        // 分批处理，避免SQL参数限制
-        for chunk in study_lists.chunks(BATCH_SIZE) {
-            // 构建批量插入语句，确保字段顺序与表结构完全一致
-            match self.save_study_info_impl(tenant_id, chunk, &mut tx).await {
-                Ok(_) => {}
-                Err(e) => {
-                    error!("Failed to invoke save_study_info: {}", e);
-                    tx.rollback()
-                        .await
-                        .expect("Failed to rollback transaction.");
-                    return None;
-                }
-            }
-        }
-        // 提交事务
-        match tx.commit().await {
-            Ok(_) => {
-                info!(
-                    "Successfully invoke save_study_info: {}, {}",
-                    tenant_id,
-                    study_lists.len()
-                );
-                Some(true)
-            }
-            Err(e) => {
-                error!("Failed to commit transaction: {}", e);
-                Some(false)
-            }
-        }
+        self.save_entities(tenant_id, study_lists).await
     }
 
     async fn save_series_info(
@@ -480,48 +524,7 @@ impl DbProvider for MySqlProvider {
         tenant_id: &str,
         series_lists: &[SeriesEntity],
     ) -> Option<bool> {
-        if series_lists.is_empty() {
-            return Some(true);
-        }
-
-        let pool = self.pool.clone();
-        // 开始事务
-        let mut tx = match pool.begin().await {
-            Ok(tx) => tx,
-            Err(e) => {
-                error!("Failed to start transaction: {}", e);
-                return None;
-            }
-        };
-        // 分批处理，避免SQL参数限制
-        for chunk in series_lists.chunks(BATCH_SIZE) {
-            // 构建批量插入语句，确保字段顺序与表结构完全一致
-            match self.save_series_info_impl(tenant_id, chunk, &mut tx).await {
-                Ok(_) => {}
-                Err(e) => {
-                    error!("Failed to invoke save_series_info: {}", e);
-                    tx.rollback()
-                        .await
-                        .expect("Failed to rollback transaction.");
-                    return None;
-                }
-            }
-        }
-        // 提交事务
-        match tx.commit().await {
-            Ok(_) => {
-                info!(
-                    "Successfully invoke save_study_info: {}, {}",
-                    tenant_id,
-                    series_lists.len()
-                );
-                Some(true)
-            }
-            Err(e) => {
-                error!("Failed to commit transaction: {}", e);
-                Some(false)
-            }
-        }
+         self.save_entities(tenant_id, series_lists).await
     }
 
     async fn save_instance_info(
@@ -533,48 +536,7 @@ impl DbProvider for MySqlProvider {
             return Some(true);
         }
 
-        let pool = self.pool.clone();
-        // 开始事务
-        let mut tx = match pool.begin().await {
-            Ok(tx) => tx,
-            Err(e) => {
-                error!("Failed to start transaction: {}", e);
-                return None;
-            }
-        };
-
-        // 分批处理，避免SQL参数限制
-        for (_batch_index, chunk) in image_lists.chunks(BATCH_SIZE).enumerate() {
-            // 构建批量插入语句，确保字段顺序与表结构完全一致
-            match self
-                .save_instance_info_impl(tenant_id, chunk, &mut tx)
-                .await
-            {
-                Ok(_) => {}
-                Err(e) => {
-                    error!("Failed to invoke save_instance_info: {}", e);
-                    tx.rollback()
-                        .await
-                        .expect("Failed to rollback transaction.");
-                    return None;
-                }
-            }
-        }
-        // 提交事务
-        match tx.commit().await {
-            Ok(_) => {
-                info!(
-                    "Successfully invoke save_study_info: {}, {}",
-                    tenant_id,
-                    image_lists.len()
-                );
-                Some(true)
-            }
-            Err(e) => {
-                error!("Failed to commit transaction: {}", e);
-                Some(false)
-            }
-        }
+        self.save_entities(tenant_id, image_lists).await
     }
 
     async fn delete_study_info(&self, tenant_id: &str, study_uid: &str) -> Option<bool> {

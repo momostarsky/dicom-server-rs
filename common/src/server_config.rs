@@ -193,7 +193,7 @@ pub fn generate_database_connection(app_config: &AppConfig) -> std::result::Resu
     let cfg = dbconfig.as_ref().unwrap();
 
     let db_conn = format!(
-        "mysql://{}:{}@{}:{}/{}",
+        "mysql://{}:{}@{}:{}/{}?allowPublicKeyRetrieval=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false",
         cfg.username, password, cfg.host, cfg.port, cfg.database
     );
     println!("database connection string: {}", db_conn);
