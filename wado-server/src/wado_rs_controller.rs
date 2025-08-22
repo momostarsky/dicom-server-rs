@@ -11,6 +11,7 @@ use std::path::PathBuf;
 struct StudyQueryParams {
 
     #[serde(rename = "charset")]
+    #[warn(dead_code)]
     charset: Option<String>,
     #[serde(rename = "anonymize")]
     anonymize: Option<bool>,
