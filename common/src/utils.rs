@@ -246,12 +246,11 @@ pub fn group_dicom_messages(
                     }
                 }
             }
-            Err(e) => {
+            Err(_) => {
                 // 记录错误但继续处理其他文件
                 eprintln!(
-                    "Failed to open DICOM file {}: {:?}",
+                    "Failed to open DICOM file: {}",
                     message.file_path,
-                    e
                 );
                 continue;
             }
