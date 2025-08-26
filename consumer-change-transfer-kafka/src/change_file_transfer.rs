@@ -120,7 +120,7 @@ mod tests {
     #[tokio::test]
     async fn test_convert_ts_with_pixel_data_success() {
         // 创建一个临时的测试文件
-        let test_file = "/home/dhz/jpdata/CDSS/DicomTest/2.dcm";
+        let test_file = "./2.dcm";
         let output_file = "./2-X.dcm";
 
         // 获取文件大小
