@@ -1,7 +1,8 @@
 [package]
-name = "consumer"
+name = "consumer-storage"
 version = "0.1.0"
 edition = "2024"
+description = "A DICOM consumer that parse DICOM file tags and save into database."
 
 [dependencies]
 clap = { version = "4.5.43", features = ["derive"] }

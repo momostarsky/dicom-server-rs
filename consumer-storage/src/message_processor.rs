@@ -66,7 +66,7 @@ pub async fn start_process() {
         .set("session.timeout.ms", "6000")
         .set("enable.partition.eof", "false")
         .create()
-        .expect("create consumer failed");
+        .expect("create consumer-storage failed");
 
     let topic = queue_config.topic_main.as_str();
     tracing::info!("Subscribing to topic: {}", topic);

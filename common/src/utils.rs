@@ -63,7 +63,7 @@ pub fn collect_dicom_files(
 //     let file_appender = RollingFileAppender::new(
 //         Rotation::DAILY,
 //         "./logs", // 日志文件目录
-//         "consumer.log", // 日志文件名前缀
+//         "consumer-storage.log", // 日志文件名前缀
 //     );
 //
 //     // 创建控制台appender

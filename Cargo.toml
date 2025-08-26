@@ -3,7 +3,7 @@ members = [
     "wado-server",
     "storescp",
     "common",
-    "consumer",
+    "consumer-storage",
     "charset-helper", "mysql-demo"]
 
 # use edition 2021 resolver
