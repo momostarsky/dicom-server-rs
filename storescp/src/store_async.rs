@@ -86,8 +86,11 @@ pub async fn run_store_async(
     let queue_config = app_config.message_queue.unwrap();
 
     let storage_producer = KafkaMessagePublisher::new(queue_config.topic_main);
-    let chgts_producer = KafkaMessagePublisher::new(queue_config.topic_change_transfer_syntax);
+
     let multi_frames_producer = KafkaMessagePublisher::new(queue_config.topic_multi_frames);
+
+    let change_ts_producer = KafkaMessagePublisher::new(queue_config.topic_change_transfer_syntax);
+
     let mut dicom_message_lists: Vec<common::database_entities::DicomObjectMeta> = vec![];
     loop {
         match association.receive().await {
@@ -229,7 +232,7 @@ pub async fn run_store_async(
                                     match dicom_file_handler::publish_messages(
                                         &storage_producer,
                                         Some(&multi_frames_producer),
-                                        Some(&chgts_producer),
+                                        Some(&change_ts_producer),
                                         &dicom_message_lists,
                                     )
                                     .await
@@ -324,7 +327,7 @@ pub async fn run_store_async(
         match dicom_file_handler::publish_messages(
             &storage_producer,
             Some(&multi_frames_producer),
-            Some(&chgts_producer),
+            Some(&change_ts_producer),
             &dicom_message_lists,
         )
         .await

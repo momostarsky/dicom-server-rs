@@ -188,16 +188,23 @@ pub(crate) async fn process_dicom_file(
     Ok(())
 }
 
+// 发布消息到消息队列
+// parameters:
+// storage_producer: 用于存储的消息生产者
+// multi_frames_producer: 用于多帧图像处理的消息生产者
+// chgts_producer: 用于传输语法转换的消息生产
+// dicom_message_lists: 包含DICOM对象元数据的列表
+
 pub(crate) async fn publish_messages(
-    main_kafka_producer: &dyn MessagePublisher,
-    multi_frames_kafka_producer: Option<&dyn MessagePublisher>,
-    chgts_kafka_producer: Option<&dyn MessagePublisher>,
+    storage_producer: &dyn MessagePublisher,
+    multi_frames_producer: Option<&dyn MessagePublisher>,
+    chage_ts_producer: Option<&dyn MessagePublisher>,
     dicom_message_lists: &Vec<DicomObjectMeta>,
 ) -> Result<(), Whatever> {
     if dicom_message_lists.is_empty() {
         return Ok(());
     }
-    match main_kafka_producer
+    match storage_producer
         .send_batch_messages(&dicom_message_lists)
         .await
     {
@@ -209,11 +216,11 @@ pub(crate) async fn publish_messages(
         }
     }
 
-    if multi_frames_kafka_producer.is_none() && chgts_kafka_producer.is_none() {
+    if multi_frames_producer.is_none() && chage_ts_producer.is_none() {
         return Ok(());
     }
 
-    match chgts_kafka_producer {
+    match chage_ts_producer {
         Some(producer) => {
             info!("chgts_kafka_producer is not None");
             //----需要创建一个KafkaProducer单独处理多帧图像
@@ -246,7 +253,7 @@ pub(crate) async fn publish_messages(
         }
     }
 
-    match multi_frames_kafka_producer {
+    match multi_frames_producer {
         Some(producer) => {
             info!("multi_frames_kafka_producer is not None");
             //----需要创建一个KafkaProducer单独处理多帧图像

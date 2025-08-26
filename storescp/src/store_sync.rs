@@ -14,6 +14,7 @@ use std::net::TcpStream;
 use tracing::log::error;
 use tracing::{debug, info, warn};
 use common::message_sender_kafka::KafkaMessagePublisher;
+use common::server_config;
 
 pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Whatever> {
     let App {
@@ -68,9 +69,17 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         association.presentation_contexts()
     );
     let base_dir = out_dir.to_str().unwrap();
-    let storage_producer = KafkaMessagePublisher::new("storage_queue".parse().unwrap());
-    let chgts_producer = KafkaMessagePublisher::new("change_transfer_syntax".parse().unwrap());
-    let multi_frames_producer = KafkaMessagePublisher::new("multi_frames".parse().unwrap());
+
+    let app_config = server_config::load_config().whatever_context("failed to load config")?;
+
+    let queue_config = app_config.message_queue.unwrap();
+
+    let storage_producer = KafkaMessagePublisher::new(queue_config.topic_main);
+
+    let multi_frames_producer = KafkaMessagePublisher::new(queue_config.topic_multi_frames);
+
+    let change_ts_producer = KafkaMessagePublisher::new(queue_config.topic_change_transfer_syntax);
+
     let mut dicom_message_lists = vec![];
     loop {
         match association.receive() {
@@ -212,7 +221,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                     match dicom_file_handler::publish_messages(
                                         &storage_producer,
                                         Some(&multi_frames_producer),
-                                        Some(&chgts_producer),
+                                        Some(&change_ts_producer),
                                         &dicom_message_lists,
                                     )
                                     .await
@@ -307,7 +316,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         match dicom_file_handler::publish_messages(
             &storage_producer,
             Some(&multi_frames_producer),
-            Some(&chgts_producer),
+            Some(&change_ts_producer),
             &dicom_message_lists,
         )
             .await
