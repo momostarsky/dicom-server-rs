@@ -1,9 +1,8 @@
-use crate::change_file_transfer::{ChangeStatus, convert_ts_with_pixel_data};
+use crate::change_file_transfer::{convert_ts_with_pixel_data};
 use common::database_entities::DicomObjectMeta;
-use common::utils::{get_unique_tenant_ids, group_dicom_messages};
 use common::{database_factory, server_config};
 use dicom_dictionary_std::tags;
-use dicom_object::{OpenFileOptions, open_file};
+use dicom_object::{OpenFileOptions};
 use futures::StreamExt;
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message};
@@ -255,9 +254,9 @@ async fn change_transfer_syntax(
             let src_file = dcm_msg.file_path.as_str();
             let src_sz = dcm_msg.file_size as usize;
             // 处理文件转换
-            let conversion_result = convert_ts_with_pixel_data(src_file, src_sz, &target_path);
+            let conversion_result = convert_ts_with_pixel_data(src_file, src_sz, &target_path,true);
 
-            if let Err(e) = conversion_result {
+            if let Err(e) = conversion_result.await {
                 tracing::error!("Failed to process message: {:?}", e);
                 let datax = vec![dcm_msg];
                 if let Err(save_err) = db_provider.save_dicommeta_info(&datax).await {

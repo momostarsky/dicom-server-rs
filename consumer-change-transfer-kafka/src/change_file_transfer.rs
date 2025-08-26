@@ -1,40 +1,36 @@
 use dicom_object;
-use dicom_object::open_file;
+use dicom_object::OpenFileOptions;
 use gdcm_conv::PhotometricInterpretation;
-use gdcm_conv::TransferSyntax as ts;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
 
 #[derive(Debug)]
 pub enum ChangeStatus {
-    Success,
     FileReadError(String),
     FileWriteError(String),
     ConversionError(String),
-    OtherError(String),
 }
 
 impl std::fmt::Display for ChangeStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ChangeStatus::Success => write!(f, "Success"),
             ChangeStatus::FileReadError(msg) => write!(f, "File read error: {}", msg),
             ChangeStatus::FileWriteError(msg) => write!(f, "File write error: {}", msg),
             ChangeStatus::ConversionError(msg) => write!(f, "Conversion error: {}", msg),
-            ChangeStatus::OtherError(msg) => write!(f, "Other error: {}", msg),
         }
     }
 }
 impl std::error::Error for ChangeStatus {}
 
-pub fn convert_ts_with_pixel_data(
+pub async fn convert_ts_with_pixel_data(
     src_file: &str,
     file_size: usize,
     output_path: &str,
+    overwrite: bool,
 ) -> Result<(), ChangeStatus> {
     // 步骤 1: 读取 DICOM 文件
-    let obj = match open_file(src_file) {
+    let obj = match OpenFileOptions::new().open_file(src_file) {
         Ok(obj) => obj,
         Err(e) => {
             return Err(ChangeStatus::FileReadError(format!(
@@ -82,15 +78,21 @@ pub fn convert_ts_with_pixel_data(
                 }
             };
             match output_file.write_all(&buffer) {
-                Ok(_) => match fs::copy(output_path, src_file) {
-                    Ok(_) => {}
-                    Err(_) => {
-                        return Err(ChangeStatus::FileWriteError(format!(
-                            "Failed to copy  file from  {} to  {}",
-                            output_path, src_file
-                        )));
+                Ok(_) => {
+                    if overwrite {
+                        match fs::copy(output_path, src_file) {
+                            Ok(_) => {}
+                            Err(_) => {
+                                return Err(ChangeStatus::FileWriteError(format!(
+                                    "Failed to copy  file from  {} to  {}",
+                                    output_path, src_file
+                                )));
+                            }
+                        }
+                    } else {
+                        println!("Conversion successful, output saved to {}", output_path);
                     }
-                },
+                }
                 Err(e) => {
                     return Err(ChangeStatus::FileWriteError(format!(
                         "Failed to write to output file {}: {}",
@@ -107,4 +109,59 @@ pub fn convert_ts_with_pixel_data(
         }
     };
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::Path;
+
+    #[tokio::test]
+    async fn test_convert_ts_with_pixel_data_success() {
+        // 创建一个临时的测试文件
+        let test_file = "/home/dhz/jpdata/CDSS/DicomTest/2.dcm";
+        let output_file = "./2-X.dcm";
+
+        // 获取文件大小
+        let metadata = fs::metadata(test_file).unwrap();
+        let file_size = metadata.len() as usize;
+
+        // 调用函数
+        let result = convert_ts_with_pixel_data(test_file, file_size, output_file,false).await;
+
+        assert!(result.is_ok());
+        // 验证结果
+        // 注意：由于我们没有真正的DICOM文件和gdcm_conv库，这里可能会返回ConversionError
+        // 但在实际环境中，如果有正确的DICOM文件，应该会成功
+
+        // 清理测试文件
+        // if Path::new(test_file).exists() {
+        //     fs::remove_file(test_file).unwrap();
+        // }
+        // if Path::new(output_file).exists() {
+        //     fs::remove_file(output_file).unwrap();
+        // }
+    }
+
+    #[tokio::test]
+    async fn test_convert_ts_with_pixel_data_file_not_found() {
+        let non_existent_file = "non_existent.dcm";
+        let output_file = "output.dcm";
+
+        let result = convert_ts_with_pixel_data(non_existent_file, 100, output_file,false).await;
+
+        // 验证返回了FileReadError
+        match result {
+            Err(ChangeStatus::FileReadError(_)) => {
+                // 正确返回了文件读取错误
+            }
+            _ => {
+                panic!("Expected FileReadError, but got {:?}", result);
+            }
+        }
+
+        // 确保输出文件没有被创建
+        assert!(!Path::new(output_file).exists());
+    }
 }
