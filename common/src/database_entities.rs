@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use dicom_core::chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
@@ -121,13 +120,14 @@ pub struct ImageEntity {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DicomObjectMeta {
-    pub patient_info: PatientEntity,
-    pub study_info: StudyEntity,
-    pub series_info: SeriesEntity,
-    pub image_info: ImageEntity,
-    pub file_size: u64,
-    pub file_path: PathBuf,
     pub tenant_id: String,
+    pub patient_id:String,
+    pub study_uid: String,
+    pub series_uid: String,
+    pub sop_uid: String,
+    pub file_size: i64,
+    pub file_path: String,
+
     pub transfer_synatx_uid: String,
     pub number_of_frames: i32,
 }

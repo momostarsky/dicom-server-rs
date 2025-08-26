@@ -1,14 +1,14 @@
-use std::path::PathBuf;
 use common::database_entities::DicomObjectMeta;
+use common::dicom_utils::get_tag_value;
+use common::message_sender::MessagePublisher;
 use dicom_dictionary_std::tags;
-use common::database_provider_base::DbProviderBase;
-use dicom_encoding::snafu::{whatever, ResultExt, Whatever};
+use dicom_encoding::snafu::{ResultExt, Whatever};
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
+use std::path::PathBuf;
 use tracing::info;
 use tracing::log::error;
-use common::message_sender::MessagePublisher;
 
 pub(crate) async fn process_dicom_file(
     instance_buffer: &[u8],    //DICOM文件的字节数组或是二进制流
@@ -46,17 +46,18 @@ pub(crate) async fn process_dicom_file(
         .whatever_context("could not retrieve SERIES_INSTANCE_UID")?
         .trim_end_matches("\0")
         .to_string();
-    let accession_number = obj
-        .element(tags::ACCESSION_NUMBER)
-        .whatever_context("Missing ACCESSION_NUMBER")?
+
+    let sop_uid = obj
+        .element(tags::SOP_INSTANCE_UID)
+        .whatever_context("Missing SOP_INSTANCE_UID")?
         .to_str()
-        .whatever_context("could not retrieve ACCESSION_NUMBER")?
+        .whatever_context("could not retrieve SOP_INSTANCE_UID")?
         .trim_end_matches("\0")
         .to_string();
-
+    let frames = get_tag_value(tags::NUMBER_OF_FRAMES, &obj, 1);
     info!(
-        "Issur:{} ,PatientID: {}, StudyUID: {}, SeriesUID: {}, AccessionNumber: {}",
-        issue_patient_id, pat_id, study_uid, series_uid, accession_number
+        "Issur:{} ,PatientID: {}, StudyUID: {}, SeriesUID: {}, SopUID: {}",
+        issue_patient_id, pat_id, study_uid, series_uid, sop_uid
     );
 
     let file_meta = FileMetaTableBuilder::new()
@@ -110,80 +111,29 @@ pub(crate) async fn process_dicom_file(
         sop_instance_uid.trim_end_matches('\0').to_string() + ".dcm"
     );
 
-    let write_result = file_obj.write_to_file(&file_path);
-    if write_result.is_err() {
-        info!("write file failed: {}", file_path);
-        whatever!("write file failed");
-    }
+    file_obj.write_to_file(&file_path).whatever_context("write file failed")?;
 
     info!("Stored {}, {}", ts, sop_instance_uid);
-    let fs = std::fs::metadata(&file_path);
-    let file_space_size = match fs {
-        Ok(fs) => fs.len(),
-        Err(_) => 0,
-    };
-    // 从新从磁盘读取DICOM文件, 确保文件已经完全写入磁盘.
-    let dicom_obj =   dicom_object::OpenFileOptions::new()
-        .read_until(tags::PIXEL_DATA)
-        .open_file(&file_path).whatever_context ("open dicom file failed")?;
+    let fsize  = std::fs::metadata(&file_path).unwrap().len();
+    // // 从新从磁盘读取DICOM文件, 确保文件已经完全写入磁盘.
+    // let dicom_obj = dicom_object::OpenFileOptions::new()
+    //     .read_until(tags::PIXEL_DATA)
+    //     .open_file(&file_path)
+    //     .whatever_context("open dicom file failed")?;
 
-
-    let pat = match DbProviderBase::extract_patient_entity(issue_patient_id, &dicom_obj) {
-        Some(pat) => pat,
-        None => {
-            whatever!("extract patient entity failed");
-        }
-    };
-    let study = match DbProviderBase::extract_study_entity(
-        issue_patient_id,
-        &dicom_obj,
-        pat.patient_id.as_str(),
-    ) {
-        Some(study) => study,
-        None => {
-            whatever!("extract study entity failed");
-        }
-    };
-
-    let series = match DbProviderBase::extract_series_entity(
-        issue_patient_id,
-        &dicom_obj,
-        study_uid.as_str(),
-    ) {
-        Some(series) => series,
-        None => {
-            whatever!("extract series entity failed");
-        }
-    };
-    let mut image = match DbProviderBase::extract_image_entity(
-        issue_patient_id,
-        &dicom_obj,
-        study_uid.as_str(),
-        series_uid.as_str(),
-        pat.patient_id.as_str(),
-    ) {
-        Some(image) => image,
-        None => {
-            whatever!("extract image entity failed");
-        }
-    };
-
-
-    println!("image is {:?}", image);
     // 修复后：
     let saved_path = PathBuf::from(file_path); // 此时可以安全转移所有权
-    image.space_size = Option::from(file_space_size);
-    image.transfer_syntax_uid = ts.to_string();
+
     lst.push(DicomObjectMeta {
-        patient_info: pat,
-        study_info: study,
-        series_info: series,
-        image_info: image.clone(),
-        file_path:saved_path,
-        file_size:file_space_size,
         tenant_id: issue_patient_id.to_string(),
+        patient_id: pat_id.to_string(),
+        study_uid,
+        series_uid,
+        sop_uid,
+        file_path: saved_path.to_str().unwrap().to_string(),
+        file_size: fsize as i64,
         transfer_synatx_uid: ts.to_string(),
-        number_of_frames: image.number_of_frames,
+        number_of_frames: frames,
     });
     Ok(())
 }

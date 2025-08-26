@@ -134,9 +134,10 @@ impl DbProviderBase {
     pub fn extract_image_entity(
         tenant_id: &str,
         dicom_obj: &InMemDicomObject,
+        patient_id: &str,
         study_uid: &str,
         series_uid: &str,
-        patient_id: &str,
+
     ) -> Option<ImageEntity> {
         let sop_uid = get_tag_value(tags::SOP_INSTANCE_UID, dicom_obj, "".to_string());
 

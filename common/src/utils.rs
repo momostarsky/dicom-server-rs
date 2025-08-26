@@ -1,4 +1,9 @@
-use crate::database_entities::{DicomObjectMeta, ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
+use crate::database_entities::{
+    DicomObjectMeta, ImageEntity, PatientEntity, SeriesEntity, StudyEntity,
+};
+use crate::database_provider_base::DbProviderBase;
+use dicom_dictionary_std::tags;
+use dicom_object::ReadError;
 use std::collections::{HashMap, HashSet};
 
 pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
@@ -49,7 +54,6 @@ pub fn collect_dicom_files(
     Ok(())
 }
 
-
 // pub fn setup_logging() {
 //     use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 //     use tracing_appender::rolling::{RollingFileAppender, Rotation};
@@ -86,15 +90,15 @@ pub fn collect_dicom_files(
 //     std::mem::forget(_guard2);
 // }
 
-pub fn setup_logging(policy_name: & str) {
+pub fn setup_logging(policy_name: &str) {
     use log::LevelFilter;
     use log4rs::append::console::ConsoleAppender;
     use log4rs::append::rolling_file::RollingFileAppender;
     use log4rs::append::rolling_file::policy::compound::CompoundPolicy;
-    use log4rs::append::rolling_file::policy::compound::trigger::size::SizeTrigger;
     use log4rs::append::rolling_file::policy::compound::roll::delete::DeleteRoller;
-    use log4rs::encode::pattern::PatternEncoder;
+    use log4rs::append::rolling_file::policy::compound::trigger::size::SizeTrigger;
     use log4rs::config::{Appender, Config, Logger, Root};
+    use log4rs::encode::pattern::PatternEncoder;
     // 创建控制台appender
     let stdout = ConsoleAppender::builder()
         .encoder(Box::new(PatternEncoder::new(
@@ -116,7 +120,7 @@ pub fn setup_logging(policy_name: & str) {
         .encoder(Box::new(PatternEncoder::new(
             "{d(%Y-%m-%d %H:%M:%S)} {l} [{M}] {m}{n}",
         )))
-        .build( format!("./logs/{}.log", policy_name), policy)
+        .build(format!("./logs/{}.log", policy_name), policy)
         .unwrap();
 
     // 构建配置
@@ -124,92 +128,140 @@ pub fn setup_logging(policy_name: & str) {
         .appender(Appender::builder().build("stdout", Box::new(stdout)))
         .appender(Appender::builder().build("logfile", Box::new(logfile)))
         .logger(Logger::builder().build("app", LevelFilter::Debug))
-        .build(Root::builder()
-            .appender("stdout")
-            .appender("logfile")
-            .build(LevelFilter::Info))
+        .build(
+            Root::builder()
+                .appender("stdout")
+                .appender("logfile")
+                .build(LevelFilter::Info),
+        )
         .unwrap();
 
     // 初始化log4rs
     let _handle = log4rs::init_config(config).unwrap();
 }
 
-
 pub fn get_unique_tenant_ids(message: &[DicomObjectMeta]) -> Vec<String> {
-    let tenant_ids: HashSet<String> = message
-        .iter()
-        .map(|m| m.patient_info.tenant_id.clone())
-        .collect();
+    let tenant_ids: HashSet<String> = message.iter().map(|m| m.tenant_id.clone()).collect();
 
     tenant_ids.into_iter().collect()
 }
-
 
 // 获取消息组中所有不同的 tenant_id
 
 pub fn group_dicom_messages(
     messages: &[DicomObjectMeta],
-) -> (
-    Vec<PatientEntity>,
-    Vec<StudyEntity>,
-    Vec<SeriesEntity>,
-    Vec<ImageEntity>,
-) {
+) -> Result<
+    (
+        Vec<PatientEntity>,
+        Vec<StudyEntity>,
+        Vec<SeriesEntity>,
+        Vec<ImageEntity>,
+    ),
+    ReadError,
+> {
     let mut patient_groups: HashMap<String, bool> = HashMap::new();
     let mut study_groups: HashMap<String, bool> = HashMap::new();
     let mut series_groups: HashMap<String, bool> = HashMap::new();
-    let mut image_groups: HashMap<String, bool> = HashMap::new();
+
     let mut patient_entities: Vec<PatientEntity> = Vec::new();
     let mut study_entities: Vec<StudyEntity> = Vec::new();
     let mut series_entities: Vec<SeriesEntity> = Vec::new();
     let mut image_entities: Vec<ImageEntity> = Vec::new();
 
     for message in messages {
-        let key = format!(
-            "{}_{}",
-            message.patient_info.patient_id, message.patient_info.tenant_id
-        );
-        if !patient_groups.contains_key(&key) {
-            patient_groups.insert(key, true);
-            patient_entities.push(message.patient_info.clone());
-        }
+        match dicom_object::OpenFileOptions::new()
+            .read_until(tags::PIXEL_DATA)
+            .open_file(&message.file_path)
+        {
+            Ok(dicom_obj) => {
+                // 处理成功的DICOM对象
+                // 提取 patient
+                let key = format!("{}_{}", message.tenant_id, message.patient_id);
+                if !patient_groups.contains_key(key.as_str()) {
+                    match DbProviderBase::extract_patient_entity(
+                        message.tenant_id.as_str(),
+                        &dicom_obj,
+                    ) {
+                        Some(p) => {
+                            patient_entities.push(p);
+                            patient_groups.insert(key.clone(), true);
+                        }
+                        _ => {
+                            continue;
+                        }
+                    }
+                }
 
-        let key2 = format!(
-            "{}_{}",
-            message.study_info.tenant_id, message.study_info.study_instance_uid
-        );
-        if !study_groups.contains_key(&key2) {
-            study_groups.insert(key2, true);
-            study_entities.push(message.study_info.clone());
-        }
+                // 提取 study
+                let key2 = format!("{}_{}", message.tenant_id, message.study_uid);
+                if patient_groups.contains_key(key.as_str()) && !study_groups.contains_key(&key2) {
+                    match DbProviderBase::extract_study_entity(
+                        message.tenant_id.as_str(),
+                        &dicom_obj,
+                        message.patient_id.as_str(),
+                    ) {
+                        Some(p) => {
+                            study_entities.push(p);
+                            study_groups.insert(key2.clone(), true);
+                        }
+                        _ => {
+                            continue;
+                        }
+                    }
+                }
+                // 提取 series
+                let key3 = format!("{}_{}", message.tenant_id, message.series_uid);
+                if study_groups.contains_key(&key2) && !series_groups.contains_key(&key3) {
+                    match DbProviderBase::extract_series_entity(
+                        message.tenant_id.as_str(),
+                        &dicom_obj,
+                        message.study_uid.as_str(),
+                    ) {
+                        Some(p) => {
+                            series_entities.push(p);
+                            series_groups.insert(key3.clone(), true);
+                        }
+                        _ => {
+                            continue;
+                        }
+                    }
+                }
+                if !patient_groups.contains_key(key.as_str()) {
+                    continue;
+                }
 
-        let key3 = format!(
-            "{}_{}_{}",
-            message.series_info.tenant_id,
-            message.series_info.study_instance_uid,
-            message.series_info.series_instance_uid,
-        );
-        if !series_groups.contains_key(&key3) {
-            series_groups.insert(key3, true);
-            series_entities.push(message.series_info.clone());
-        }
-
-        let key4 = format!(
-            "{}_{}_{}",
-            message.image_info.tenant_id,
-            message.image_info.study_instance_uid,
-            message.image_info.sop_instance_uid,
-        );
-        if !image_groups.contains_key(&key4) {
-            image_groups.insert(key4, true);
-            image_entities.push(message.image_info.clone());
+                // 处理series
+                match DbProviderBase::extract_image_entity(
+                    message.tenant_id.as_str(),
+                    &dicom_obj,
+                    message.patient_id.as_str(),
+                    message.study_uid.as_str(),
+                    message.series_uid.as_str(),
+                ) {
+                    Some(p) => {
+                        image_entities.push(p);
+                    }
+                    _ => {
+                        continue;
+                    }
+                }
+            }
+            Err(e) => {
+                // 记录错误但继续处理其他文件
+                eprintln!(
+                    "Failed to open DICOM file {}: {:?}",
+                    message.file_path,
+                    e
+                );
+                continue;
+            }
         }
     }
 
-    (
+    Ok((
         patient_entities,
         study_entities,
         series_entities,
         image_entities,
-    )
+    ))
 }

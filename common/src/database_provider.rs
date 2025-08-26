@@ -1,4 +1,4 @@
-use crate::database_entities::{ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
+use crate::database_entities::{DicomObjectMeta, ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
 use async_trait::async_trait;
 use dicom_object::DefaultDicomObject;
 use thiserror::Error;
@@ -23,6 +23,13 @@ pub trait DbProvider: Send + Sync {
 
 
     async fn echo(&self) -> Result<String, DbError>;
+
+
+    async fn save_dicommeta_info(
+        &self, 
+        dicom_obj: &[DicomObjectMeta],
+    ) -> Result<(), DbError>;
+
 
     // 保存DICOM信息
     // 返回值：Some(true) 表示成功保存，Some(false) 表示已存在，None 表示保存失败

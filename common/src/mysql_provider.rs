@@ -1,4 +1,4 @@
-use crate::database_entities::{ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
+use crate::database_entities::{DicomObjectMeta, ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
 use crate::database_provider::{DbError, DbProvider};
 use crate::database_provider_base::DbProviderBase;
 use crate::dicom_utils::{parse_dicom_date_from_sql, parse_dicom_time_from_sql};
@@ -392,6 +392,57 @@ impl DbProvider for MySqlProvider {
         }
     }
 
+    async fn save_dicommeta_info(&self, dicom_obj: &[DicomObjectMeta]) -> Result<(), DbError> {
+        if dicom_obj.is_empty() {
+            return Ok(());
+        }
+
+        let mut tx = self.pool.begin().await.map_err(DbError::DatabaseError)?;
+
+        // 构建批量插入语句
+        let mut query_builder = "INSERT INTO dicom_object_meta (
+            tenant_id,
+            patient_id,
+            study_uid,
+            series_uid,
+            sop_uid,
+            file_size,
+            file_path,
+            transfer_syntax_uid,
+            number_of_frames
+        ) VALUES ".to_string();
+
+        let placeholders: Vec<String> = (0..dicom_obj.len())
+            .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string())
+            .collect();
+        query_builder.push_str(&placeholders.join(", "));
+        query_builder.push_str(" ON DUPLICATE KEY UPDATE
+            file_size = VALUES(file_size),
+            file_path = VALUES(file_path),
+            transfer_syntax_uid = VALUES(transfer_syntax_uid),
+            number_of_frames = VALUES(number_of_frames)");
+
+        let mut query = sqlx::query(&query_builder);
+        for obj in dicom_obj {
+            query = query
+                .bind(&obj.tenant_id)
+                .bind(&obj.patient_id)
+                .bind(&obj.study_uid)
+                .bind(&obj.series_uid)
+                .bind(&obj.sop_uid)
+                .bind(&obj.file_size) // u64转i64以适应数据库BIGINT类型
+                .bind(&obj.file_path)
+                .bind(&obj.transfer_synatx_uid) // 注意：结构体中字段名有拼写错误
+                .bind(obj.number_of_frames);
+        }
+
+        query.execute(&mut *tx).await.map_err(DbError::DatabaseError)?;
+        tx.commit().await.map_err(DbError::DatabaseError)?;
+
+        Ok(())
+    }
+
+
     async fn save_dicom_info(
         &self,
         tenant_id: &str,
@@ -439,9 +490,11 @@ impl DbProvider for MySqlProvider {
         let image_entity = match DbProviderBase::extract_image_entity(
             &tenant_id,
             dicom_obj,
-            &series_entity.series_instance_uid,
-            &study_entity.study_instance_uid,
             &patient_entity.patient_id,
+            &study_entity.study_instance_uid,
+            &series_entity.series_instance_uid,
+
+
         ) {
             Some(image_entity) => image_entity,
             None => {
@@ -1063,9 +1116,10 @@ mod tests {
                     let image_entity = DbProviderBase::extract_image_entity(
                         tenant_id,
                         &dcmobj,
+                        &patient_id,        // 使用 clone 后的值，避免 move
                         study_uid.as_str(), // 使用 clone 后的值，避免 move
                         series_id.as_str(), // 使用 clone 后的值，避免 move
-                        &patient_id,        // 使用 clone 后的值，避免 move
+
                     )
                     .unwrap();
                     let image_id = image_entity.sop_instance_uid.clone();

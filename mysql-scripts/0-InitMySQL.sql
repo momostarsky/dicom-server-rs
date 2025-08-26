@@ -186,3 +186,26 @@ CREATE TABLE ImageEntity
     INDEX                                  idx_instance_number (InstanceNumber),
     INDEX                                  idx_content_date (ContentDate)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='图像实体表，存储单帧DICOM图像实例';
+
+-- 用于存储消息队列处理有异常的DICOM图像实例
+CREATE TABLE dicom_object_meta (
+                                   id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                                   tenant_id VARCHAR(64) NOT NULL,
+                                   patient_id VARCHAR(64) NOT NULL,
+                                   study_uid VARCHAR(64) NOT NULL,
+                                   series_uid VARCHAR(64) NOT NULL,
+                                   sop_uid VARCHAR(64) NOT NULL,
+                                   file_size BIGINT NOT NULL,
+                                   file_path varchar(512) NOT NULL,
+                                   transfer_syntax_uid VARCHAR(64) NOT NULL,
+                                   number_of_frames INT NOT NULL,
+                                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+                                   INDEX idx_tenant_id (tenant_id),
+                                   INDEX idx_patient_id (patient_id),
+                                   INDEX idx_study_uid (study_uid),
+                                   INDEX idx_series_uid (series_uid),
+                                   INDEX idx_sop_uid (sop_uid),
+                                   UNIQUE KEY unique_sop_instance (tenant_id, sop_uid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

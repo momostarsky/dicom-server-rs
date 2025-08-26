@@ -63,7 +63,7 @@ impl MessagePublisher for KafkaMessagePublisher {
         let payload = serde_json::to_vec(msg)?;
         let key = format!(
             "{}_{}",
-            msg.patient_info.tenant_id, msg.image_info.sop_instance_uid
+            msg.tenant_id, msg.sop_uid
         );
         let record: FutureRecord<String, Vec<u8>> =
             FutureRecord::to(&*self.topic).key(&key).payload(&payload);
@@ -93,7 +93,7 @@ impl MessagePublisher for KafkaMessagePublisher {
                 Ok(payload) => {
                     let key = format!(
                         "{}_{}",
-                        msg.patient_info.tenant_id, msg.image_info.sop_instance_uid
+                        msg.tenant_id, msg.sop_uid
                     );
                     wait_message.insert(key.clone(), payload.clone());
                 }
