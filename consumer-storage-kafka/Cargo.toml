@@ -1,5 +1,5 @@
 [package]
-name = "consumer-storage"
+name = "consumer-storage-kafka"
 version = "0.1.0"
 edition = "2024"
 description = "A DICOM consumer that parse DICOM file tags and save into database."

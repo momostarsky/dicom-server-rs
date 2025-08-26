@@ -3,8 +3,11 @@ members = [
     "wado-server",
     "storescp",
     "common",
-    "consumer-storage",
-    "charset-helper", "mysql-demo"]
+    "consumer-storage-kafka",
+    "charset-helper",
+    "mysql-demo",
+    "consumer-change-transfer-kafka",
+]
 
 # use edition 2021 resolver
 resolver = "2"

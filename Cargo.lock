@@ -573,6 +573,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
 
 [[package]]
+name = "cmake"
+version = "0.1.54"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7caa3f9de89ddbe2c607f4101924c5abec803763ae9534e4f4d7d8f84aa81f0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -645,7 +654,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
 
 [[package]]
-name = "consumer-storage"
+name = "consumer-change-transfer"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "common",
+ "config",
+ "dicom-core",
+ "dicom-dictionary-std",
+ "dicom-encoding",
+ "dicom-object",
+ "dicom-transfer-syntax-registry",
+ "dicom-ul",
+ "dotenv",
+ "futures",
+ "gdcm_conv",
+ "install",
+ "rdkafka",
+ "serde",
+ "serde_json",
+ "snafu",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "urlencoding",
+]
+
+[[package]]
+name = "consumer-storage-kafka"
 version = "0.1.0"
 dependencies = [
  "clap",
@@ -1287,6 +1324,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "gdcm_conv"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e20aa6b6404c2a9f63df6406ad955507a538d3ee9a88300b8625d04671833d93"
+dependencies = [
+ "cc",
+ "cmake",
+ "libc",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1593,6 +1642,12 @@ dependencies = [
  "equivalent",
  "hashbrown 0.15.5",
 ]
+
+[[package]]
+name = "install"
+version = "0.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a37f5624a15b3b2aeaba5a8bff9e6998ef4a1d23224e6eebc8139dc5619df78"
 
 [[package]]
 name = "io-uring"

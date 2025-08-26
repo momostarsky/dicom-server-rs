@@ -1,12 +1,15 @@
+use crate::change_file_transfer::{ChangeStatus, convert_ts_with_pixel_data};
 use common::database_entities::DicomObjectMeta;
 use common::utils::{get_unique_tenant_ids, group_dicom_messages};
 use common::{database_factory, server_config};
+use dicom_dictionary_std::tags;
+use dicom_object::{OpenFileOptions, open_file};
 use futures::StreamExt;
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message};
 use std::sync::{Arc, Mutex};
-use std::thread;
 use std::time::{Duration, Instant};
+use std::{fs, thread};
 use tokio::runtime::Handle;
 use tracing::log::error;
 
@@ -66,9 +69,9 @@ pub async fn start_process() {
         .set("session.timeout.ms", "6000")
         .set("enable.partition.eof", "false")
         .create()
-        .expect("create consumer-storage failed");
+        .expect("create consumer-storage-kafka failed");
 
-    let topic = queue_config.topic_main.as_str();
+    let topic = queue_config.topic_change_transfer_syntax.as_str();
     tracing::info!("Subscribing to topic: {}", topic);
 
     match consumer.subscribe(&[topic]) {
@@ -103,7 +106,7 @@ pub async fn start_process() {
     // 启动消息处理任务（在新线程中运行异步代码）
     let writer_thread = thread::spawn(move || {
         handle_for_writer.block_on(async {
-            persist_message_loop(vec_for_writer, time_for_writer).await;
+            change_transfer_syntax(vec_for_writer, time_for_writer).await;
         });
     });
 
@@ -183,9 +186,9 @@ async fn read_message(
     }
 }
 
-static MAX_MESSAGES_PER_BATCH: usize = 50;
+static MAX_MESSAGES_PER_BATCH: usize = 10;
 static MAX_TIME_BETWEEN_BATCHES: Duration = Duration::from_secs(5);
-async fn persist_message_loop(
+async fn change_transfer_syntax(
     vec: Arc<Mutex<Vec<DicomObjectMeta>>>,
     last_process_time: Arc<Mutex<Instant>>,
 ) {
@@ -232,12 +235,10 @@ async fn persist_message_loop(
             tokio::time::sleep(Duration::from_secs(1)).await;
             continue;
         }
-        tracing::info!("Processing batch of {} messages", messages_to_process.len());
-
-        // 获取所有不同的 tenant_id
-        let unique_tenant_ids = get_unique_tenant_ids(&messages_to_process);
-        tracing::info!("Processing data for tenant IDs: {:?}", unique_tenant_ids);
-
+        tracing::info!(
+            "change transferSyntax  batch of {} messages",
+            messages_to_process.len()
+        );
         // 创建数据库提供者
         let db_provider = match database_factory::create_db_instance().await {
             Some(provider) => provider,
@@ -248,35 +249,50 @@ async fn persist_message_loop(
                 continue;
             }
         };
+        let msg_size = messages_to_process.len();
+        for dcm_msg in messages_to_process {
+            let target_path = format!("./{}.dcm", dcm_msg.sop_uid);
+            let src_file = dcm_msg.file_path.as_str();
+            let src_sz = dcm_msg.file_size as usize;
+            // 处理文件转换
+            let conversion_result = convert_ts_with_pixel_data(src_file, src_sz, &target_path);
 
-        for tenant_id in unique_tenant_ids {
-            let tenant_msg = messages_to_process
-                .iter()
-                .filter(|m| m.tenant_id == tenant_id)
-                .cloned()
-                .collect::<Vec<_>>();
-            let (patients, studies, series, images) = match group_dicom_messages(&tenant_msg) {
-                Ok((patients, studies, series, images)) => (patients, studies, series, images),
-                Err(_) => {
-                    db_provider.save_dicommeta_info(&tenant_msg).await.expect("解析DICOM信息出现错误,并写入数据库失败!");
-                    continue;
+            if let Err(e) = conversion_result {
+                tracing::error!("Failed to process message: {:?}", e);
+                let datax = vec![dcm_msg];
+                if let Err(save_err) = db_provider.save_dicommeta_info(&datax).await {
+                    tracing::error!("Failed to save dicommeta info: {:?}", save_err);
                 }
-            };
-            if images.len() != tenant_msg.len() {
-                db_provider.save_dicommeta_info(&tenant_msg).await.expect("解析DICOM信息成功但是文件个数和消息个数不对,并写入数据库失败!");
+                // 继续处理下一条消息
                 continue;
             }
-            match db_provider
-                .persist_to_database(tenant_id.as_str(), &patients, &studies, &series, &images)
-                .await
-            {
-                Ok(()) => {
-                    tracing::info!("Successfully persisted data for tenant {}", tenant_id);
+
+            // 转换成功，删除临时文件
+            if let Err(remove_err) = fs::remove_file(&target_path) {
+                tracing::error!(
+                    "Failed to delete temporary file {}: {:?}",
+                    target_path,
+                    remove_err
+                );
+                // 即使删除失败也继续处理
+            }
+
+            // 读取并保存DICOM信息
+            let obj_result = OpenFileOptions::new()
+                .read_until(tags::PIXEL_DATA)
+                .open_file(src_file);
+
+            match obj_result {
+                Ok(obj) => {
+                    if let Err(save_err) = db_provider
+                        .save_dicom_info(dcm_msg.tenant_id.as_str(), &obj)
+                        .await
+                    {
+                        tracing::error!("Failed to save dicom info: {:?}", save_err);
+                    }
                 }
-                Err(e) => {
-                    tracing::error!("Failed to persist data for tenant {}: {}", tenant_id, e);
-                    db_provider.save_dicommeta_info(&tenant_msg).await.expect("解析DICOM信息成功但是写入数据库失败!");
-                    continue;
+                Err(open_err) => {
+                    tracing::error!("Failed to open file {}: {:?}", src_file, open_err);
                 }
             }
         }
@@ -287,9 +303,6 @@ async fn persist_message_loop(
             *time = Instant::now();
         }
 
-        tracing::info!(
-            "Successfully processed batch of {} messages",
-            messages_to_process.len()
-        );
+        tracing::info!("Successfully processed batch of {} messages", msg_size);
     }
 }
