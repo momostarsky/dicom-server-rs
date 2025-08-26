@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 pub mod database_provider;
 pub mod mysql_provider;
 pub mod server_config;
-pub mod producer_factory;
 pub mod database_entities;
 pub mod utils;
 pub mod database_factory;
@@ -11,6 +10,8 @@ pub mod cornerstonejs;
 pub mod dicom_utils;
 pub mod dicom_json_helper;
 pub mod database_provider_base;
+pub mod message_sender;
+pub mod message_sender_kafka;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DicomMessage {

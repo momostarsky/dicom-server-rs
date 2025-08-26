@@ -46,6 +46,10 @@ pub struct KafkaConfig {
     pub queue_buffering_max_ms: u32,
     pub linger_ms: u32,
     pub compression_codec: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MessageQueueConfig {
     pub topic_main: String,
     pub topic_change_transfer_syntax: String,
     pub topic_multi_frames: String,
@@ -58,6 +62,7 @@ pub struct AppConfig {
     pub server: Option<ServerConfig>,
     pub local_storage: Option<LocalStorageConfig>,
     pub dicom_store_scp: Option<DicomStoreScpConfig>,
+    pub message_queue: Option<MessageQueueConfig>,
 }
 
 static APP_ENV: &str = "APP_ENV";
@@ -150,12 +155,20 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
             );
             println!("kafka:linger_ms {:?}", kafka.linger_ms);
             println!("kafka:compression_codec {:?}", kafka.compression_codec);
-            println!("kafka:topic {:?}", kafka.topic_main);
+        }
+        AppConfig {
+            message_queue: Some(message_queue),
+            ..
+        } => {
+            println!("message_queue:topic_main {:?}", message_queue.topic_main);
             println!(
-                "kafka:topic_change_transfer_syntax {:?}",
-                kafka.topic_change_transfer_syntax
+                "message_queue:topic_change_transfer_syntax {:?}",
+                message_queue.topic_change_transfer_syntax
             );
-            println!("kafka:topic_multi_frames {:?}", kafka.topic_multi_frames);
+            println!(
+                "message_queue:topic_multi_frames {:?}",
+                message_queue.topic_multi_frames
+            );
         }
         _ => {
             println!("other config {:?}", app_config);
@@ -164,7 +177,7 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
     Ok(app_config)
 }
 
-pub fn generate_database_connection(app_config: &AppConfig) -> std::result::Result<String, String> {
+pub fn generate_database_connection(app_config: &AppConfig) -> Result<String, String> {
     let dbconfig = &app_config.database;
     if dbconfig.is_none() {
         return Err("database config is none".to_string());

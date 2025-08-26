@@ -1,7 +1,5 @@
 use std::path::PathBuf;
 use common::database_entities::DicomObjectMeta;
-
-use common::producer_factory::KafkaProducer;
 use dicom_dictionary_std::tags;
 use common::database_provider_base::DbProviderBase;
 use dicom_encoding::snafu::{whatever, ResultExt, Whatever};
@@ -10,6 +8,7 @@ use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use tracing::info;
 use tracing::log::error;
+use common::message_sender::MessagePublisher;
 
 pub(crate) async fn process_dicom_file(
     instance_buffer: &[u8],    //DICOM文件的字节数组或是二进制流
@@ -190,9 +189,9 @@ pub(crate) async fn process_dicom_file(
 }
 
 pub(crate) async fn publish_messages(
-    main_kafka_producer: &KafkaProducer,
-    multi_frames_kafka_producer: Option<&KafkaProducer>,
-    chgts_kafka_producer: Option<&KafkaProducer>,
+    main_kafka_producer: &dyn MessagePublisher,
+    multi_frames_kafka_producer: Option<&dyn MessagePublisher>,
+    chgts_kafka_producer: Option<&dyn MessagePublisher>,
     dicom_message_lists: &Vec<DicomObjectMeta>,
 ) -> Result<(), Whatever> {
     if dicom_message_lists.is_empty() {

@@ -2,7 +2,7 @@ use crate::{
     create_cecho_response, create_cstore_response, dicom_file_handler, transfer::ABSTRACT_SYNTAXES,
     App,
 };
-use common::producer_factory;
+
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu;
 use dicom_encoding::snafu::{OptionExt, Report, ResultExt, Whatever};
@@ -10,6 +10,8 @@ use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dicom_ul::{pdu::PDataValueType, Pdu};
 
+use common::message_sender_kafka::KafkaMessagePublisher;
+use common::server_config;
 use tracing::log::error;
 use tracing::{debug, info, warn};
 
@@ -78,11 +80,14 @@ pub async fn run_store_async(
         association.presentation_contexts()
     );
     let base_dir = out_dir.to_str().unwrap();
-    let main_kafka_producer = producer_factory::create_main_kafka_producer();
-    let chgts_kafka_producer =
-        producer_factory::create_change_transfersyntax_kafka_producer();
-    let multi_frames_kafka_producer =
-        producer_factory::create_multi_frames_kafka_producer();
+
+    let app_config = server_config::load_config().whatever_context("failed to load config")?;
+
+    let queue_config = app_config.message_queue.unwrap();
+
+    let storage_producer = KafkaMessagePublisher::new(queue_config.topic_main);
+    let chgts_producer = KafkaMessagePublisher::new(queue_config.topic_change_transfer_syntax);
+    let multi_frames_producer = KafkaMessagePublisher::new(queue_config.topic_multi_frames);
     let mut dicom_message_lists: Vec<common::database_entities::DicomObjectMeta> = vec![];
     loop {
         match association.receive().await {
@@ -164,7 +169,7 @@ pub async fn run_store_async(
                                             "could not retrieve Affected SOP Instance UID",
                                         )?
                                         .to_string();
-                                    issue_patient_id ="1234567890".to_string();
+                                    issue_patient_id = "1234567890".to_string();
                                     // obj
                                     //     .element(tags::ISSUER_OF_PATIENT_ID)
                                     //     .whatever_context("missing ISSUER_OF_PATIENT_ID")?
@@ -222,9 +227,9 @@ pub async fn run_store_async(
                                 }
                                 if dicom_message_lists.len() >= 10 {
                                     match dicom_file_handler::publish_messages(
-                                        &main_kafka_producer,
-                                        Some(&multi_frames_kafka_producer),
-                                        Some(&chgts_kafka_producer),
+                                        &storage_producer,
+                                        Some(&multi_frames_producer),
+                                        Some(&chgts_producer),
                                         &dicom_message_lists,
                                     )
                                     .await
@@ -317,12 +322,12 @@ pub async fn run_store_async(
     }
     if dicom_message_lists.len() > 0 {
         match dicom_file_handler::publish_messages(
-            &main_kafka_producer,
-            Some(&multi_frames_kafka_producer),
-            Some(&chgts_kafka_producer),
+            &storage_producer,
+            Some(&multi_frames_producer),
+            Some(&chgts_producer),
             &dicom_message_lists,
         )
-            .await
+        .await
         {
             Ok(_) => {
                 info!("Successfully published messages to Kafka");

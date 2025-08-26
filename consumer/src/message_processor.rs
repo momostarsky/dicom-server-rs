@@ -49,6 +49,15 @@ pub async fn start_process() {
         Some(kafka_config) => kafka_config,
     };
 
+    let queue_config_opt = config.message_queue;
+    let queue_config = match queue_config_opt {
+        None => {
+            error!("message queue config is None");
+            std::process::exit(-2);
+        }
+        Some(queue_config) => queue_config,
+    };
+
     // 配置消费者
     let consumer: StreamConsumer = ClientConfig::new()
         .set("group.id", kafka_config.consumer_group_id.as_str())
@@ -60,7 +69,7 @@ pub async fn start_process() {
         .create()
         .expect("create consumer failed");
 
-    let topic = kafka_config.topic_main.as_str();
+    let topic = queue_config.topic_main.as_str();
     tracing::info!("Subscribing to topic: {}", topic);
 
     match consumer.subscribe(&[topic]) {

@@ -3,7 +3,7 @@ use crate::{
     App,
 };
 
-use common::producer_factory;
+
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
@@ -13,6 +13,7 @@ use std::net::TcpStream;
 
 use tracing::log::error;
 use tracing::{debug, info, warn};
+use common::message_sender_kafka::KafkaMessagePublisher;
 
 pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Whatever> {
     let App {
@@ -67,10 +68,9 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         association.presentation_contexts()
     );
     let base_dir = out_dir.to_str().unwrap();
-    let main_kafka_producer = producer_factory::create_main_kafka_producer();
-    let chgts_producer =
-        producer_factory::create_change_transfersyntax_kafka_producer();
-    let multi_frames_producer = producer_factory::create_multi_frames_kafka_producer();
+    let storage_producer = KafkaMessagePublisher::new("storage_queue".parse().unwrap());
+    let chgts_producer = KafkaMessagePublisher::new("change_transfer_syntax".parse().unwrap());
+    let multi_frames_producer = KafkaMessagePublisher::new("multi_frames".parse().unwrap());
     let mut dicom_message_lists = vec![];
     loop {
         match association.receive() {
@@ -210,7 +210,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
 
                                 if dicom_message_lists.len() >= 10 {
                                     match dicom_file_handler::publish_messages(
-                                        &main_kafka_producer,
+                                        &storage_producer,
                                         Some(&multi_frames_producer),
                                         Some(&chgts_producer),
                                         &dicom_message_lists,
@@ -305,12 +305,12 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
 
     if dicom_message_lists.len() > 0 {
         match dicom_file_handler::publish_messages(
-            &main_kafka_producer,
+            &storage_producer,
             Some(&multi_frames_producer),
             Some(&chgts_producer),
             &dicom_message_lists,
         )
-        .await
+            .await
         {
             Ok(_) => {
                 info!("Successfully published messages to Kafka");
