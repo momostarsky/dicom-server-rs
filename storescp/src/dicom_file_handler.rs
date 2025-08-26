@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use common::database_entities::DicomObjectMeta;
 
 use common::producer_factory::KafkaProducer;
@@ -16,7 +17,7 @@ pub(crate) async fn process_dicom_file(
     issue_patient_id: &String, // 机构ID,或是医院ID, 用于区分多个医院.
     ts: &String,               // 传输语法
     sop_instance_uid: &String, //当前文件的SOP实例ID
-    lst: &mut Vec<common::database_entities::DicomObjectMeta>,
+    lst: &mut Vec<DicomObjectMeta>,
 ) -> Result<(), Whatever> {
     let obj = InMemDicomObject::read_dataset_with_ts(
         instance_buffer,
@@ -117,10 +118,18 @@ pub(crate) async fn process_dicom_file(
     }
 
     info!("Stored {}, {}", ts, sop_instance_uid);
+    let fs = std::fs::metadata(&file_path);
+    let file_space_size = match fs {
+        Ok(fs) => fs.len(),
+        Err(_) => 0,
+    };
+    // 从新从磁盘读取DICOM文件, 确保文件已经完全写入磁盘.
+    let dicom_obj =   dicom_object::OpenFileOptions::new()
+        .read_until(tags::PIXEL_DATA)
+        .open_file(&file_path).whatever_context ("open dicom file failed")?;
 
 
-
-    let pat = match DbProviderBase::extract_patient_entity(issue_patient_id, &file_obj) {
+    let pat = match DbProviderBase::extract_patient_entity(issue_patient_id, &dicom_obj) {
         Some(pat) => pat,
         None => {
             whatever!("extract patient entity failed");
@@ -128,7 +137,7 @@ pub(crate) async fn process_dicom_file(
     };
     let study = match DbProviderBase::extract_study_entity(
         issue_patient_id,
-        &file_obj,
+        &dicom_obj,
         pat.patient_id.as_str(),
     ) {
         Some(study) => study,
@@ -139,7 +148,7 @@ pub(crate) async fn process_dicom_file(
 
     let series = match DbProviderBase::extract_series_entity(
         issue_patient_id,
-        &file_obj,
+        &dicom_obj,
         study_uid.as_str(),
     ) {
         Some(series) => series,
@@ -149,7 +158,7 @@ pub(crate) async fn process_dicom_file(
     };
     let mut image = match DbProviderBase::extract_image_entity(
         issue_patient_id,
-        &file_obj,
+        &dicom_obj,
         study_uid.as_str(),
         series_uid.as_str(),
         pat.patient_id.as_str(),
@@ -160,21 +169,19 @@ pub(crate) async fn process_dicom_file(
         }
     };
 
-    let fs = std::fs::metadata(file_path.as_str());
-    let file_size = match fs {
-        Ok(fs) => fs.len() as u64,
-        Err(_) => 0,
-    };
+
     println!("image is {:?}", image);
-    image.space_size = Option::from(file_size);
+    // 修复后：
+    let saved_path = PathBuf::from(file_path); // 此时可以安全转移所有权
+    image.space_size = Option::from(file_space_size);
     image.transfer_syntax_uid = ts.to_string();
     lst.push(DicomObjectMeta {
         patient_info: pat,
         study_info: study,
         series_info: series,
         image_info: image.clone(),
-        file_path: file_path.to_string(),
-        file_size,
+        file_path:saved_path,
+        file_size:file_space_size,
         tenant_id: issue_patient_id.to_string(),
         transfer_synatx_uid: ts.to_string(),
         number_of_frames: image.number_of_frames,

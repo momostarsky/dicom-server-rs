@@ -1,5 +1,4 @@
 use dicom_dictionary_std::tags;
-use dicom_encoding::text::{DefaultCharacterSetCodec};
 
 // #[derive(Debug, Snafu)]
 // pub enum Error {

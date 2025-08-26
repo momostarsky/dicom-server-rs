@@ -2,7 +2,6 @@ use crate::database_entities::{ImageEntity, PatientEntity, SeriesEntity, StudyEn
 use crate::dicom_utils;
 use crate::dicom_utils::get_tag_value;
 use dicom_dictionary_std::tags;
-use dicom_encoding::text::{DefaultCharacterSetCodec, SpecificCharacterSet, TextCodec};
 use dicom_object::InMemDicomObject;
 
 pub struct DbProviderBase {}

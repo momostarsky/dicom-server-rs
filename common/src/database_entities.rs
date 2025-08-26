@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use dicom_core::chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
@@ -125,7 +126,7 @@ pub struct DicomObjectMeta {
     pub series_info: SeriesEntity,
     pub image_info: ImageEntity,
     pub file_size: u64,
-    pub file_path: String,
+    pub file_path: PathBuf,
     pub tenant_id: String,
     pub transfer_synatx_uid: String,
     pub number_of_frames: i32,
