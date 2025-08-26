@@ -1,15 +1,14 @@
-use common::database_entities::{ DicomObjectMeta};
+use common::database_entities::DicomObjectMeta;
 
 use common::producer_factory::KafkaProducer;
 use dicom_dictionary_std::tags;
- 
+use common::database_provider_base::DbProviderBase;
+use dicom_encoding::snafu::{whatever, ResultExt, Whatever};
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
-use dicom_encoding::snafu::{whatever, ResultExt, Whatever};
 use tracing::info;
-use tracing::log::{error};
-use common::database_provider_base::DbProviderBase;
+use tracing::log::error;
 
 pub(crate) async fn process_dicom_file(
     instance_buffer: &[u8],    //DICOM文件的字节数组或是二进制流
@@ -23,7 +22,7 @@ pub(crate) async fn process_dicom_file(
         instance_buffer,
         TransferSyntaxRegistry.get(ts).unwrap(),
     )
-        .whatever_context("failed to read DICOM data object")?;
+    .whatever_context("failed to read DICOM data object")?;
     let pat_id = obj
         .element(tags::PATIENT_ID)
         .whatever_context("Missing PatientID")?
@@ -54,8 +53,6 @@ pub(crate) async fn process_dicom_file(
         .whatever_context("could not retrieve ACCESSION_NUMBER")?
         .trim_end_matches("\0")
         .to_string();
-
-
 
     info!(
         "Issur:{} ,PatientID: {}, StudyUID: {}, SeriesUID: {}, AccessionNumber: {}",
@@ -120,32 +117,43 @@ pub(crate) async fn process_dicom_file(
     }
 
     info!("Stored {}, {}", ts, sop_instance_uid);
-    let pat = match DbProviderBase::extract_patient_entity(issue_patient_id, &file_obj){
+
+
+
+    let pat = match DbProviderBase::extract_patient_entity(issue_patient_id, &file_obj) {
         Some(pat) => pat,
         None => {
             whatever!("extract patient entity failed");
         }
     };
-    let study = match DbProviderBase::extract_study_entity(issue_patient_id, &file_obj, pat.patient_id.as_str()) {
+    let study = match DbProviderBase::extract_study_entity(
+        issue_patient_id,
+        &file_obj,
+        pat.patient_id.as_str(),
+    ) {
         Some(study) => study,
         None => {
             whatever!("extract study entity failed");
         }
     };
 
-    let series = match  DbProviderBase::extract_series_entity(issue_patient_id, &file_obj, study_uid.as_str()) {
+    let series = match DbProviderBase::extract_series_entity(
+        issue_patient_id,
+        &file_obj,
+        study_uid.as_str(),
+    ) {
         Some(series) => series,
         None => {
             whatever!("extract series entity failed");
         }
     };
-    let mut image =match   DbProviderBase::extract_image_entity(
+    let mut image = match DbProviderBase::extract_image_entity(
         issue_patient_id,
         &file_obj,
         study_uid.as_str(),
         series_uid.as_str(),
         pat.patient_id.as_str(),
-    ){
+    ) {
         Some(image) => image,
         None => {
             whatever!("extract image entity failed");
@@ -169,7 +177,7 @@ pub(crate) async fn process_dicom_file(
         file_size,
         tenant_id: issue_patient_id.to_string(),
         transfer_synatx_uid: ts.to_string(),
-        number_of_frames: image.number_of_frames
+        number_of_frames: image.number_of_frames,
     });
     Ok(())
 }
@@ -195,7 +203,7 @@ pub(crate) async fn publish_messages(
         }
     }
 
-    if  multi_frames_kafka_producer.is_none() && chgts_kafka_producer.is_none() {
+    if multi_frames_kafka_producer.is_none() && chgts_kafka_producer.is_none() {
         return Ok(());
     }
 
@@ -206,7 +214,11 @@ pub(crate) async fn publish_messages(
             //----多帧会进行CHGTS转换
             let chgts_messages: Vec<_> = dicom_message_lists
                 .iter()
-                .filter(|msg| msg.number_of_frames == 1 && !common::cornerstonejs::SUPPORTED_TRANSFER_SYNTAXES.contains(&msg.transfer_synatx_uid.as_str()))
+                .filter(|msg| {
+                    msg.number_of_frames == 1
+                        && !common::cornerstonejs::SUPPORTED_TRANSFER_SYNTAXES
+                            .contains(&msg.transfer_synatx_uid.as_str())
+                })
                 .cloned()
                 .collect();
             if chgts_messages.len() > 0 {
@@ -215,11 +227,14 @@ pub(crate) async fn publish_messages(
                         info!("Successfully sent messages to topic-change transfersynatx ");
                     }
                     Err(e) => {
-                        error!("Failed to send messages to topic-change transfersynatx : {}", e);
+                        error!(
+                            "Failed to send messages to topic-change transfersynatx : {}",
+                            e
+                        );
                     }
                 }
             }
-        },
+        }
         None => {
             info!("chgts_kafka_producer is None");
         }
@@ -251,7 +266,6 @@ pub(crate) async fn publish_messages(
             info!("multi_frames_kafka_producer is None");
         }
     }
-
 
     // 添加返回语句
     Ok(())

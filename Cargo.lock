@@ -593,6 +593,7 @@ dependencies = [
  "dicom-transfer-syntax-registry",
  "dicom-ul",
  "dotenv",
+ "encoding_rs",
  "futures",
  "futures-util",
  "log",

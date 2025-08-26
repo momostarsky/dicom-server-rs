@@ -2,6 +2,7 @@ use crate::database_entities::{ImageEntity, PatientEntity, SeriesEntity, StudyEn
 use crate::dicom_utils;
 use crate::dicom_utils::get_tag_value;
 use dicom_dictionary_std::tags;
+use dicom_encoding::text::{DefaultCharacterSetCodec, SpecificCharacterSet, TextCodec};
 use dicom_object::InMemDicomObject;
 
 pub struct DbProviderBase {}
@@ -15,6 +16,7 @@ impl DbProviderBase {
         if patient_id.is_empty() || patient_id.len() == 0 {
             return None;
         }
+
         Some(PatientEntity {
             tenant_id: tenant_id.to_string(),
             patient_id: patient_id.to_string(),
@@ -39,17 +41,14 @@ impl DbProviderBase {
         dicom_obj: &InMemDicomObject,
         patient_id: &str,
     ) -> Option<StudyEntity> {
-
-
-
         let study_uid = get_tag_value(tags::STUDY_INSTANCE_UID, dicom_obj, "".to_string());
-        if   study_uid.is_empty()  {
+        if study_uid.is_empty() {
             return None;
         }
-        Some( StudyEntity {
+        Some(StudyEntity {
             tenant_id: tenant_id.to_string(),
-            study_instance_uid:  study_uid.to_string(),
-            patient_id:  patient_id.to_string(),
+            study_instance_uid: study_uid.to_string(),
+            patient_id: patient_id.to_string(),
             patient_age: dicom_utils::get_text_value(dicom_obj, tags::PATIENT_AGE),
             patient_size: dicom_utils::get_decimal_value(dicom_obj, tags::PATIENT_SIZE),
             patient_weight: dicom_utils::get_decimal_value(dicom_obj, tags::PATIENT_WEIGHT),
@@ -94,20 +93,17 @@ impl DbProviderBase {
         dicom_obj: &InMemDicomObject,
         study_uid: &str,
     ) -> Option<SeriesEntity> {
-
-
-
         let patid = get_tag_value(tags::PATIENT_ID, dicom_obj, "".to_string());
         let seris_uid = get_tag_value(tags::SERIES_INSTANCE_UID, dicom_obj, "".to_string());
 
-
-        if patid.is_empty() || study_uid.is_empty()  ||seris_uid.is_empty() {
+        if patid.is_empty() || study_uid.is_empty() || seris_uid.is_empty() {
             return None;
         }
 
+
         Some(SeriesEntity {
             tenant_id: tenant_id.to_string(),
-            series_instance_uid:  seris_uid.to_string(),
+            series_instance_uid: seris_uid.to_string(),
             study_instance_uid: study_uid.to_string(),
             patient_id: patid.to_string(),
             modality: dicom_utils::get_text_value(dicom_obj, tags::MODALITY).unwrap_or_default(),
@@ -142,20 +138,14 @@ impl DbProviderBase {
         study_uid: &str,
         series_uid: &str,
         patient_id: &str,
-    ) -> Option<ImageEntity>  {
-
+    ) -> Option<ImageEntity> {
         let sop_uid = get_tag_value(tags::SOP_INSTANCE_UID, dicom_obj, "".to_string());
 
-
-        if sop_uid.is_empty()  {
+        if sop_uid.is_empty() {
             return None;
         }
 
-
-
-
-
-        let img_number_of_frames = dicom_utils::get_tag_value(tags::NUMBER_OF_FRAMES, dicom_obj, 1);
+        let img_number_of_frames = get_tag_value(tags::NUMBER_OF_FRAMES, dicom_obj, 1);
         Some(ImageEntity {
             tenant_id: tenant_id.to_string(),
             sop_instance_uid: sop_uid.to_string(),
@@ -167,8 +157,11 @@ impl DbProviderBase {
             content_date: dicom_utils::get_date_value_dicom(dicom_obj, tags::CONTENT_DATE),
             content_time: dicom_utils::get_time_value_dicom(dicom_obj, tags::CONTENT_TIME),
             acquisition_date: dicom_utils::get_date_value_dicom(dicom_obj, tags::ACQUISITION_DATE),
-            acquisition_time: dicom_utils::get_time_value_dicom(dicom_obj, tags::ACQUISITION_TIME ),
-            acquisition_date_time:  dicom_utils::get_datetime_value_dicom(dicom_obj, tags::ACQUISITION_DATE_TIME ),
+            acquisition_time: dicom_utils::get_time_value_dicom(dicom_obj, tags::ACQUISITION_TIME),
+            acquisition_date_time: dicom_utils::get_datetime_value_dicom(
+                dicom_obj,
+                tags::ACQUISITION_DATE_TIME,
+            ),
             image_type: dicom_utils::get_text_value(dicom_obj, tags::IMAGE_TYPE),
             image_orientation_patient: dicom_utils::get_text_value(
                 dicom_obj,
