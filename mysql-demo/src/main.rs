@@ -1,9 +1,9 @@
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
-use sqlx::{Error, Executor, MySql, MySqlPool, Transaction};
+use sqlx::{ MySql, MySqlPool, Transaction};
 use tracing::{error, info};
 
-static DB_URL: &str = " mysql://dicomstore:hzjp%23123@192.168.1.14:3306/dicomdb";
+// static DB_URL: &str = " mysql://dicomstore:hzjp%23123@192.168.1.14:3306/dicomdb";
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PatientEntity {
     pub patient_id: String,

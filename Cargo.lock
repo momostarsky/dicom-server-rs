@@ -491,6 +491,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9555578bc9e57714c812a1f84e4fc5b4d21fcb063490c624de019f7464c91268"
 
 [[package]]
+name = "change-transfer-kafka"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "common",
+ "config",
+ "dicom-core",
+ "dicom-dictionary-std",
+ "dicom-encoding",
+ "dicom-object",
+ "dicom-transfer-syntax-registry",
+ "dicom-ul",
+ "dotenv",
+ "futures",
+ "gdcm_conv",
+ "install",
+ "rdkafka",
+ "serde",
+ "serde_json",
+ "snafu",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "urlencoding",
+]
+
+[[package]]
 name = "charset-helper"
 version = "0.1.0"
 dependencies = [
@@ -652,34 +680,6 @@ name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
-
-[[package]]
-name = "consumer-change-transfer"
-version = "0.1.0"
-dependencies = [
- "clap",
- "common",
- "config",
- "dicom-core",
- "dicom-dictionary-std",
- "dicom-encoding",
- "dicom-object",
- "dicom-transfer-syntax-registry",
- "dicom-ul",
- "dotenv",
- "futures",
- "gdcm_conv",
- "install",
- "rdkafka",
- "serde",
- "serde_json",
- "snafu",
- "sqlx",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "urlencoding",
-]
 
 [[package]]
 name = "consumer-storage-kafka"

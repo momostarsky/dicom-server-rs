@@ -1,5 +1,5 @@
 [package]
-name = "consumer-change-transfer"
+name = "change-transfer-kafka"
 version = "0.1.0"
 edition = "2024"
 
