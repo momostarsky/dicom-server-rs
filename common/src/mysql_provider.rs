@@ -211,12 +211,12 @@ impl MySqlProvider {
 
         // 移除了 batch 分组，直接处理所有数据
         // 构建批量插入语句，确保字段顺序与表结构完全一致
-        let mut query_builder = "INSERT INTO SeriesEntity (tenant_id, SeriesInstanceUID, StudyInstanceUID, PatientID, Modality, SeriesNumber, SeriesDate, SeriesTime, SeriesDescription, BodyPartExamined, ProtocolName, AcquisitionNumber, AcquisitionTime, AcquisitionDate, PerformingPhysicianName, OperatorsName, NumberOfSeriesRelatedInstances, ReceivedInstances, SpaceSize) VALUES ".to_string();
+        let mut query_builder = "INSERT INTO SeriesEntity (tenant_id, SeriesInstanceUID, StudyInstanceUID, PatientID, Modality, SeriesNumber, SeriesDate, SeriesTime, SeriesDescription, BodyPartExamined, ProtocolName, AcquisitionNumber, AcquisitionTime, AcquisitionDate, AcquisitionDateTime, PerformingPhysicianName, OperatorsName, NumberOfSeriesRelatedInstances, ReceivedInstances, SpaceSize) VALUES ".to_string();
         let placeholders: Vec<String> = (0..series_lists.len())
-            .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string())
+            .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string())
             .collect();
         query_builder.push_str(&placeholders.join(", "));
-        query_builder.push_str(" ON DUPLICATE KEY UPDATE Modality = VALUES(Modality), SeriesNumber = VALUES(SeriesNumber), SeriesDate = VALUES(SeriesDate), SeriesTime = VALUES(SeriesTime), SeriesDescription = VALUES(SeriesDescription), BodyPartExamined = VALUES(BodyPartExamined), ProtocolName = VALUES(ProtocolName), AcquisitionNumber = VALUES(AcquisitionNumber), AcquisitionTime = VALUES(AcquisitionTime), AcquisitionDate = VALUES(AcquisitionDate), PerformingPhysicianName = VALUES(PerformingPhysicianName), OperatorsName = VALUES(OperatorsName), NumberOfSeriesRelatedInstances = VALUES(NumberOfSeriesRelatedInstances), ReceivedInstances = VALUES(ReceivedInstances), SpaceSize = VALUES(SpaceSize)");
+        query_builder.push_str(" ON DUPLICATE KEY UPDATE Modality = VALUES(Modality), SeriesNumber = VALUES(SeriesNumber), SeriesDate = VALUES(SeriesDate), SeriesTime = VALUES(SeriesTime), SeriesDescription = VALUES(SeriesDescription), BodyPartExamined = VALUES(BodyPartExamined), ProtocolName = VALUES(ProtocolName), AcquisitionNumber = VALUES(AcquisitionNumber), AcquisitionTime = VALUES(AcquisitionTime), AcquisitionDate = VALUES(AcquisitionDate), AcquisitionDateTime = VALUES(AcquisitionDateTime), PerformingPhysicianName = VALUES(PerformingPhysicianName), OperatorsName = VALUES(OperatorsName), NumberOfSeriesRelatedInstances = VALUES(NumberOfSeriesRelatedInstances), ReceivedInstances = VALUES(ReceivedInstances), SpaceSize = VALUES(SpaceSize)");
         let mut query = sqlx::query(&query_builder);
         for series in series_lists {
             query = query
@@ -235,12 +235,14 @@ impl MySqlProvider {
                 .bind(&series.acquisition_number)
                 .bind(&series.acquisition_time)
                 .bind(&series.acquisition_date)
+                .bind(&series.acquisition_date_time)
                 .bind(&series.performing_physician_name)
                 .bind(&series.operators_name)
                 .bind(&series.number_of_series_related_instances)
                 .bind(&series.received_instances)
                 .bind(&series.space_size);
         }
+
 
         query.execute(&mut **tx).await?;
 
@@ -261,9 +263,9 @@ impl MySqlProvider {
         // 构建批量插入语句，确保字段顺序与表结构完全一致
         let mut query_builder = "INSERT INTO ImageEntity (tenant_id, SOPInstanceUID, SeriesInstanceUID, StudyInstanceUID, PatientID, InstanceNumber, ImageComments, ContentDate, ContentTime, \
 AcquisitionDate, AcquisitionTime, AcquisitionDateTime, \
-ImageType, ImageOrientationPatient, ImagePositionPatient, SliceThickness, SpacingBetweenSlices, SliceLocation, SamplesPerPixel, PhotometricInterpretation, Width, Columns, BitsAllocated, BitsStored, HighBit, PixelRepresentation, RescaleIntercept, RescaleSlope, RescaleType, AcquisitionDeviceProcessingDescription, AcquisitionDeviceProcessingCode, DeviceSerialNumber, SoftwareVersions, TransferSyntaxUID, SOPClassUID, NumberOfFrames, SpaceSize) VALUES ".to_string();
+ImageType, ImageOrientationPatient, ImagePositionPatient, SliceThickness, SpacingBetweenSlices, SliceLocation, SamplesPerPixel, PhotometricInterpretation, Width, Columns, BitsAllocated, BitsStored, HighBit, PixelRepresentation, RescaleIntercept, RescaleSlope, RescaleType, WindowCenter, WindowWidth, AcquisitionDeviceProcessingDescription, AcquisitionDeviceProcessingCode, DeviceSerialNumber, SoftwareVersions, TransferSyntaxUID, SOPClassUID, NumberOfFrames, SpaceSize, PixelDataLocation, ThumbnailLocation, ImageStatus) VALUES ".to_string();
         let placeholders: Vec<String> = (0..dicom_obj.len())
-            .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string())
+            .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string())
             .collect();
         query_builder.push_str(&placeholders.join(", "));
         query_builder.push_str(" ON DUPLICATE KEY UPDATE InstanceNumber = VALUES(InstanceNumber), ImageComments = VALUES(ImageComments), ContentDate = VALUES(ContentDate), \
@@ -271,7 +273,7 @@ ContentTime = VALUES(ContentTime), \
 AcquisitionDate = VALUES(AcquisitionDate), \
 AcquisitionTime = VALUES(AcquisitionTime), \
 AcquisitionDateTime = VALUES(AcquisitionDateTime), \
-ImageType = VALUES(ImageType), ImageOrientationPatient = VALUES(ImageOrientationPatient), ImagePositionPatient = VALUES(ImagePositionPatient), SliceThickness = VALUES(SliceThickness), SpacingBetweenSlices = VALUES(SpacingBetweenSlices), SliceLocation = VALUES(SliceLocation), SamplesPerPixel = VALUES(SamplesPerPixel), PhotometricInterpretation = VALUES(PhotometricInterpretation), Width = VALUES(Width), Columns = VALUES(Columns), BitsAllocated = VALUES(BitsAllocated), BitsStored = VALUES(BitsStored), HighBit = VALUES(HighBit), PixelRepresentation = VALUES(PixelRepresentation), RescaleIntercept = VALUES(RescaleIntercept), RescaleSlope = VALUES(RescaleSlope), RescaleType = VALUES(RescaleType), AcquisitionDeviceProcessingDescription = VALUES(AcquisitionDeviceProcessingDescription), AcquisitionDeviceProcessingCode = VALUES(AcquisitionDeviceProcessingCode), DeviceSerialNumber = VALUES(DeviceSerialNumber), SoftwareVersions = VALUES(SoftwareVersions), TransferSyntaxUID = VALUES(TransferSyntaxUID), NumberOfFrames = VALUES(NumberOfFrames), SpaceSize = VALUES(SpaceSize)");
+ImageType = VALUES(ImageType), ImageOrientationPatient = VALUES(ImageOrientationPatient), ImagePositionPatient = VALUES(ImagePositionPatient), SliceThickness = VALUES(SliceThickness), SpacingBetweenSlices = VALUES(SpacingBetweenSlices), SliceLocation = VALUES(SliceLocation), SamplesPerPixel = VALUES(SamplesPerPixel), PhotometricInterpretation = VALUES(PhotometricInterpretation), Width = VALUES(Width), Columns = VALUES(Columns), BitsAllocated = VALUES(BitsAllocated), BitsStored = VALUES(BitsStored), HighBit = VALUES(HighBit), PixelRepresentation = VALUES(PixelRepresentation), RescaleIntercept = VALUES(RescaleIntercept), RescaleSlope = VALUES(RescaleSlope), RescaleType = VALUES(RescaleType), WindowCenter = VALUES(WindowCenter), WindowWidth = VALUES(WindowWidth), AcquisitionDeviceProcessingDescription = VALUES(AcquisitionDeviceProcessingDescription), AcquisitionDeviceProcessingCode = VALUES(AcquisitionDeviceProcessingCode), DeviceSerialNumber = VALUES(DeviceSerialNumber), SoftwareVersions = VALUES(SoftwareVersions), TransferSyntaxUID = VALUES(TransferSyntaxUID), NumberOfFrames = VALUES(NumberOfFrames), SpaceSize = VALUES(SpaceSize), PixelDataLocation = VALUES(PixelDataLocation), ThumbnailLocation = VALUES(ThumbnailLocation), ImageStatus = VALUES(ImageStatus)");
 
         let mut query = sqlx::query(&query_builder);
 
@@ -306,6 +308,8 @@ ImageType = VALUES(ImageType), ImageOrientationPatient = VALUES(ImageOrientation
                 .bind(&image.rescale_intercept)
                 .bind(&image.rescale_slope)
                 .bind(&image.rescale_type)
+                .bind(&image.window_center)
+                .bind(&image.window_width)
                 .bind(&image.acquisition_device_processing_description)
                 .bind(&image.acquisition_device_processing_code)
                 .bind(&image.device_serial_number)
@@ -313,7 +317,10 @@ ImageType = VALUES(ImageType), ImageOrientationPatient = VALUES(ImageOrientation
                 .bind(&image.transfer_syntax_uid)
                 .bind(&image.sop_class_uid)
                 .bind(&image.number_of_frames)
-                .bind(&image.space_size);
+                .bind(&image.space_size)
+                .bind(&image.pixel_data_location)
+                .bind(&image.thumbnail_location)
+                .bind(&image.image_status);
         }
 
         query.execute(&mut **tx).await?;

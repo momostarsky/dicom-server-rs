@@ -62,10 +62,11 @@ pub struct SeriesEntity {
     pub acquisition_number: Option<i32>,
     pub acquisition_time: Option<dicom_core::chrono::NaiveTime>,
     pub acquisition_date: Option<dicom_core::chrono::NaiveDate>,
+    pub acquisition_date_time: Option<dicom_core::chrono::NaiveDateTime>,
     pub performing_physician_name: Option<String>,
     pub operators_name: Option<String>,
     pub number_of_series_related_instances: Option<i32>,
-    pub received_instances: Option<u32>, // 新增字段
+    pub received_instances: Option<i32>, // 新增字段
     pub space_size: Option<u64>,         // 新增字段
     pub created_time: Option<NaiveDateTime>,
     pub updated_time: Option<NaiveDateTime>,
@@ -103,6 +104,8 @@ pub struct ImageEntity {
     pub rescale_intercept: Option<f64>,
     pub rescale_slope: Option<f64>,
     pub rescale_type: Option<String>,
+    pub window_center:Option<String>,
+    pub window_width:  Option<String>,
     pub number_of_frames: i32,
     pub acquisition_device_processing_description: Option<String>,
     pub acquisition_device_processing_code: Option<String>,

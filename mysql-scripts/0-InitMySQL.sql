@@ -95,6 +95,7 @@ CREATE TABLE SeriesEntity
     AcquisitionNumber              INT COMMENT '采集号 (0020,0012) - IS, VM=1, max 12 chars → INT',
     AcquisitionTime                TIME COMMENT '采集时间 (0008,0032) - TM',
     AcquisitionDate                DATE COMMENT '采集日期 (0008,0022) - DA',
+    AcquisitionDateTime            DATETIME COMMENT '采集日期时间 (0008,002A) - DT, 合并 DA+TM',
     -- 其他信息
     PerformingPhysicianName        VARCHAR(192) COMMENT '执行医生姓名 (0008,1050) - PN, 可继承自 Study',
     OperatorsName                  VARCHAR(192) COMMENT '操作员姓名 (0008,1070) - PN, VM=1-n',
@@ -156,6 +157,8 @@ CREATE TABLE ImageEntity
     RescaleIntercept                       DECIMAL(8, 4) COMMENT '重缩放截距 (0028,1052) - DS, VM=1',
     RescaleSlope                           DECIMAL(8, 4) COMMENT '重缩放斜率 (0028,1053) - DS, VM=1',
     RescaleType                            VARCHAR(16) COMMENT '重缩放类型 (0028,1054) - LO, VM=1, e.g., "HU" for CT',
+    WindowsWidth                           VARCHAR(64) COMMENT '窗宽 (0028,1051) - LO, VM=1, e.g., "HU" for CT',
+    WindowsCenter                          VARCHAR(64) COMMENT '窗位 (0028,1050) - LO, VM=1, e.g., "HU" for CT',
     NumberOfFrames                         INT COMMENT '帧数 (0028,0008) - IS, VM=1, max 8 chars → INT',
     -- 图像来源与设备
     AcquisitionDeviceProcessingDescription VARCHAR(64) COMMENT '采集设备处理描述 (0018,1010) - LO, VM=1',

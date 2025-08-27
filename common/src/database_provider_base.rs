@@ -115,6 +115,10 @@ impl DbProviderBase {
             acquisition_number: dicom_utils::get_int_value(dicom_obj, tags::ACQUISITION_NUMBER),
             acquisition_time: dicom_utils::get_time_value_dicom(dicom_obj, tags::ACQUISITION_TIME),
             acquisition_date: dicom_utils::get_date_value_dicom(dicom_obj, tags::ACQUISITION_DATE),
+            acquisition_date_time: dicom_utils::get_datetime_value_dicom(
+                dicom_obj,
+                tags::ACQUISITION_DATE_TIME,
+            ),
             performing_physician_name: dicom_utils::get_text_value(
                 dicom_obj,
                 tags::PERFORMING_PHYSICIAN_NAME,
@@ -191,6 +195,8 @@ impl DbProviderBase {
             rescale_intercept: dicom_utils::get_decimal_value(dicom_obj, tags::RESCALE_INTERCEPT),
             rescale_slope: dicom_utils::get_decimal_value(dicom_obj, tags::RESCALE_SLOPE),
             rescale_type: dicom_utils::get_text_value(dicom_obj, tags::RESCALE_TYPE),
+            window_center: dicom_utils::get_text_value(dicom_obj, tags::WINDOW_CENTER),
+            window_width: dicom_utils::get_text_value(dicom_obj, tags::WINDOW_WIDTH),
             number_of_frames: img_number_of_frames,
             acquisition_device_processing_description: dicom_utils::get_text_value(
                 dicom_obj,
