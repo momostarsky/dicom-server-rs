@@ -171,6 +171,7 @@ pub async fn group_dicom_messages(
     let mut series_entities: Vec<SeriesEntity> = Vec::new();
     let mut image_entities: Vec<ImageEntity> = Vec::new();
     let mut failed_messages: Vec<DicomObjectMeta> = Vec::new();
+    let mut failed_message_set: HashSet<&DicomObjectMeta> = HashSet::new(); // 用于跟踪已失败的消息
 
     {
         //-------------对所有的DICOM文件进行转码------
@@ -183,7 +184,10 @@ pub async fn group_dicom_messages(
                 convert_ts_with_pixel_data(src_file, src_sz, &target_path, true);
             if let Err(e) = conversion_result.await {
                 tracing::error!("Change Dicom TransferSyntax To RLE Failed: {:?}", e);
-                failed_messages.push(dcm_msg.clone());
+                if !failed_message_set.contains(dcm_msg) {
+                    failed_messages.push(dcm_msg.clone());
+                    failed_message_set.insert(dcm_msg);
+                }
                 // 继续处理下一条消息
                 continue;
             }
@@ -200,8 +204,8 @@ pub async fn group_dicom_messages(
     }
 
     for message in messages {
-        // todo: 剔除在 failed_messages 列表中的消息
-        if failed_messages.contains(message) {
+        // todo: 不处理在 failed_messages 列表中的消息
+        if failed_message_set.contains(message) {
             continue;
         }
         match dicom_object::OpenFileOptions::new()
@@ -217,11 +221,20 @@ pub async fn group_dicom_messages(
                         message.tenant_id.as_str(),
                         &dicom_obj,
                     ) {
-                        Some(p) => {
-                            patient_entities.push(p);
+                        Ok(patient_entity) => {
+                            patient_entities.push(patient_entity);
                             patient_groups.insert(key.clone(), true);
                         }
-                        _ => {
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to extract patient entity from file '{}': {}",
+                                message.file_path,
+                                e
+                            );
+                            if !failed_message_set.contains(message) {
+                                failed_messages.push(message.clone());
+                                failed_message_set.insert(message);
+                            }
                             continue;
                         }
                     }
@@ -229,43 +242,56 @@ pub async fn group_dicom_messages(
 
                 // 提取 study
                 let key2 = format!("{}_{}", message.tenant_id, message.study_uid);
-                if patient_groups.contains_key(key.as_str()) && !study_groups.contains_key(&key2) {
-                    match DbProviderBase::extract_study_entity(
-                        message.tenant_id.as_str(),
-                        &dicom_obj,
-                        message.patient_id.as_str(),
-                    ) {
-                        Some(p) => {
-                            study_entities.push(p);
-                            study_groups.insert(key2.clone(), true);
+                match DbProviderBase::extract_study_entity(
+                    message.tenant_id.as_str(),
+                    &dicom_obj,
+                    message.patient_id.as_str(),
+                ) {
+                    Ok(study_entity) => {
+                        study_entities.push(study_entity);
+                        study_groups.insert(key2.clone(), true);
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                                "Failed to extract study entity from file '{}': {}",
+                                message.file_path ,
+                                e
+                            );
+                        if !failed_message_set.contains(message) {
+                            failed_messages.push(message.clone());
+                            failed_message_set.insert(message);
                         }
-                        _ => {
-                            continue;
-                        }
+                        continue;
                     }
                 }
                 // 提取 series
                 let key3 = format!("{}_{}", message.tenant_id, message.series_uid);
-                if study_groups.contains_key(&key2) && !series_groups.contains_key(&key3) {
-                    match DbProviderBase::extract_series_entity(
-                        message.tenant_id.as_str(),
-                        &dicom_obj,
-                        message.study_uid.as_str(),
-                    ) {
-                        Some(p) => {
-                            series_entities.push(p);
-                            series_groups.insert(key3.clone(), true);
+                match DbProviderBase::extract_series_entity(
+                    message.tenant_id.as_str(),
+                    &dicom_obj,
+                    message.study_uid.as_str(),
+                ) {
+                    Ok(series_entity) => {
+                        series_entities.push(series_entity);
+                        series_groups.insert(key3.clone(), true);
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                                "Failed to extract series entity from file '{}': {}",
+                                message.file_path ,
+                                e
+                            );
+                        if !failed_message_set.contains(message) {
+                            failed_messages.push(message.clone());
+                            failed_message_set.insert(message);
                         }
-                        _ => {
-                            continue;
-                        }
+                        continue;
                     }
                 }
                 if !patient_groups.contains_key(key.as_str()) {
                     continue;
                 }
 
-                // 处理series
                 match DbProviderBase::extract_image_entity(
                     message.tenant_id.as_str(),
                     &dicom_obj,
@@ -273,19 +299,31 @@ pub async fn group_dicom_messages(
                     message.study_uid.as_str(),
                     message.series_uid.as_str(),
                 ) {
-                    Some(mut p) => {
-                        p.space_size = Some(message.file_size);
-                        p.transfer_syntax_uid = message.transfer_synatx_uid.clone();
-                        image_entities.push(p);
+                    Ok(mut sop_entity) => {
+                        sop_entity.space_size = Some(message.file_size);
+                        sop_entity.transfer_syntax_uid = message.transfer_synatx_uid.clone();
+                        image_entities.push(sop_entity);
                     }
-                    _ => {
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to extract image entity from file '{}': {}",
+                            message.file_path ,
+                            e
+                        );
+                        if !failed_message_set.contains(message) {
+                            failed_messages.push(message.clone());
+                            failed_message_set.insert(message);
+                        }
                         continue;
                     }
                 }
             }
             Err(_) => {
                 // 记录错误但继续处理其他文件
-                failed_messages.push(message.clone());
+                if !failed_message_set.contains(message) {
+                    failed_messages.push(message.clone());
+                    failed_message_set.insert(message);
+                }
             }
         }
     }

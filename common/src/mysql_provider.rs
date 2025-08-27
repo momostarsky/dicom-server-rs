@@ -469,11 +469,11 @@ impl DbProvider for MySqlProvider {
 
         // 使用 DbProviderBase 提取实体信息
         let patient_entity = match DbProviderBase::extract_patient_entity(&tenant_id, dicom_obj) {
-            Some(patient_entity) => patient_entity,
-            None => {
+            Ok(patient_entity) => patient_entity,
+            Err( e ) => {
                 error!("Failed to extract patient entity.");
                 return Err(DbError::ExtractionFailed(
-                    "Failed to extract patient entity".to_string(),
+                    e.to_string()
                 ));
             }
         };
@@ -483,11 +483,11 @@ impl DbProvider for MySqlProvider {
             dicom_obj,
             &patient_entity.patient_id,
         ) {
-            Some(study_entity) => study_entity,
-            None => {
+            Ok(study_entity) => study_entity,
+            Err(e) => {
                 error!("Failed to extract study entity.");
                 return Err(DbError::ExtractionFailed(
-                    "Failed to extract study entity".to_string(),
+                     e.to_string()
                 ));
             }
         };
@@ -496,11 +496,11 @@ impl DbProvider for MySqlProvider {
             dicom_obj,
             &study_entity.study_instance_uid,
         ) {
-            Some(series_entity) => series_entity,
-            None => {
+            Ok(series_entity) => series_entity,
+            Err( e) => {
                 error!("Failed to extract series entity.");
                 return Err(DbError::ExtractionFailed(
-                    "Failed to extract series entity".to_string(),
+                    e.to_string()
                 ));
             }
         };
@@ -511,11 +511,11 @@ impl DbProvider for MySqlProvider {
             &study_entity.study_instance_uid,
             &series_entity.series_instance_uid,
         ) {
-            Some(image_entity) => image_entity,
-            None => {
+            Ok(image_entity) => image_entity,
+            Err(e) => {
                 error!("Failed to extract image entity.");
                 return Err(DbError::ExtractionFailed(
-                    "Failed to extract image entity".to_string(),
+                    e.to_string()
                 ));
             }
         };

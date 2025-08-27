@@ -3,20 +3,50 @@ use crate::dicom_utils;
 use crate::dicom_utils::get_tag_value;
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
+use std::fmt;
+
+#[derive(Debug)]
+pub enum ExtractionError {
+    MissingPatientId,
+    EmptyPatientId,
+    MissingStudyUid,
+    EmptyStudyUid,
+    MissingSeriesUid,
+    EmptySeriesUid,
+    MissingSopUid,
+    EmptySopUid,
+}
+
+impl fmt::Display for ExtractionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExtractionError::MissingPatientId => write!(f, "Missing patient ID in DICOM object"),
+            ExtractionError::EmptyPatientId => write!(f, "Patient ID is empty in DICOM object"),
+            ExtractionError::MissingStudyUid => write!(f, "Missing study UID in DICOM object"),
+            ExtractionError::EmptyStudyUid => write!(f, "Study UID is empty in DICOM object"),
+            ExtractionError::MissingSeriesUid => write!(f, "Missing series UID in DICOM object"),
+            ExtractionError::EmptySeriesUid => write!(f, "Series UID is empty in DICOM object"),
+            ExtractionError::MissingSopUid => write!(f, "Missing SOP UID in DICOM object"),
+            ExtractionError::EmptySopUid => write!(f, "SOP UID is empty in DICOM object"),
+        }
+    }
+}
+
+impl std::error::Error for ExtractionError {}
 
 pub struct DbProviderBase {}
 impl DbProviderBase {
     pub fn extract_patient_entity(
         tenant_id: &str,
         dicom_obj: &InMemDicomObject,
-    ) -> Option<PatientEntity> {
+    ) -> Result<PatientEntity, ExtractionError> {
         let patient_id = get_tag_value(tags::PATIENT_ID, dicom_obj, "".to_string());
 
-        if patient_id.is_empty() || patient_id.len() == 0 {
-            return None;
+        if patient_id.is_empty() {
+            return Err(ExtractionError::EmptyPatientId);
         }
 
-        Some(PatientEntity {
+        Ok(PatientEntity {
             tenant_id: tenant_id.to_string(),
             patient_id: patient_id.to_string(),
             patient_name: dicom_utils::get_text_value(dicom_obj, tags::PATIENT_NAME),
@@ -39,12 +69,12 @@ impl DbProviderBase {
         tenant_id: &str,
         dicom_obj: &InMemDicomObject,
         patient_id: &str,
-    ) -> Option<StudyEntity> {
+    ) -> Result<StudyEntity, ExtractionError> {
         let study_uid = get_tag_value(tags::STUDY_INSTANCE_UID, dicom_obj, "".to_string());
         if study_uid.is_empty() {
-            return None;
+            return Err(ExtractionError::EmptyStudyUid);
         }
-        Some(StudyEntity {
+        Ok(StudyEntity {
             tenant_id: tenant_id.to_string(),
             study_instance_uid: study_uid.to_string(),
             patient_id: patient_id.to_string(),
@@ -91,18 +121,25 @@ impl DbProviderBase {
         tenant_id: &str,
         dicom_obj: &InMemDicomObject,
         study_uid: &str,
-    ) -> Option<SeriesEntity> {
+    ) -> Result<SeriesEntity, ExtractionError> {
         let patid = get_tag_value(tags::PATIENT_ID, dicom_obj, "".to_string());
-        let seris_uid = get_tag_value(tags::SERIES_INSTANCE_UID, dicom_obj, "".to_string());
+        let series_uid = get_tag_value(tags::SERIES_INSTANCE_UID, dicom_obj, "".to_string());
 
-        if patid.is_empty() || study_uid.is_empty() || seris_uid.is_empty() {
-            return None;
+        if patid.is_empty() {
+            return Err(ExtractionError::EmptyPatientId);
         }
 
+        if study_uid.is_empty() {
+            return Err(ExtractionError::EmptyStudyUid);
+        }
 
-        Some(SeriesEntity {
+        if series_uid.is_empty() {
+            return Err(ExtractionError::EmptySeriesUid);
+        }
+
+        Ok(SeriesEntity {
             tenant_id: tenant_id.to_string(),
-            series_instance_uid: seris_uid.to_string(),
+            series_instance_uid: series_uid.to_string(),
             study_instance_uid: study_uid.to_string(),
             patient_id: patid.to_string(),
             modality: dicom_utils::get_text_value(dicom_obj, tags::MODALITY).unwrap_or_default(),
@@ -141,16 +178,15 @@ impl DbProviderBase {
         patient_id: &str,
         study_uid: &str,
         series_uid: &str,
-
-    ) -> Option<ImageEntity> {
+    ) -> Result<ImageEntity, ExtractionError> {
         let sop_uid = get_tag_value(tags::SOP_INSTANCE_UID, dicom_obj, "".to_string());
 
         if sop_uid.is_empty() {
-            return None;
+            return Err(ExtractionError::EmptySopUid);
         }
 
         let img_number_of_frames = get_tag_value(tags::NUMBER_OF_FRAMES, dicom_obj, 1);
-        Some(ImageEntity {
+        Ok(ImageEntity {
             tenant_id: tenant_id.to_string(),
             sop_instance_uid: sop_uid.to_string(),
             series_instance_uid: series_uid.to_string(),

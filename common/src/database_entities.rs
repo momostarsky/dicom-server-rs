@@ -1,3 +1,4 @@
+use std::hash::{Hash, Hasher};
 use dicom_core::chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
@@ -58,7 +59,7 @@ pub struct SeriesEntity {
     pub series_time: Option<dicom_core::chrono::NaiveTime>,
     pub series_description: Option<String>,
     pub body_part_examined: Option<String>,
-    pub protocol_name: Option<String>, 
+    pub protocol_name: Option<String>,
     pub acquisition_number: Option<i32>,
     pub acquisition_time: Option<dicom_core::chrono::NaiveTime>,
     pub acquisition_date: Option<dicom_core::chrono::NaiveDate>,
@@ -156,7 +157,16 @@ pub struct DicomObjectMeta {
     pub created_time: Option<NaiveDateTime>,
     pub updated_time: Option<NaiveDateTime>,
 }
-
+// 为 DicomObjectMeta 实现 Hash trait 以便可以在 HashSet 中使用
+impl Hash for DicomObjectMeta {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.tenant_id.hash(state);
+        self.patient_id.hash(state);
+        self.study_uid.hash(state);
+        self.series_uid.hash(state);
+        self.sop_uid.hash(state);
+    }
+}
 impl PartialEq for DicomObjectMeta {
     fn eq(&self, other: &Self) -> bool {
         self.tenant_id == other.tenant_id
@@ -166,3 +176,4 @@ impl PartialEq for DicomObjectMeta {
             && self.sop_uid == other.sop_uid
     }
 }
+impl Eq for DicomObjectMeta {}
