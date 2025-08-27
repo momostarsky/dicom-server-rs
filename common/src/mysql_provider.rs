@@ -1,4 +1,6 @@
-use crate::database_entities::{DicomObjectMeta, ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
+use crate::database_entities::{
+    DicomObjectMeta, ImageEntity, PatientEntity, SeriesEntity, StudyEntity,
+};
 use crate::database_provider::{DbError, DbProvider};
 use crate::database_provider_base::DbProviderBase;
 use crate::dicom_utils::{parse_dicom_date_from_sql, parse_dicom_time_from_sql};
@@ -243,7 +245,6 @@ impl MySqlProvider {
                 .bind(&series.space_size);
         }
 
-
         query.execute(&mut **tx).await?;
 
         Ok(())
@@ -417,17 +418,24 @@ impl DbProvider for MySqlProvider {
             file_path,
             transfer_syntax_uid,
             number_of_frames
-        ) VALUES ".to_string();
+        ) VALUES "
+            .to_string();
 
         let placeholders: Vec<String> = (0..dicom_obj.len())
             .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string())
             .collect();
         query_builder.push_str(&placeholders.join(", "));
-        query_builder.push_str(" ON DUPLICATE KEY UPDATE
+        query_builder.push_str(
+            " ON DUPLICATE KEY UPDATE
+            patient_id = VALUES(patient_id),
+            study_uid = VALUES(study_uid),
+            series_uid = VALUES(series_uid),
             file_size = VALUES(file_size),
             file_path = VALUES(file_path),
             transfer_syntax_uid = VALUES(transfer_syntax_uid),
-            number_of_frames = VALUES(number_of_frames)");
+            number_of_frames = VALUES(number_of_frames),
+            updated_at = CURRENT_TIMESTAMP",
+        );
 
         let mut query = sqlx::query(&query_builder);
         for obj in dicom_obj {
@@ -437,18 +445,20 @@ impl DbProvider for MySqlProvider {
                 .bind(&obj.study_uid)
                 .bind(&obj.series_uid)
                 .bind(&obj.sop_uid)
-                .bind(&obj.file_size) // u64转i64以适应数据库BIGINT类型
+                .bind(&obj.file_size)
                 .bind(&obj.file_path)
-                .bind(&obj.transfer_synatx_uid) // 注意：结构体中字段名有拼写错误
+                .bind(&obj.transfer_synatx_uid)
                 .bind(obj.number_of_frames);
         }
 
-        query.execute(&mut *tx).await.map_err(DbError::DatabaseError)?;
+        query
+            .execute(&mut *tx)
+            .await
+            .map_err(DbError::DatabaseError)?;
         tx.commit().await.map_err(DbError::DatabaseError)?;
 
         Ok(())
     }
-
 
     async fn save_dicom_info(
         &self,
@@ -500,8 +510,6 @@ impl DbProvider for MySqlProvider {
             &patient_entity.patient_id,
             &study_entity.study_instance_uid,
             &series_entity.series_instance_uid,
-
-
         ) {
             Some(image_entity) => image_entity,
             None => {
@@ -824,21 +832,25 @@ impl DbProvider for MySqlProvider {
     ) -> Result<(), DbError> {
         // 批量插入到数据库，并处理结果
         if !patient_list.is_empty() {
+            info!("开始保存 {} 条患者数据", patient_list.len());
             self.save_patient_info(tenant_id, patient_list).await?;
             info!("成功保存 {} 条患者数据", patient_list.len());
         }
 
         if !study_list.is_empty() {
+            info!("开始保存 {} 条检查数据", study_list.len());
             self.save_study_info(tenant_id, study_list).await?;
             info!("成功保存 {} 条检查数据", study_list.len());
         }
 
         if !series_list.is_empty() {
+            info!("开始保存 {} 条序列数据", series_list.len());
             self.save_series_info(tenant_id, series_list).await?;
             info!("成功保存 {} 条序列数据", series_list.len());
         }
 
         if !images_list.is_empty() {
+            info!("开始保存 {} 条图像数据", images_list.len());
             self.save_instance_info(tenant_id, images_list).await?;
             info!("成功保存 {} 条图像数据", images_list.len());
         }
@@ -1126,7 +1138,6 @@ mod tests {
                         &patient_id,        // 使用 clone 后的值，避免 move
                         study_uid.as_str(), // 使用 clone 后的值，避免 move
                         series_id.as_str(), // 使用 clone 后的值，避免 move
-
                     )
                     .unwrap();
                     let image_id = image_entity.sop_instance_uid.clone();

@@ -157,8 +157,8 @@ CREATE TABLE ImageEntity
     RescaleIntercept                       DECIMAL(8, 4) COMMENT '重缩放截距 (0028,1052) - DS, VM=1',
     RescaleSlope                           DECIMAL(8, 4) COMMENT '重缩放斜率 (0028,1053) - DS, VM=1',
     RescaleType                            VARCHAR(16) COMMENT '重缩放类型 (0028,1054) - LO, VM=1, e.g., "HU" for CT',
-    WindowsWidth                           VARCHAR(64) COMMENT '窗宽 (0028,1051) - LO, VM=1, e.g., "HU" for CT',
-    WindowsCenter                          VARCHAR(64) COMMENT '窗位 (0028,1050) - LO, VM=1, e.g., "HU" for CT',
+    WindowWidth                           VARCHAR(64) COMMENT '窗宽 (0028,1051) - LO, VM=1, e.g., "HU" for CT',
+    WindowCenter                          VARCHAR(64) COMMENT '窗位 (0028,1050) - LO, VM=1, e.g., "HU" for CT',
     NumberOfFrames                         INT COMMENT '帧数 (0028,0008) - IS, VM=1, max 8 chars → INT',
     -- 图像来源与设备
     AcquisitionDeviceProcessingDescription VARCHAR(64) COMMENT '采集设备处理描述 (0018,1010) - LO, VM=1',
