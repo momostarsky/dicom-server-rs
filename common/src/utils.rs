@@ -238,7 +238,9 @@ pub fn group_dicom_messages(
                     message.study_uid.as_str(),
                     message.series_uid.as_str(),
                 ) {
-                    Some(p) => {
+                    Some(mut p) => {
+                        p.space_size =  Some(message.file_size ) ;
+                        p.transfer_syntax_uid = message.transfer_synatx_uid.clone();
                         image_entities.push(p);
                     }
                     _ => {

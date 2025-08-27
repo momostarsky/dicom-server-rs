@@ -112,9 +112,9 @@ pub(crate) async fn process_dicom_file(
     );
 
     file_obj.write_to_file(&file_path).whatever_context("write file failed")?;
-
-    info!("Stored {}, {}", ts, sop_instance_uid);
     let fsize  = std::fs::metadata(&file_path).unwrap().len();
+    info!("Stored {}, {} with:{} bytes", ts, sop_instance_uid,fsize);
+
     // // 从新从磁盘读取DICOM文件, 确保文件已经完全写入磁盘.
     // let dicom_obj = dicom_object::OpenFileOptions::new()
     //     .read_until(tags::PIXEL_DATA)

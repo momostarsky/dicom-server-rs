@@ -113,7 +113,7 @@ pub struct ImageEntity {
     pub thumbnail_location: Option<String>,
     pub sop_class_uid: String,
     pub image_status: Option<String>,
-    pub space_size: Option<u64>, // 新增字段
+    pub space_size: Option<i64>, // 新增字段
     pub created_time: Option<NaiveDateTime>,
     pub updated_time: Option<NaiveDateTime>,
 }
