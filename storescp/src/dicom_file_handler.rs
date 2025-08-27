@@ -134,6 +134,8 @@ pub(crate) async fn process_dicom_file(
         file_size: fsize as i64,
         transfer_synatx_uid: ts.to_string(),
         number_of_frames: frames,
+        created_time: None,
+        updated_time: None,
     });
     Ok(())
 }

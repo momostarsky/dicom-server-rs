@@ -255,30 +255,20 @@ async fn persist_message_loop(
                 .filter(|m| m.tenant_id == tenant_id)
                 .cloned()
                 .collect::<Vec<_>>();
-            let (patients, studies, series, images) = match group_dicom_messages(&tenant_msg) {
-                Ok((patients, studies, series, images)) => (patients, studies, series, images),
-                Err(_) => {
-                    db_provider.save_dicommeta_info(&tenant_msg).await.expect("解析DICOM信息出现错误,并写入数据库失败!");
-                    continue;
-                }
-            };
-            if images.len() != tenant_msg.len() {
-                db_provider.save_dicommeta_info(&tenant_msg).await.expect("解析DICOM信息成功但是文件个数和消息个数不对,并写入数据库失败!");
-                continue;
-            }
-            match db_provider
+            let (patients, studies, series, images, failed_messages) =
+                group_dicom_messages(&tenant_msg)
+                    .await
+                    .expect("分组处理dicom消息失败");
+
+            db_provider
+                .save_dicommeta_info(&failed_messages)
+                .await
+                .expect("解析DICOM信息成功但是文件个数和消息个数不对,并写入数据库失败!");
+
+            db_provider
                 .persist_to_database(tenant_id.as_str(), &patients, &studies, &series, &images)
                 .await
-            {
-                Ok(()) => {
-                    tracing::info!("Successfully persisted data for tenant {}", tenant_id);
-                }
-                Err(e) => {
-                    tracing::error!("Failed to persist data for tenant {}: {}", tenant_id, e);
-                    db_provider.save_dicommeta_info(&tenant_msg).await.expect("解析DICOM信息成功但是写入数据库失败!");
-                    continue;
-                }
-            }
+                .expect("解析DICOM信息成功但是写入数据库失败!");
         }
 
         // 更新最后处理时间

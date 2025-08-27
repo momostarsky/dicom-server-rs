@@ -633,6 +633,7 @@ dependencies = [
  "encoding_rs",
  "futures",
  "futures-util",
+ "gdcm_conv",
  "log",
  "log4rs",
  "rayon",

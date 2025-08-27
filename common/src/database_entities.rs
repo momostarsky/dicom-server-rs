@@ -156,3 +156,13 @@ pub struct DicomObjectMeta {
     pub created_time: Option<NaiveDateTime>,
     pub updated_time: Option<NaiveDateTime>,
 }
+
+impl PartialEq for DicomObjectMeta {
+    fn eq(&self, other: &Self) -> bool {
+        self.tenant_id == other.tenant_id
+            && self.patient_id == other.patient_id
+            && self.study_uid == other.study_uid
+            && self.series_uid == other.series_uid
+            && self.sop_uid == other.sop_uid
+    }
+}

@@ -1,3 +1,4 @@
+use crate::change_file_transfer::convert_ts_with_pixel_data;
 use crate::database_entities::{
     DicomObjectMeta, ImageEntity, PatientEntity, SeriesEntity, StudyEntity,
 };
@@ -5,6 +6,7 @@ use crate::database_provider_base::DbProviderBase;
 use dicom_dictionary_std::tags;
 use dicom_object::ReadError;
 use std::collections::{HashMap, HashSet};
+use std::fs;
 
 pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let path = std::path::Path::new(p0);
@@ -31,7 +33,7 @@ pub fn collect_dicom_files(
     dicom_files: &mut Vec<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // 读取目录项
-    let entries = std::fs::read_dir(dir_path)?;
+    let entries = fs::read_dir(dir_path)?;
 
     for entry in entries {
         let entry = entry?;
@@ -148,7 +150,7 @@ pub fn get_unique_tenant_ids(message: &[DicomObjectMeta]) -> Vec<String> {
 
 // 获取消息组中所有不同的 tenant_id
 
-pub fn group_dicom_messages(
+pub async fn group_dicom_messages(
     messages: &[DicomObjectMeta],
 ) -> Result<
     (
@@ -156,6 +158,7 @@ pub fn group_dicom_messages(
         Vec<StudyEntity>,
         Vec<SeriesEntity>,
         Vec<ImageEntity>,
+        Vec<DicomObjectMeta>,
     ),
     ReadError,
 > {
@@ -167,8 +170,40 @@ pub fn group_dicom_messages(
     let mut study_entities: Vec<StudyEntity> = Vec::new();
     let mut series_entities: Vec<SeriesEntity> = Vec::new();
     let mut image_entities: Vec<ImageEntity> = Vec::new();
+    let mut failed_messages: Vec<DicomObjectMeta> = Vec::new();
+
+    {
+        //-------------对所有的DICOM文件进行转码------
+        for dcm_msg in messages {
+            let target_path = format!("./{}.dcm", dcm_msg.sop_uid);
+            let src_file = dcm_msg.file_path.as_str();
+            let src_sz = dcm_msg.file_size as usize;
+            // 处理文件转换
+            let conversion_result =
+                convert_ts_with_pixel_data(src_file, src_sz, &target_path, true);
+            if let Err(e) = conversion_result.await {
+                tracing::error!("Change Dicom TransferSyntax To RLE Failed: {:?}", e);
+                failed_messages.push(dcm_msg.clone());
+                // 继续处理下一条消息
+                continue;
+            }
+            // 转换成功，删除临时文件
+            if let Err(remove_err) = fs::remove_file(&target_path) {
+                tracing::error!(
+                    "Failed to delete temporary file {}: {:?}",
+                    target_path,
+                    remove_err
+                );
+                // 即使删除失败也继续处理
+            }
+        }
+    }
 
     for message in messages {
+        // todo: 剔除在 failed_messages 列表中的消息
+        if failed_messages.contains(message) {
+            continue;
+        }
         match dicom_object::OpenFileOptions::new()
             .read_until(tags::PIXEL_DATA)
             .open_file(&message.file_path)
@@ -239,7 +274,7 @@ pub fn group_dicom_messages(
                     message.series_uid.as_str(),
                 ) {
                     Some(mut p) => {
-                        p.space_size =  Some(message.file_size ) ;
+                        p.space_size = Some(message.file_size);
                         p.transfer_syntax_uid = message.transfer_synatx_uid.clone();
                         image_entities.push(p);
                     }
@@ -250,11 +285,7 @@ pub fn group_dicom_messages(
             }
             Err(_) => {
                 // 记录错误但继续处理其他文件
-                eprintln!(
-                    "Failed to open DICOM file: {}",
-                    message.file_path,
-                );
-                continue;
+                failed_messages.push(message.clone());
             }
         }
     }
@@ -264,5 +295,6 @@ pub fn group_dicom_messages(
         study_entities,
         series_entities,
         image_entities,
+        failed_messages,
     ))
 }

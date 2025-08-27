@@ -12,6 +12,7 @@ pub mod dicom_json_helper;
 pub mod database_provider_base;
 pub mod message_sender;
 pub mod message_sender_kafka;
+pub mod change_file_transfer;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DicomMessage {

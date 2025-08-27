@@ -1,5 +1,4 @@
 mod change_consumer;
-mod change_file_transfer;
 
 use common::utils::setup_logging;
 use crate::change_consumer::start_process;
