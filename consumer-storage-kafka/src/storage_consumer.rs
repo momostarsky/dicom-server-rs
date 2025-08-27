@@ -1,5 +1,5 @@
 use common::database_entities::DicomObjectMeta;
-use common::utils::{get_unique_tenant_ids, group_dicom_messages};
+use common::utils::{process_storage_messages};
 use common::{database_factory, server_config};
 use futures::StreamExt;
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
@@ -232,11 +232,6 @@ async fn persist_message_loop(
             tokio::time::sleep(Duration::from_secs(1)).await;
             continue;
         }
-        tracing::info!("Processing batch of {} messages", messages_to_process.len());
-
-        // 获取所有不同的 tenant_id
-        let unique_tenant_ids = get_unique_tenant_ids(&messages_to_process);
-        tracing::info!("Processing data for tenant IDs: {:?}", unique_tenant_ids);
 
         // 创建数据库提供者
         let db_provider = match database_factory::create_db_instance().await {
@@ -248,29 +243,7 @@ async fn persist_message_loop(
                 continue;
             }
         };
-
-        for tenant_id in unique_tenant_ids {
-            let tenant_msg = messages_to_process
-                .iter()
-                .filter(|m| m.tenant_id == tenant_id)
-                .cloned()
-                .collect::<Vec<_>>();
-            let (patients, studies, series, images, failed_messages) =
-                group_dicom_messages(&tenant_msg)
-                    .await
-                    .expect("分组处理dicom消息失败");
-
-            db_provider
-                .save_dicommeta_info(&failed_messages)
-                .await
-                .expect("解析DICOM信息成功但是文件个数和消息个数不对,并写入数据库失败!");
-
-            db_provider
-                .persist_to_database(tenant_id.as_str(), &patients, &studies, &series, &images)
-                .await
-                .expect("解析DICOM信息成功但是写入数据库失败!");
-        }
-
+        process_storage_messages(&messages_to_process, &db_provider).await;
         // 更新最后处理时间
         {
             let mut time = last_process_time.lock().unwrap();

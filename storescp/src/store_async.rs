@@ -12,6 +12,7 @@ use dicom_ul::{pdu::PDataValueType, Pdu};
 
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
+use common::utils::publish_messages;
 use tracing::log::error;
 use tracing::{debug, info, warn};
 
@@ -86,10 +87,6 @@ pub async fn run_store_async(
     let queue_config = app_config.message_queue.unwrap();
 
     let storage_producer = KafkaMessagePublisher::new(queue_config.topic_main);
-
-    let multi_frames_producer = KafkaMessagePublisher::new(queue_config.topic_multi_frames);
-
-    let change_ts_producer = KafkaMessagePublisher::new(queue_config.topic_change_transfer_syntax);
 
     let mut dicom_message_lists: Vec<common::database_entities::DicomObjectMeta> = vec![];
     loop {
@@ -229,13 +226,8 @@ pub async fn run_store_async(
                                     }
                                 }
                                 if dicom_message_lists.len() >= 10 {
-                                    match dicom_file_handler::publish_messages(
-                                        &storage_producer,
-                                        Some(&multi_frames_producer),
-                                        Some(&change_ts_producer),
-                                        &dicom_message_lists,
-                                    )
-                                    .await
+                                    match publish_messages(&storage_producer, &dicom_message_lists)
+                                        .await
                                     {
                                         Ok(_) => {
                                             info!("Successfully published messages to Kafka");
@@ -323,24 +315,15 @@ pub async fn run_store_async(
     } else {
         info!("Dropping connection with {}", association.client_ae_title());
     }
-    if dicom_message_lists.len() > 0 {
-        match dicom_file_handler::publish_messages(
-            &storage_producer,
-            Some(&multi_frames_producer),
-            Some(&change_ts_producer),
-            &dicom_message_lists,
-        )
-        .await
-        {
-            Ok(_) => {
-                info!("Successfully published messages to Kafka");
-            }
-            Err(e) => {
-                error!("Failed to publish messages to Kafka: {}", e);
-            }
+
+    match publish_messages(&storage_producer, &dicom_message_lists).await {
+        Ok(_) => {
+            info!("Successfully published messages to Kafka");
         }
-    } else {
-        info!("No messages to publish to Kafka");
+        Err(e) => {
+            error!("Failed to publish messages to Kafka: {}", e);
+        }
     }
+
     Ok(())
 }

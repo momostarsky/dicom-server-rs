@@ -8,7 +8,6 @@ use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use std::path::PathBuf;
 use tracing::info;
-use tracing::log::error;
 
 pub(crate) async fn process_dicom_file(
     instance_buffer: &[u8],    //DICOM文件的字节数组或是二进制流
@@ -137,101 +136,5 @@ pub(crate) async fn process_dicom_file(
         created_time: None,
         updated_time: None,
     });
-    Ok(())
-}
-
-// 发布消息到消息队列
-// parameters:
-// storage_producer: 用于存储的消息生产者
-// multi_frames_producer: 用于多帧图像处理的消息生产者
-// chgts_producer: 用于传输语法转换的消息生产
-// dicom_message_lists: 包含DICOM对象元数据的列表
-
-pub(crate) async fn publish_messages(
-    storage_producer: &dyn MessagePublisher,
-    multi_frames_producer: Option<&dyn MessagePublisher>,
-    chage_ts_producer: Option<&dyn MessagePublisher>,
-    dicom_message_lists: &Vec<DicomObjectMeta>,
-) -> Result<(), Whatever> {
-    if dicom_message_lists.is_empty() {
-        return Ok(());
-    }
-    match storage_producer
-        .send_batch_messages(&dicom_message_lists)
-        .await
-    {
-        Ok(_) => {
-            info!("Successfully sent messages to Kafka");
-        }
-        Err(e) => {
-            error!("Failed to send messages to Kafka: {}", e);
-        }
-    }
-
-    if multi_frames_producer.is_none() && chage_ts_producer.is_none() {
-        return Ok(());
-    }
-
-    match chage_ts_producer {
-        Some(producer) => {
-            info!("chgts_kafka_producer is not None");
-            //----需要创建一个KafkaProducer单独处理多帧图像
-            //----多帧会进行CHGTS转换
-            let chgts_messages: Vec<_> = dicom_message_lists
-                .iter()
-                .filter(|msg| {
-                    msg.number_of_frames == 1
-                        && !common::cornerstonejs::SUPPORTED_TRANSFER_SYNTAXES
-                            .contains(&msg.transfer_synatx_uid.as_str())
-                })
-                .cloned()
-                .collect();
-            if chgts_messages.len() > 0 {
-                match producer.send_batch_messages(&chgts_messages).await {
-                    Ok(_) => {
-                        info!("Successfully sent messages to topic-change transfersynatx ");
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to send messages to topic-change transfersynatx : {}",
-                            e
-                        );
-                    }
-                }
-            }
-        }
-        None => {
-            info!("chgts_kafka_producer is None");
-        }
-    }
-
-    match multi_frames_producer {
-        Some(producer) => {
-            info!("multi_frames_kafka_producer is not None");
-            //----需要创建一个KafkaProducer单独处理多帧图像
-            //----多帧会对DICOM图像进行传输语法转换.
-            let multi_frame_messages: Vec<_> = dicom_message_lists
-                .iter()
-                .filter(|msg| msg.number_of_frames > 1)
-                .cloned()
-                .collect();
-
-            if multi_frame_messages.len() > 0 {
-                match producer.send_batch_messages(&multi_frame_messages).await {
-                    Ok(_) => {
-                        info!("Successfully sent messages to topic_multi_frames");
-                    }
-                    Err(e) => {
-                        error!("Failed to send messages to topic_multi_frames: {}", e);
-                    }
-                }
-            }
-        }
-        None => {
-            info!("multi_frames_kafka_producer is None");
-        }
-    }
-
-    // 添加返回语句
     Ok(())
 }

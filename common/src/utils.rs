@@ -1,12 +1,19 @@
 use crate::change_file_transfer::convert_ts_with_pixel_data;
+use crate::cornerstonejs::SUPPORTED_TRANSFER_SYNTAXES;
 use crate::database_entities::{
     DicomObjectMeta, ImageEntity, PatientEntity, SeriesEntity, StudyEntity,
 };
+use crate::database_provider::DbProvider;
 use crate::database_provider_base::DbProviderBase;
 use dicom_dictionary_std::tags;
 use dicom_object::ReadError;
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::sync::Arc;
+use dicom_encoding::snafu::Whatever;
+use log::error;
+use tracing::info;
+use crate::message_sender::MessagePublisher;
 
 pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let path = std::path::Path::new(p0);
@@ -55,43 +62,7 @@ pub fn collect_dicom_files(
 
     Ok(())
 }
-
-// pub fn setup_logging() {
-//     use tracing_subscriber::{EnvFilter, fmt, prelude::*};
-//     use tracing_appender::rolling::{RollingFileAppender, Rotation};
-//     use std::io::stdout;
-//
-//     // 创建日志文件appender，每天滚动一次
-//     let file_appender = RollingFileAppender::new(
-//         Rotation::DAILY,
-//         "./logs", // 日志文件目录
-//         "consumer-storage-kafka.log", // 日志文件名前缀
-//     );
-//
-//     // 创建控制台appender
-//     let (non_blocking_file, _guard) = tracing_appender::non_blocking(file_appender);
-//     let (non_blocking_stdout, _guard2) = tracing_appender::non_blocking(stdout());
-//
-//     // 构建日志订阅者
-//     tracing_subscriber::registry()
-//         .with(EnvFilter::from_default_env())
-//         .with(
-//             fmt::layer()
-//                 .with_writer(non_blocking_file.with_max_level(tracing::Level::INFO)) // 文件日志记录INFO及以上级别
-//                 .with_ansi(false) // 文件日志不使用ANSI颜色
-//         )
-//         .with(
-//             fmt::layer()
-//                 .with_writer(non_blocking_stdout.with_max_level(tracing::Level::DEBUG)) // 控制台日志记录DEBUG及以上级别
-//                 .with_ansi(true) // 控制台日志使用ANSI颜色
-//         )
-//         .init();
-//
-//     // 将guard存储在全局变量中以防止被释放
-//     std::mem::forget(_guard);
-//     std::mem::forget(_guard2);
-// }
-
+// 设置日志记录，日志文件按大小滚动，保留最近7个文件
 pub fn setup_logging(policy_name: &str) {
     use log::LevelFilter;
     use log4rs::append::console::ConsoleAppender;
@@ -149,7 +120,6 @@ pub fn get_unique_tenant_ids(message: &[DicomObjectMeta]) -> Vec<String> {
 }
 
 // 获取消息组中所有不同的 tenant_id
-
 pub async fn group_dicom_messages(
     messages: &[DicomObjectMeta],
 ) -> Result<
@@ -176,13 +146,19 @@ pub async fn group_dicom_messages(
     {
         //-------------对所有的DICOM文件进行转码------
         for dcm_msg in messages {
+            let support_ts =
+                SUPPORTED_TRANSFER_SYNTAXES.contains(&dcm_msg.transfer_synatx_uid.as_str());
+            if support_ts {
+                continue;
+            }
+
             let target_path = format!("./{}.dcm", dcm_msg.sop_uid);
             let src_file = dcm_msg.file_path.as_str();
             let src_sz = dcm_msg.file_size as usize;
             // 处理文件转换
             let conversion_result =
-                convert_ts_with_pixel_data(src_file, src_sz, &target_path, true);
-            if let Err(e) = conversion_result.await {
+                convert_ts_with_pixel_data(src_file, src_sz, &target_path, true).await;
+            if let Err(e) = conversion_result {
                 tracing::error!("Change Dicom TransferSyntax To RLE Failed: {:?}", e);
                 if !failed_message_set.contains(dcm_msg) {
                     failed_messages.push(dcm_msg.clone());
@@ -204,7 +180,7 @@ pub async fn group_dicom_messages(
     }
 
     for message in messages {
-        // todo: 不处理在 failed_messages 列表中的消息
+        // 不处理在 failed_messages 列表中的消息
         if failed_message_set.contains(message) {
             continue;
         }
@@ -253,10 +229,10 @@ pub async fn group_dicom_messages(
                     }
                     Err(e) => {
                         tracing::warn!(
-                                "Failed to extract study entity from file '{}': {}",
-                                message.file_path ,
-                                e
-                            );
+                            "Failed to extract study entity from file '{}': {}",
+                            message.file_path,
+                            e
+                        );
                         if !failed_message_set.contains(message) {
                             failed_messages.push(message.clone());
                             failed_message_set.insert(message);
@@ -277,10 +253,10 @@ pub async fn group_dicom_messages(
                     }
                     Err(e) => {
                         tracing::warn!(
-                                "Failed to extract series entity from file '{}': {}",
-                                message.file_path ,
-                                e
-                            );
+                            "Failed to extract series entity from file '{}': {}",
+                            message.file_path,
+                            e
+                        );
                         if !failed_message_set.contains(message) {
                             failed_messages.push(message.clone());
                             failed_message_set.insert(message);
@@ -307,7 +283,7 @@ pub async fn group_dicom_messages(
                     Err(e) => {
                         tracing::warn!(
                             "Failed to extract image entity from file '{}': {}",
-                            message.file_path ,
+                            message.file_path,
                             e
                         );
                         if !failed_message_set.contains(message) {
@@ -336,3 +312,95 @@ pub async fn group_dicom_messages(
         failed_messages,
     ))
 }
+
+// 处理 主要队列  topic_main 的消息
+pub async fn process_storage_messages(
+    messages_to_process: &[DicomObjectMeta],
+    db_provider: &Arc<dyn DbProvider>,
+) {
+    if messages_to_process.is_empty() {
+        return;
+    }
+    tracing::info!("Processing batch of {} messages", messages_to_process.len());
+    let unique_tenant_ids = get_unique_tenant_ids(&messages_to_process);
+    tracing::info!("Processing data for tenant IDs: {:?}", unique_tenant_ids);
+
+    for tenant_id in unique_tenant_ids {
+        let tenant_msg = messages_to_process
+            .iter()
+            .filter(|m| m.tenant_id == tenant_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        match group_dicom_messages(&tenant_msg).await {
+            Ok((patients, studies, series, images, failed_messages)) => {
+                // 保存失败的消息到数据库
+                if !failed_messages.is_empty() {
+                    if let Err(e) = db_provider.save_dicommeta_info(&failed_messages).await {
+                        tracing::error!("Failed to save failed messages to database: {}", e);
+                    }
+                }
+
+                // 持久化成功提取的数据到数据库
+                if let Err(e) = db_provider
+                    .persist_to_database(tenant_id.as_str(), &patients, &studies, &series, &images)
+                    .await
+                {
+                    tracing::error!(
+                        "Failed to persist DICOM data to database for tenant {}: {}",
+                        tenant_id,
+                        e
+                    );
+                    // 将所有消息标记为失败并保存到数据库
+                    if let Err(save_err) = db_provider.save_dicommeta_info(&tenant_msg).await {
+                        tracing::error!(
+                            "Failed to save tenant messages to failed table: {}",
+                            save_err
+                        );
+                    }
+                    continue;
+                }
+
+                tracing::info!("Successfully processed data for tenant {}", tenant_id);
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Failed to group DICOM messages for tenant {}: {}",
+                    tenant_id,
+                    e
+                );
+                // 当分组处理失败时，将所有消息保存到失败表中
+                if let Err(save_err) = db_provider.save_dicommeta_info(&tenant_msg).await {
+                    tracing::error!(
+                        "Failed to save tenant messages to failed table after group failure: {}",
+                        save_err
+                    );
+                }
+                continue;
+            }
+        }
+    }
+}
+
+
+pub async fn publish_messages(
+    message_producer: &dyn MessagePublisher,
+    dicom_message_lists: &[DicomObjectMeta],
+) -> Result<(), Whatever> {
+    if dicom_message_lists.is_empty() {
+        return Ok(());
+    }
+    match message_producer
+        .send_batch_messages(&dicom_message_lists)
+        .await
+    {
+        Ok(_) => {
+            info!("Successfully publish_messages");
+        }
+        Err(e) => {
+            error!("Failed to publish_messages: {}", e);
+        }
+    }
+    Ok(())
+}
+
+

@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
+// cornerstonejs 支持的传输语法
+//参考: https://github.com/cornerstonejs/cornerstoneWADOImageLoader/blob/main/src/imageLoader/wadouri/getTransferSyntax.js
 pub static SUPPORTED_TRANSFER_SYNTAXES: LazyLock<HashSet<&'static str>> =
     LazyLock::new(supported_transfer_syntaies);
 // cornerstonejs 支持的传输语法
