@@ -24,6 +24,7 @@ impl std::fmt::Display for ChangeStatus {
 impl std::error::Error for ChangeStatus {}
 
 //修改传输语法为 RLELossless
+// 建议:采用FO_DICOM库提供的转换接口方式, 可以通过gRPC模式调用
 pub async fn convert_ts_with_pixel_data(
     src_file: &str,
     file_size: usize,
