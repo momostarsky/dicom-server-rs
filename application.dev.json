@@ -9,7 +9,10 @@
   },
   "server": {
     "port": 8080,
-    "host": "0.0.0.0"
+    "host": "0.0.0.0",
+    "allow_origin": [
+      "*"
+    ]
   },
   "local_storage": {
     "type": "DISK",
@@ -35,5 +38,4 @@
     "linger_ms": "100",
     "compression_codec": "snappy"
   }
-
 }

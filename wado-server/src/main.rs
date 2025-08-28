@@ -81,12 +81,27 @@ async fn main() -> std::io::Result<()> {
     };
 
     HttpServer::new(move || {
-        let cors = Cors::default()
-            .allow_any_origin() // 🚨 开发环境可用，生产环境不推荐
+        let mut cors = Cors::default()
             .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
             .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
             .allowed_header(http::header::CONTENT_TYPE)
             .max_age(3600);
+
+        // 根据配置设置允许的origin
+        if !server_config.allow_origin.is_empty() {
+            for origin in &server_config.allow_origin {
+                if origin == "*" {
+                    cors = cors.allow_any_origin();
+                    break;
+                } else {
+                    cors = cors.allowed_origin(origin);
+                }
+            }
+        } else {
+            // 如果没有配置，则默认只允许localhost（保持原有行为）
+            cors = cors.allowed_origin_fn(|origin, _req_head| origin.as_bytes().starts_with(b"http://localhost"));
+        }
+
 
         App::new()
             .wrap(cors)

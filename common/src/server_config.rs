@@ -18,6 +18,7 @@ pub struct DatabaseConfig {
 pub struct ServerConfig {
     pub port: u16,
     pub host: String,
+    pub allow_origin: Vec<String>,
 }
 // "local_storage":{
 // "type": "DISK",
@@ -64,6 +65,7 @@ pub struct AppConfig {
     pub dicom_store_scp: Option<DicomStoreScpConfig>,
     pub message_queue: Option<MessageQueueConfig>,
 }
+
 
 static APP_ENV: &str = "APP_ENV";
 static APP_PREFIX: &str = "DICOM";
@@ -114,6 +116,7 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
         } => {
             println!("server:port {:?}", server.port);
             println!("server:host {:?}", server.host);
+            println!("server:log_level {:?}", server.allow_origin);
         }
         AppConfig {
             local_storage: Some(local_storage),
