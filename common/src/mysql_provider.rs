@@ -466,59 +466,16 @@ impl DbProvider for MySqlProvider {
         dicom_obj: &DefaultDicomObject,
     ) -> Result<(), DbError> {
         let tenant_id = tenant_id.to_string();
-
         // 使用 DbProviderBase 提取实体信息
-        let patient_entity = match DbProviderBase::extract_patient_entity(&tenant_id, dicom_obj) {
-            Ok(patient_entity) => patient_entity,
-            Err( e ) => {
-                error!("Failed to extract patient entity.");
-                return Err(DbError::ExtractionFailed(
-                    e.to_string()
-                ));
-            }
-        };
+        let (patient, study, series, image) =
+            match DbProviderBase::extract_entity(&tenant_id, dicom_obj) {
+                Ok(entities) => entities,
+                Err(e) => {
+                    error!("Failed to extract DICOM entities: {}", e);
+                    return Err(DbError::ExtractionFailed(e.to_string()));
+                }
+            };
 
-        let study_entity = match DbProviderBase::extract_study_entity(
-            &tenant_id,
-            dicom_obj,
-            &patient_entity.patient_id,
-        ) {
-            Ok(study_entity) => study_entity,
-            Err(e) => {
-                error!("Failed to extract study entity.");
-                return Err(DbError::ExtractionFailed(
-                     e.to_string()
-                ));
-            }
-        };
-        let series_entity = match DbProviderBase::extract_series_entity(
-            &tenant_id,
-            dicom_obj,
-            &study_entity.study_instance_uid,
-        ) {
-            Ok(series_entity) => series_entity,
-            Err( e) => {
-                error!("Failed to extract series entity.");
-                return Err(DbError::ExtractionFailed(
-                    e.to_string()
-                ));
-            }
-        };
-        let image_entity = match DbProviderBase::extract_image_entity(
-            &tenant_id,
-            dicom_obj,
-            &patient_entity.patient_id,
-            &study_entity.study_instance_uid,
-            &series_entity.series_instance_uid,
-        ) {
-            Ok(image_entity) => image_entity,
-            Err(e) => {
-                error!("Failed to extract image entity.");
-                return Err(DbError::ExtractionFailed(
-                    e.to_string()
-                ));
-            }
-        };
         let pool = self.pool.clone();
 
         // 开始事务
@@ -531,10 +488,10 @@ impl DbProvider for MySqlProvider {
                 ));
             }
         };
-        let sop_uid = image_entity.sop_instance_uid.clone();
+        let sop_uid = image.sop_instance_uid.clone();
         // 保存患者信息
         if let Err(e) = self
-            .save_patient_info_impl(&tenant_id, &[patient_entity], &mut tx)
+            .save_patient_info_impl(&tenant_id, &[patient], &mut tx)
             .await
         {
             error!("Failed to save patient info: {}", e);
@@ -546,7 +503,7 @@ impl DbProvider for MySqlProvider {
 
         // 保存检查信息
         if let Err(e) = self
-            .save_study_info_impl(&tenant_id, &[study_entity], &mut tx)
+            .save_study_info_impl(&tenant_id, &[study], &mut tx)
             .await
         {
             error!("Failed to save study info: {}", e);
@@ -558,7 +515,7 @@ impl DbProvider for MySqlProvider {
 
         // 保存序列信息
         if let Err(e) = self
-            .save_series_info_impl(&tenant_id, &[series_entity], &mut tx)
+            .save_series_info_impl(&tenant_id, &[series], &mut tx)
             .await
         {
             error!("Failed to save series info: {}", e);
@@ -570,7 +527,7 @@ impl DbProvider for MySqlProvider {
 
         // 保存实例信息
         if let Err(e) = self
-            .save_instance_info_impl(&tenant_id, &[image_entity], &mut tx)
+            .save_instance_info_impl(&tenant_id, &[image], &mut tx)
             .await
         {
             error!("Failed to save instance info: {}", e);

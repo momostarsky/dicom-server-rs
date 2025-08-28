@@ -1,6 +1,5 @@
 use common::database_entities::DicomObjectMeta;
 use common::dicom_utils::get_tag_value;
-use common::message_sender::MessagePublisher;
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu::{ResultExt, Whatever};
 use dicom_encoding::TransferSyntaxIndex;
@@ -53,6 +52,18 @@ pub(crate) async fn process_dicom_file(
         .whatever_context("could not retrieve SOP_INSTANCE_UID")?
         .trim_end_matches("\0")
         .to_string();
+
+    // obj
+    //     .element(tags::STUDY_DATE)
+    //     .whatever_context("Missing STUDY_DATE")?
+    //     .to_str()
+    //     .whatever_context("could not retrieve STUDY_DATE")? ;
+    // obj
+    //     .element(tags::MODALITY)
+    //     .whatever_context("Missing MODALITY")?
+    //     .to_str()
+    //     .whatever_context("could not retrieve MODALITY")? ;
+
     let frames = get_tag_value(tags::NUMBER_OF_FRAMES, &obj, 1);
     info!(
         "Issur:{} ,PatientID: {}, StudyUID: {}, SeriesUID: {}, SopUID: {}",

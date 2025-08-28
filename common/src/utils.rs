@@ -5,15 +5,15 @@ use crate::database_entities::{
 };
 use crate::database_provider::DbProvider;
 use crate::database_provider_base::DbProviderBase;
+use crate::message_sender::MessagePublisher;
 use dicom_dictionary_std::tags;
+use dicom_encoding::snafu::Whatever;
 use dicom_object::ReadError;
+use log::error;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::sync::Arc;
-use dicom_encoding::snafu::Whatever;
-use log::error;
 use tracing::info;
-use crate::message_sender::MessagePublisher;
 
 pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let path = std::path::Path::new(p0);
@@ -381,7 +381,7 @@ pub async fn process_storage_messages(
     }
 }
 
-
+// 发送消息到指定队列
 pub async fn publish_messages(
     message_producer: &dyn MessagePublisher,
     dicom_message_lists: &[DicomObjectMeta],
@@ -402,5 +402,3 @@ pub async fn publish_messages(
     }
     Ok(())
 }
-
-

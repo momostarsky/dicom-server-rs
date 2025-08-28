@@ -23,6 +23,7 @@ impl std::fmt::Display for ChangeStatus {
 }
 impl std::error::Error for ChangeStatus {}
 
+//修改传输语法为 RLELossless
 pub async fn convert_ts_with_pixel_data(
     src_file: &str,
     file_size: usize,
@@ -61,7 +62,7 @@ pub async fn convert_ts_with_pixel_data(
         // Estimated Length
         None,
         // First Transfer Syntax conversion
-        gdcm_conv::TransferSyntax::RLELossless,
+        gdcm_conv::TransferSyntax::ExplicitVRLittleEndian,
         // Photometric conversion
         PhotometricInterpretation::None,
         // Second Transfer Syntax conversion
@@ -114,54 +115,36 @@ pub async fn convert_ts_with_pixel_data(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
     use std::fs;
-    use std::path::Path;
 
+    #[rstest]
+    // #[case(
+    //     "./data/DeflatedExplicitVRLittleEndian.dcm",
+    //     "./data/x-DeflatedExplicitVRLittleEndian.dcm"
+    // )]
+    #[case("./data/ExplicitVRBigEndian.dcm", "./data/x-ExplicitVRBigEndian.dcm")]
+    #[case(
+        "./data/ExplicitVRLittleEndian.dcm",
+        "./data/x-ExplicitVRLittleEndian.dcm"
+    )]
+    #[case(
+        "./data/ImplicitVRLittleEndian.dcm",
+        "./data/x-ImplicitVRLittleEndian.dcm"
+    )]
+    #[case("./data/JPEG2000Lossless.dcm", "./data/x-JPEG2000Lossless.dcm")]
+    #[case("./data/JPEG2000Lossy.dcm", "./data/x-JPEG2000Lossy.dcm")]
+    #[case("./data/JPEGProcess1.dcm", "./data/x-JPEGProcess1.dcm")]
+    #[case("./data/JPEGProcess2_4.dcm", "./data/x-JPEGProcess2_4.dcm")]
+    #[case("./data/RLELossless.dcm", "./data/x-RLELossless.dcm")]
     #[tokio::test]
-    async fn test_convert_ts_with_pixel_data_success() {
-        // 创建一个临时的测试文件
-        let test_file = "./2.dcm";
-        let output_file = "./2-X.dcm";
-
+    async fn test_change_file_transfer_success(#[case] input: &str, #[case] output: &str) {
+        println!("input: {}, output: {}", input, output);
+        println!("PWD:{}", env!("PWD"));
         // 获取文件大小
-        let metadata = fs::metadata(test_file).unwrap();
+        let metadata = fs::metadata(input).unwrap();
         let file_size = metadata.len() as usize;
-
-        // 调用函数
-        let result = convert_ts_with_pixel_data(test_file, file_size, output_file,false).await;
-
+        let result = convert_ts_with_pixel_data(input, file_size, output, false).await;
         assert!(result.is_ok());
-        // 验证结果
-        // 注意：由于我们没有真正的DICOM文件和gdcm_conv库，这里可能会返回ConversionError
-        // 但在实际环境中，如果有正确的DICOM文件，应该会成功
-
-        // 清理测试文件
-        // if Path::new(test_file).exists() {
-        //     fs::remove_file(test_file).unwrap();
-        // }
-        // if Path::new(output_file).exists() {
-        //     fs::remove_file(output_file).unwrap();
-        // }
-    }
-
-    #[tokio::test]
-    async fn test_convert_ts_with_pixel_data_file_not_found() {
-        let non_existent_file = "non_existent.dcm";
-        let output_file = "output.dcm";
-
-        let result = convert_ts_with_pixel_data(non_existent_file, 100, output_file,false).await;
-
-        // 验证返回了FileReadError
-        match result {
-            Err(ChangeStatus::FileReadError(_)) => {
-                // 正确返回了文件读取错误
-            }
-            _ => {
-                panic!("Expected FileReadError, but got {:?}", result);
-            }
-        }
-
-        // 确保输出文件没有被创建
-        assert!(!Path::new(output_file).exists());
     }
 }

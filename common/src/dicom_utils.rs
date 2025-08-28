@@ -7,7 +7,7 @@ pub fn get_text_value(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<String> 
         .element(tag)
         .ok()
         .and_then(|e| e.to_str().ok())
-        .map(|s| s.trim_end_matches('\0').to_string())
+        .map(|s| s.trim_end_matches(|c| c == ' ' || c == '\0').to_string()) // 正确处理尾部空格和\0字符
 }
 
 pub fn get_date_value(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<String> {
@@ -41,9 +41,9 @@ pub fn get_date_value_dicom(
 pub fn get_time_value_dicom(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<NaiveTime> {
     get_text_value(dicom_obj, tag).and_then(|s| {
         // 简单处理时间格式，实际可能需要更复杂的解析
-        println!("get_time_value_dicom: {}", s);
+
         if !s.is_empty() {
-            match NaiveTime::parse_from_str(&s[..], "%H%M%S%.6f") {
+            match NaiveTime::parse_from_str(&s[..], "%H%M%S%.f") {
                 Ok(date) => Some(date),
                 Err(_) => None,
             }
@@ -56,9 +56,9 @@ pub fn get_time_value_dicom(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<Na
 pub fn get_datetime_value_dicom(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<NaiveDateTime> {
     get_text_value(dicom_obj, tag).and_then(|s| {
         // 简单处理时间格式，实际可能需要更复杂的解析
-        println!("get_datetime_value_dicom: {}", s);
+
         if !s.is_empty() {
-            match NaiveDateTime::parse_from_str(&s[..], "%Y%m%d%H%M%S%.6f") {
+            match NaiveDateTime::parse_from_str(&s[..], "%Y%m%d%H%M%S%.f") {
                 Ok(date) => Some(date),
                 Err(_) => None,
             }
@@ -76,7 +76,7 @@ pub fn parse_dicom_date_from_sql(s: &str) -> Option<NaiveDate> {
 }
 
 pub  fn parse_dicom_time_from_sql(s: &str) -> Option<NaiveTime> {
-    match NaiveTime::parse_from_str(&s[..], "%H:%M:%S%.6f") {
+    match NaiveTime::parse_from_str(&s[..], "%H:%M:%S%.f") {
         Ok(date) => Some(date),
         Err(_) => None,
     }
@@ -102,6 +102,7 @@ where
         .ok()
         .flatten()
         .and_then(|e| e.to_str().ok())
+        .map(|s| s.trim_end_matches(|c| c == ' ' || c == '\0').to_string()) // 正确处理尾部空格和\0字符
         .and_then(|s| s.parse::<T>().ok())
         .unwrap_or(def_value)
 }
@@ -115,6 +116,7 @@ where
         .ok()
         .flatten()
         .and_then(|e| e.to_str().ok())
+        .map(|s| s.trim_end_matches(|c| c == ' ' || c == '\0').to_string()) // 正确处理尾部空格和\0字符
         .and_then(|s| {
             let mut result = vec![];
             for s in s.trim_end().split("\\") {

@@ -230,10 +230,10 @@ pub async fn run_store_async(
                                         .await
                                     {
                                         Ok(_) => {
-                                            info!("Successfully published messages to Kafka");
+                                            info!("Successfully published messages to MessageQueue");
                                         }
                                         Err(e) => {
-                                            error!("Failed to publish messages to Kafka: {}", e);
+                                            error!("Failed to publish messages to MessageQueue: {}", e);
                                         }
                                     }
                                     dicom_message_lists.clear();
