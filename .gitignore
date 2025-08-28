@@ -54,3 +54,11 @@ target/release
 */.next/cache
 */.next/server/pages
 */.next/server/static
+/common/data/x-ImplicitVRLittleEndian.dcm
+/common/data/x-ExplicitVRBigEndian.dcm
+/common/data/x-ExplicitVRLittleEndian.dcm
+/common/data/x-JPEG2000Lossless.dcm
+/common/data/x-JPEG2000Lossy.dcm
+/common/data/x-JPEGProcess1.dcm
+/common/data/x-JPEGProcess2_4.dcm
+/common/data/x-RLELossless.dcm
