@@ -4,7 +4,6 @@ use crate::{
 };
 
 use dicom_dictionary_std::tags;
-use dicom_encoding::snafu;
 use dicom_encoding::snafu::{OptionExt, Report, ResultExt, Whatever};
 use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
@@ -275,7 +274,7 @@ pub async fn run_store_async(
                         association.send(&Pdu::ReleaseRP).await.unwrap_or_else(|e| {
                             warn!(
                                 "Failed to send association release message to SCU: {}",
-                                snafu::Report::from_error(e)
+                                Report::from_error(e)
                             );
                         });
                         info!(
