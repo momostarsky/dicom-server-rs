@@ -135,6 +135,7 @@ pub trait DbProvider: Send + Sync {
         images_list: &[ImageEntity],
     ) -> Result<(), DbError>;
 
-    // 获取患者信息
+
     async fn get_study_info(&self, tenant_id: &str, study_uid: &str) -> Result<Option<StudyEntity>, DbError>;
+    async fn get_series_info(&self, tenant_id: &str, series_uid: &str) -> Result<Option<SeriesEntity>, DbError>;
 }

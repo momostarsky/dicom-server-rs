@@ -883,6 +883,73 @@ impl DbProvider for MySqlProvider {
             }
         }
     }
+
+    async fn get_series_info(
+        &self,
+        tenant_id: &str,
+        series_uid: &str,
+    ) -> Result<Option<SeriesEntity>, DbError> {
+        let pool = self.pool.clone();
+
+        match sqlx::query(
+            r#"SELECT tenant_id, SeriesInstanceUID, StudyInstanceUID, PatientID, Modality, SeriesNumber,
+                    COALESCE(SeriesDate, '') as series_date,
+                    COALESCE(SeriesTime, '') as series_time,
+                    SeriesDescription, BodyPartExamined, ProtocolName,
+                    AcquisitionNumber,
+                    COALESCE(AcquisitionTime, '') as acquisition_time,
+                    COALESCE(AcquisitionDate, '') as acquisition_date,
+                    AcquisitionDateTime,
+                    PerformingPhysicianName,
+                    OperatorsName, NumberOfSeriesRelatedInstances, ReceivedInstances, SpaceSize,
+                    CreatedTime, UpdatedTime
+             FROM SeriesEntity
+             WHERE tenant_id = ? AND SeriesInstanceUID = ?"#
+        )
+            .bind(tenant_id)
+            .bind(series_uid)
+            .fetch_optional(&pool)
+            .await {
+            Ok(Some(row)) => {
+                let series = SeriesEntity {
+                    tenant_id: row.get("tenant_id"),
+                    series_instance_uid: row.get("SeriesInstanceUID"),
+                    study_instance_uid: row.get("StudyInstanceUID"),
+                    patient_id: row.get("PatientID"),
+                    modality: row.get("Modality"),
+                    series_number: row.get("SeriesNumber"),
+                    series_date: parse_dicom_date_from_sql(row.get("series_date")),
+                    series_time: parse_dicom_time_from_sql(row.get("series_time")),
+                    series_description: row.get("SeriesDescription"),
+                    body_part_examined: row.get("BodyPartExamined"),
+                    protocol_name: row.get("ProtocolName"),
+                    acquisition_number: row.get("AcquisitionNumber"),
+                    acquisition_time: parse_dicom_time_from_sql(row.get("acquisition_time")),
+                    acquisition_date: parse_dicom_date_from_sql(row.get("acquisition_date")),
+                    acquisition_date_time: row.get("AcquisitionDateTime"),
+                    performing_physician_name: row.get("PerformingPhysicianName"),
+                    operators_name: row.get("OperatorsName"),
+                    number_of_series_related_instances: row.get("NumberOfSeriesRelatedInstances"),
+                    received_instances: row.get("ReceivedInstances"),
+                    space_size: row.get("SpaceSize"),
+                    created_time: row.get("CreatedTime"),
+                    updated_time: row.get("UpdatedTime"),
+                };
+                Ok(Some(series))
+            }
+            Ok(None) => {
+                info!(
+                    "Series not found for tenant_id: {}, series_uid: {}",
+                    tenant_id, series_uid
+                );
+                Ok(None)
+            }
+            Err(e) => {
+                error!("Failed to get series info: {}", e);
+                Err(DbError::DatabaseError(e))
+            }
+        }
+    }
 }
 
 #[cfg(test)]

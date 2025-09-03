@@ -68,7 +68,7 @@ pub struct SeriesEntity {
     pub operators_name: Option<String>,
     pub number_of_series_related_instances: Option<i32>,
     pub received_instances: Option<i32>, // 新增字段
-    pub space_size: Option<u64>,         // 新增字段
+    pub space_size: Option<i64>,         // 新增字段
     pub created_time: Option<NaiveDateTime>,
     pub updated_time: Option<NaiveDateTime>,
 }

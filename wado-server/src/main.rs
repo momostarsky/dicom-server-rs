@@ -1,20 +1,17 @@
 pub mod common_utils;
 mod wado_rs_controller;
 
-use std::sync::Arc;
-use crate::wado_rs_controller::{
-    echo, manual_hello, retrieve_instance, retrieve_instance_frames, retrieve_instance_metadata,
-    retrieve_series, retrieve_series_metadata, retrieve_study, retrieve_study_metadata,
-};
+use crate::wado_rs_controller::{echo, manual_hello, retrieve_instance, retrieve_instance_frames, retrieve_instance_metadata, retrieve_series, retrieve_series_metadata, retrieve_study, retrieve_study_metadata, retrieve_study_metadata_octstream, retrieve_study_metadata_wadouri};
 use actix_cors::Cors;
-use actix_web::{web, App, HttpServer};
+use actix_web::{App, HttpServer, middleware, web};
 use common::database_provider::DbProvider;
 use common::server_config::LocalStorageConfig;
 use common::{database_factory, server_config};
 use slog;
-use slog::{error, info, o, Drain, Logger};
+use slog::{Drain, Logger, error, info, o};
 use slog_async;
 use slog_term;
+use std::sync::Arc;
 
 fn configure_log() -> Logger {
     let decorator = slog_term::TermDecorator::new().build();
@@ -32,7 +29,7 @@ fn configure_log() -> Logger {
 struct AppState {
     log: Logger,
     local_storage_config: LocalStorageConfig,
-    db:  Arc<dyn DbProvider + Send + Sync>,
+    db: Arc<dyn DbProvider + Send + Sync>,
     // 可以添加其他配置
 }
 
@@ -77,7 +74,7 @@ async fn main() -> std::io::Result<()> {
     let app_state = AppState {
         log: log.clone(),
         local_storage_config: local_storage_config.clone(),
-        db:db_instance as Arc<dyn DbProvider + Send + Sync>,  // 正确的类型转换
+        db: db_instance as Arc<dyn DbProvider + Send + Sync>, // 正确的类型转换
     };
 
     HttpServer::new(move || {
@@ -99,15 +96,20 @@ async fn main() -> std::io::Result<()> {
             }
         } else {
             // 如果没有配置，则默认只允许localhost（保持原有行为）
-            cors = cors.allowed_origin_fn(|origin, _req_head| origin.as_bytes().starts_with(b"http://localhost"));
+            cors = cors.allowed_origin_fn(|origin, _req_head| {
+                origin.as_bytes().starts_with(b"http://localhost")
+            });
         }
 
-
         App::new()
+            // 使用.wrap()方法添加Compress中间件
+            .wrap(middleware::Compress::default())
             .wrap(cors)
             .app_data(web::Data::new(app_state.clone()))
             .service(retrieve_study)
             .service(retrieve_study_metadata)
+            .service(retrieve_study_metadata_octstream)
+            .service(retrieve_study_metadata_wadouri)
             .service(retrieve_series)
             .service(retrieve_series_metadata)
             .service(retrieve_instance)
