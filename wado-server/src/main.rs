@@ -108,8 +108,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(app_state.clone()))
             .service(retrieve_study)
             .service(retrieve_study_metadata)
-            .service(retrieve_study_metadata_octstream)
-            .service(retrieve_study_metadata_wadouri)
+         
             .service(retrieve_series)
             .service(retrieve_series_metadata)
             .service(retrieve_instance)
