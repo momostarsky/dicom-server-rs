@@ -83,7 +83,7 @@ pub async fn run_store_async(
 
     let app_config = server_config::load_config().whatever_context("failed to load config")?;
 
-    let queue_config = app_config.message_queue.unwrap();
+    let queue_config = app_config.message_queue ;
 
     let storage_producer = KafkaMessagePublisher::new(queue_config.topic_main);
 

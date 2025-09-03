@@ -17,17 +17,12 @@ pub async fn create_db_instance() -> Option<Arc<dyn DbProvider>> {
             std::process::exit(-2);
         }
     };
-    let db_type = match &config.database {
-        Some(database) => database.dbtype.to_lowercase(),
-        None => {
-            error!("database config not found");
-            std::process::exit(-2);
-        }
-    };
+    let db_type = config.database.dbtype.to_lowercase();
     if db_type != "mysql" {
         error!("only mysql is supported");
         std::process::exit(-2);
     }
+
 
     let conn_url = match server_config::generate_database_connection(&config) {
         Ok(url) => url,

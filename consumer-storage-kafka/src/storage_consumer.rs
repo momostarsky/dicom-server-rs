@@ -39,23 +39,11 @@ pub async fn start_process() {
         }
     }
 
-    let kafka_config_opt = config.kafka;
-    let kafka_config = match kafka_config_opt {
-        None => {
-            error!("kafka config is None");
-            std::process::exit(-2);
-        }
-        Some(kafka_config) => kafka_config,
-    };
+    let kafka_config = config.kafka;
 
-    let queue_config_opt = config.message_queue;
-    let queue_config = match queue_config_opt {
-        None => {
-            error!("message queue config is None");
-            std::process::exit(-2);
-        }
-        Some(queue_config) => queue_config,
-    };
+
+    let queue_config = config.message_queue;
+
 
     // 配置消费者
     let consumer: StreamConsumer = ClientConfig::new()

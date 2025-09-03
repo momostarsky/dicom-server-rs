@@ -3,13 +3,15 @@ use dotenv::dotenv;
 use serde::Deserialize;
 use std::env;
 
-#[derive(Debug, Deserialize,Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct RedisConfig {
-    pub url: String, //连接地址
+    pub url: String,            //连接地址
+    pub passwd: Option<String>, //密码
+    pub is_lts: Option<bool>,   //是否启动TLS
 }
 
 // 定义配置结构体
-#[derive(Debug, Deserialize,Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct DatabaseConfig {
     pub dbtype: String, //数据库类型 POSTGRES  MYSQL SQLITE
     pub host: String,
@@ -19,7 +21,7 @@ pub struct DatabaseConfig {
     pub database: String,
 }
 
-#[derive(Debug, Deserialize,Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ServerConfig {
     pub port: u16,
     pub host: String,
@@ -36,13 +38,13 @@ pub struct LocalStorageConfig {
     pub json_store_path: String,
 }
 
-#[derive(Debug, Deserialize,Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct DicomStoreScpConfig {
     pub port: u16,
     pub ae_title: String,
 }
 
-#[derive(Debug, Deserialize,Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct KafkaConfig {
     pub brokers: String,
     pub consumer_group_id: String,
@@ -54,22 +56,22 @@ pub struct KafkaConfig {
     pub compression_codec: String,
 }
 
-#[derive(Debug, Deserialize,Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct MessageQueueConfig {
     pub topic_main: String,
     pub topic_change_transfer_syntax: String,
     pub topic_multi_frames: String,
 }
 
-#[derive(Debug, Deserialize,Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
-    pub redis: Option<RedisConfig>,
-    pub kafka: Option<KafkaConfig>,
-    pub database: Option<DatabaseConfig>,
-    pub server: Option<ServerConfig>,
-    pub local_storage: Option<LocalStorageConfig>,
-    pub dicom_store_scp: Option<DicomStoreScpConfig>,
-    pub message_queue: Option<MessageQueueConfig>,
+    pub redis: RedisConfig,
+    pub kafka: KafkaConfig,
+    pub database: DatabaseConfig,
+    pub server: ServerConfig,
+    pub local_storage: LocalStorageConfig,
+    pub dicom_store_scp: DicomStoreScpConfig,
+    pub message_queue: MessageQueueConfig,
 }
 
 static APP_ENV: &str = "APP_ENV";
@@ -103,101 +105,76 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
 
     // 5. 解析配置到结构体
     let app_config: AppConfig = settings.try_deserialize()?;
-    match &app_config {
-        AppConfig {
-            redis: Some(redis), ..
-        } => {
-            println!("redis:url {:?}", redis.url);
-        }
-        AppConfig {
-            database: Some(database),
-            ..
-        } => {
-            println!("database:dbtype {:?}", database.dbtype);
-            println!("database:host {:?}", database.host);
-            println!("database:port {:?}", database.port);
-            println!("database:username {:?}", database.username);
-            println!("database:password {:?}", database.password);
-            println!("database:database {:?}", database.database);
-        }
-        AppConfig {
-            server: Some(server),
-            ..
-        } => {
-            println!("server:port {:?}", server.port);
-            println!("server:host {:?}", server.host);
-            println!("server:log_level {:?}", server.allow_origin);
-        }
-        AppConfig {
-            local_storage: Some(local_storage),
-            ..
-        } => {
-            println!(
-                "local_storage:dicom_store_path {:?}",
-                local_storage.dicom_store_path
-            );
-            println!(
-                "local_storage:json_store_path {:?}",
-                local_storage.json_store_path
-            );
-        }
-        AppConfig {
-            dicom_store_scp: Some(dicom_store_scp),
-            ..
-        } => {
-            println!("dicom_store_scp:port {:?}", dicom_store_scp.port);
-            println!("dicom_store_scp:ae_title {:?}", dicom_store_scp.ae_title);
-        }
-        AppConfig {
-            kafka: Some(kafka), ..
-        } => {
-            println!("kafka:brokers {:?}", kafka.brokers);
-            println!("kafka:consumer_group_id {:?}", kafka.consumer_group_id);
-            println!(
-                "kafka:queue_buffering_max_messages {:?}",
-                kafka.queue_buffering_max_messages
-            );
-            println!(
-                "kafka:queue_buffering_max_kbytes {:?}",
-                kafka.queue_buffering_max_kbytes
-            );
-            println!("kafka:batch_num_messages {:?}", kafka.batch_num_messages);
-            println!(
-                "kafka:queue_buffering_max_ms {:?}",
-                kafka.queue_buffering_max_ms
-            );
-            println!("kafka:linger_ms {:?}", kafka.linger_ms);
-            println!("kafka:compression_codec {:?}", kafka.compression_codec);
-        }
-        AppConfig {
-            message_queue: Some(message_queue),
-            ..
-        } => {
-            println!("message_queue:topic_main {:?}", message_queue.topic_main);
-            println!(
-                "message_queue:topic_change_transfer_syntax {:?}",
-                message_queue.topic_change_transfer_syntax
-            );
-            println!(
-                "message_queue:topic_multi_frames {:?}",
-                message_queue.topic_multi_frames
-            );
-        }
-        _ => {
-            println!("other config {:?}", app_config);
-        }
-    }
+
+    // 打印配置信息
+    println!("redis:url {:?}", app_config.redis.url);
+    println!("database:dbtype {:?}", app_config.database.dbtype);
+    println!("database:host {:?}", app_config.database.host);
+    println!("database:port {:?}", app_config.database.port);
+    println!("database:username {:?}", app_config.database.username);
+    println!("database:password {:?}", app_config.database.password);
+    println!("database:database {:?}", app_config.database.database);
+    println!("server:port {:?}", app_config.server.port);
+    println!("server:host {:?}", app_config.server.host);
+    println!("server:log_level {:?}", app_config.server.allow_origin);
+    println!(
+        "local_storage:dicom_store_path {:?}",
+        app_config.local_storage.dicom_store_path
+    );
+    println!(
+        "local_storage:json_store_path {:?}",
+        app_config.local_storage.json_store_path
+    );
+    println!("dicom_store_scp:port {:?}", app_config.dicom_store_scp.port);
+    println!(
+        "dicom_store_scp:ae_title {:?}",
+        app_config.dicom_store_scp.ae_title
+    );
+    println!("kafka:brokers {:?}", app_config.kafka.brokers);
+    println!(
+        "kafka:consumer_group_id {:?}",
+        app_config.kafka.consumer_group_id
+    );
+    println!(
+        "kafka:queue_buffering_max_messages {:?}",
+        app_config.kafka.queue_buffering_max_messages
+    );
+    println!(
+        "kafka:queue_buffering_max_kbytes {:?}",
+        app_config.kafka.queue_buffering_max_kbytes
+    );
+    println!(
+        "kafka:batch_num_messages {:?}",
+        app_config.kafka.batch_num_messages
+    );
+    println!(
+        "kafka:queue_buffering_max_ms {:?}",
+        app_config.kafka.queue_buffering_max_ms
+    );
+    println!("kafka:linger_ms {:?}", app_config.kafka.linger_ms);
+    println!(
+        "kafka:compression_codec {:?}",
+        app_config.kafka.compression_codec
+    );
+    println!(
+        "message_queue:topic_main {:?}",
+        app_config.message_queue.topic_main
+    );
+    println!(
+        "message_queue:topic_change_transfer_syntax {:?}",
+        app_config.message_queue.topic_change_transfer_syntax
+    );
+    println!(
+        "message_queue:topic_multi_frames {:?}",
+        app_config.message_queue.topic_multi_frames
+    );
+
     Ok(app_config)
 }
 
 pub fn generate_database_connection(app_config: &AppConfig) -> Result<String, String> {
     let dbconfig = &app_config.database;
-    if dbconfig.is_none() {
-        return Err("database config is none".to_string());
-    }
     let password = dbconfig
-        .as_ref()
-        .unwrap()
         .password
         .replace("@", "%40")
         .replace(":", "%3A")
@@ -216,12 +193,11 @@ pub fn generate_database_connection(app_config: &AppConfig) -> Result<String, St
         .replace("^", "%5E")
         .replace("`", "%60");
 
-    let cfg = dbconfig.as_ref().unwrap();
-
     let db_conn = format!(
         "mysql://{}:{}@{}:{}/{}?allowPublicKeyRetrieval=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false",
-        cfg.username, password, cfg.host, cfg.port, cfg.database
+        dbconfig.username, password, dbconfig.host, dbconfig.port, dbconfig.database
     );
     println!("database connection string: {}", db_conn);
+
     Ok(db_conn)
 }

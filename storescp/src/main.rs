@@ -124,22 +124,15 @@ async fn main() {
 
     let mut app = App::parse();
     let scp_config = config.dicom_store_scp;
-    match scp_config {
-        Some(scp_config) => {
-            app.port = scp_config.port;
 
-            app.calling_ae_title = scp_config.ae_title;
-            let store_cfg = config.local_storage;
-            if store_cfg.is_some() {
-                let store_cfg = store_cfg.unwrap();
-                app.out_dir = store_cfg.dicom_store_path.parse().unwrap();
-                app.json_store_path = store_cfg.json_store_path.parse().unwrap();
-            }
-        }
-        None => {
-            info!("dicom_cstore_scp config with default value");
-        }
-    };
+    app.port = scp_config.port;
+
+    app.calling_ae_title = scp_config.ae_title;
+    let store_cfg = config.local_storage;
+
+    app.out_dir = store_cfg.dicom_store_path.parse().unwrap();
+    app.json_store_path = store_cfg.json_store_path.parse().unwrap();
+
     let out_dir = std::fs::exists(&app.out_dir);
     if out_dir.unwrap() == false {
         std::fs::create_dir_all(&app.out_dir).unwrap_or_else(|e| {

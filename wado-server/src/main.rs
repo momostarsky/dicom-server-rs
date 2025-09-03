@@ -1,5 +1,6 @@
 pub mod common_utils;
 mod wado_rs_controller;
+mod redis_helper;
 
 use crate::wado_rs_controller::{
     echo, manual_hello, retrieve_instance, retrieve_instance_frames, retrieve_series_metadata,
@@ -51,11 +52,12 @@ async fn main() -> std::io::Result<()> {
             return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
         }
     };
+    
 
     let g_config = config.clone();
     // let db_config = config.database.unwrap();
-    let server_config = config.server.unwrap();
-    let local_storage_config = config.local_storage.unwrap();
+    let server_config = config.server ;
+    let local_storage_config = config.local_storage ;
 
     info!(
         log,

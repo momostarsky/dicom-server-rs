@@ -19,10 +19,8 @@ pub struct KafkaMessagePublisher {
 impl KafkaMessagePublisher {
     pub fn new(topic_name: String) -> Self {
         let app_config = server_config::load_config().expect("Failed to load config");
-        let config = app_config
-            .kafka
-            .ok_or("Kafka configuration is missing")
-            .expect("Kafka configuration must be provided");
+        let config = app_config.kafka;
+
         let brokers = config.brokers;
         let producer = ClientConfig::new()
             .set("bootstrap.servers", brokers)

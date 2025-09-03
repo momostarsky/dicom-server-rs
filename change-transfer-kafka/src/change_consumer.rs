@@ -1,8 +1,8 @@
-use common::change_file_transfer::{convert_ts_with_pixel_data};
+use common::change_file_transfer::convert_ts_with_pixel_data;
 use common::database_entities::DicomObjectMeta;
 use common::{database_factory, server_config};
 use dicom_dictionary_std::tags;
-use dicom_object::{OpenFileOptions};
+use dicom_object::OpenFileOptions;
 use futures::StreamExt;
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message};
@@ -41,23 +41,9 @@ pub async fn start_process() {
         }
     }
 
-    let kafka_config_opt = config.kafka;
-    let kafka_config = match kafka_config_opt {
-        None => {
-            error!("kafka config is None");
-            std::process::exit(-2);
-        }
-        Some(kafka_config) => kafka_config,
-    };
+    let kafka_config = config.kafka;
 
-    let queue_config_opt = config.message_queue;
-    let queue_config = match queue_config_opt {
-        None => {
-            error!("message queue config is None");
-            std::process::exit(-2);
-        }
-        Some(queue_config) => queue_config,
-    };
+    let queue_config = config.message_queue;
 
     // 配置消费者
     let consumer: StreamConsumer = ClientConfig::new()
@@ -254,7 +240,8 @@ async fn change_transfer_syntax(
             let src_file = dcm_msg.file_path.as_str();
             let src_sz = dcm_msg.file_size as usize;
             // 处理文件转换
-            let conversion_result = convert_ts_with_pixel_data(src_file, src_sz, &target_path,true);
+            let conversion_result =
+                convert_ts_with_pixel_data(src_file, src_sz, &target_path, true);
 
             if let Err(e) = conversion_result.await {
                 tracing::error!("Failed to process message: {:?}", e);

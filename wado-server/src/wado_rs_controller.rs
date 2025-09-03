@@ -1,10 +1,7 @@
-use crate::common_utils::{get_param_case_insensitive, parse_query_string_case_insensitive};
+use crate::redis_helper::{get_redis_value_with_config, set_redis_value_with_expiry_and_config};
 use crate::{AppState, common_utils};
-use actix_web::cookie::time::macros::time;
 use actix_web::http::header::ACCEPT;
 use actix_web::{HttpRequest, HttpResponse, Responder, get, web, web::Path};
-use chrono::Utc;
-use common::change_file_transfer::ChangeStatus;
 use common::dicom_json_helper;
 use common::dicom_json_helper::walk_directory;
 use common::dicom_utils::get_tag_values;
@@ -13,7 +10,7 @@ use serde::Deserialize;
 use serde_json::{Map, json};
 use slog::{error, info};
 use std::path::PathBuf;
-use uuid::{NoContext, Timestamp, Uuid};
+use common::database_entities::SeriesEntity;
 
 #[derive(Deserialize, Debug)]
 struct StudyQueryParams {
@@ -46,6 +43,11 @@ fn is_accept_type_supported(accept_header: &str, expected_type: &str) -> bool {
         .iter()
         .any(|&t| t.to_lowercase() == expected_type_lower)
 }
+
+fn get_redis_key_for_seirs(tenant_id: &str, series_uid: &str) -> String {
+    format!("wado:{}:{}", tenant_id, series_uid)
+}
+
 #[get("/studies/{study_instance_uid}/metadata")]
 async fn retrieve_study_metadata(
     study_instance_uid: Path<String>,
@@ -84,13 +86,7 @@ async fn retrieve_study_metadata(
         }
     };
     info!(log, "Study Info: {:?}", study_info);
-    let dicom_storage_path = app_state
-        .config
-        .local_storage
-        .as_ref()
-        .unwrap()
-        .dicom_store_path
-        .clone();
+    let dicom_storage_path = app_state.config.local_storage.dicom_store_path.clone();
     let dicom_dir = format!(
         "{}/{}/{}/{}",
         dicom_storage_path, tenant_id, study_info.patient_id, study_uid
@@ -98,13 +94,7 @@ async fn retrieve_study_metadata(
     if !std::path::Path::new(&dicom_dir).exists() {
         return HttpResponse::NotFound().body(format!("DICOM directory not found: {}", dicom_dir));
     }
-    let json_save_path = app_state
-        .config
-        .local_storage
-        .as_ref()
-        .unwrap()
-        .json_store_path
-        .clone();
+    let json_save_path = app_state.config.local_storage.json_store_path.clone();
     let json_dir = format!(
         "{}/{}/{:?}",
         json_save_path, tenant_id, study_info.study_date
@@ -178,7 +168,7 @@ async fn retrieve_series_metadata(
         ));
     }
     // ... existing code ...
-
+    let redis_key =get_redis_key_for_seirs(&*tenant_id, &*series_uid);
     let series_info = match app_state.db.get_series_info(&tenant_id, &series_uid).await {
         Ok(Some(info)) => info,
         Ok(None) => {
@@ -195,13 +185,8 @@ async fn retrieve_series_metadata(
         }
     };
     info!(log, "Study Info: {:?}", series_info);
-    let storage_path = app_state
-        .config
-        .local_storage
-        .as_ref()
-        .unwrap()
-        .dicom_store_path
-        .clone();
+
+    let storage_path = app_state.config.local_storage.dicom_store_path.clone();
     let dicom_dir = format!(
         "{}/{}/{}/{}/{}",
         storage_path,
@@ -264,6 +249,22 @@ async fn retrieve_series_metadata(
 
             if let Err(e) = std::fs::write(&json_file_path, &json_str) {
                 error!(log, "Failed to write JSON file {}: {}", json_file_path, e);
+            }
+            // series_info 序列化JSON后,调用 set_redis_value_with_expiry 写入Redis, 过期时间为2小时
+            match serde_json::to_string(&series_info) {
+                Ok(series_info_json) => {
+                    let redis_config = &app_state.config.redis;
+
+                    set_redis_value_with_expiry_and_config::<String>(
+                        redis_config,
+                        &redis_key,
+                        &series_info_json,
+                        2 * 60 * 60,
+                    );
+                }
+                Err(e) => {
+                    error!(log, "Failed to serialize series_info to JSON: {}", e);
+                }
             }
             HttpResponse::Ok()
                 .content_type(ACCEPT_DICOM_JSON_TYPE)
@@ -329,32 +330,73 @@ async fn retrieve_instance_impl(
         log,
         "retrieve_instance Tenant ID: {}  and StudyUID:{} ", tenant_id, study_uid
     );
-
-    // 获取 series_info (用于两个 endpoint)
-    let series_info = match app_state.db.get_series_info(&tenant_id, &series_uid).await {
-        Ok(Some(info)) => info,
-        Ok(None) => {
-            return HttpResponse::NotFound().body(format!(
-                "retrieve_instance not found: {},{}",
-                tenant_id, study_uid
-            ));
-        }
-        Err(e) => {
-            return HttpResponse::InternalServerError().body(format!(
-                "retrieve_instance Failed to retrieve study info: {}",
-                e
-            ));
+    let redis_key =get_redis_key_for_seirs(&*tenant_id, &*series_uid);
+    // 首先尝试从Redis获取series_info
+    let series_info = match get_redis_value_with_config::<String>(&app_state.config.redis, &redis_key) {
+        Some(cached_json) => {
+            // 如果Redis中有缓存，尝试反序列化
+            match serde_json::from_str::<SeriesEntity>(&cached_json) {
+                Ok(info) => {
+                    info!(log, "Retrieved series_info from Redis cache");
+                    info!(log, "series_info: {:?}", info);
+                    info!(log, "Redis key: {}", redis_key);
+                    info!(log, "Cached JSON: {}", cached_json);
+                    Some(info)
+                },
+                Err(e) => {
+                    error!(log, "Failed to deserialize series_info from Redis cache: {}", e);
+                    None
+                }
+            }
+        },
+        None => {
+            info!(log, "No cached series_info found in Redis");
+            None
         }
     };
 
-    info!(log, "series_info  : {:?}", series_info);
-    let storage_path = app_state
-        .config
-        .local_storage
-        .as_ref()
-        .unwrap()
-        .dicom_store_path
-        .clone();
+    // 如果Redis中没有缓存，则从数据库获取
+    let series_info = match series_info {
+        Some(info) => info,
+        None => {
+            match app_state.db.get_series_info(&tenant_id, &series_uid).await {
+                Ok(Some(info)) => {
+                    info!(log, "Retrieved series_info from database");
+                    // 将从数据库获取的数据存入Redis缓存
+                    match serde_json::to_string(&info) {
+                        Ok(series_info_json) => {
+                            set_redis_value_with_expiry_and_config::<String>(
+                                &app_state.config.redis,
+                                &redis_key,
+                                &series_info_json,
+                                2 * 60 * 60, // 2小时过期时间
+                            );
+                            info!(log, "Cached series_info to Redis with key: {}", redis_key);
+                        },
+                        Err(e) => {
+                            error!(log, "Failed to serialize series_info to JSON for caching: {}", e);
+                        }
+                    }
+                    info!(log, "series_info: {:?}", info);
+                    info
+                },
+                Ok(None) => {
+                    return HttpResponse::NotFound().body(format!(
+                        "retrieve_instance not found: {},{}",
+                        tenant_id, study_uid
+                    ));
+                },
+                Err(e) => {
+                    return HttpResponse::InternalServerError().body(format!(
+                        "retrieve_instance Failed to retrieve study info: {}",
+                        e
+                    ));
+                }
+            }
+        }
+    };
+
+    let storage_path = app_state.config.local_storage.dicom_store_path.clone();
     let dicom_dir = format!(
         "{}/{}/{}/{}",
         storage_path, tenant_id, series_info.patient_id, study_uid

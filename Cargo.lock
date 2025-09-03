@@ -4641,6 +4641,7 @@ dependencies = [
  "slog-async",
  "slog-term",
  "tokio",
+ "url",
  "urlencoding",
  "uuid",
 ]
