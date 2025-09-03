@@ -39,73 +39,13 @@ static ACCEPT_OCTET_STREAM_TYPE: &str = "multipart/related; type=application/oct
 
 // 检查Accept头部是否包含指定的MIME类型（不区分大小写）
 fn is_accept_type_supported(accept_header: &str, expected_type: &str) -> bool {
-    let accepted_types: Vec<&str> = accept_header
-        .split(',')
-        .map(|s| s.trim())
-        .collect();
+    let accepted_types: Vec<&str> = accept_header.split(',').map(|s| s.trim()).collect();
 
     let expected_type_lower = expected_type.to_lowercase();
-    accepted_types.iter().any(|&t| t.to_lowercase() == expected_type_lower)
+    accepted_types
+        .iter()
+        .any(|&t| t.to_lowercase() == expected_type_lower)
 }
-#[get("/studies/{study_instance_uid}")]
-async fn retrieve_study(
-    study_instance_uid: Path<String>,
-    req: HttpRequest,
-    app_state: web::Data<AppState>,
-) -> impl Responder {
-    let study_uid = study_instance_uid.into_inner();
-    let log = app_state.log.clone();
-    info!(log, "retrieve_study: study_instance_uid {}", study_uid);
-    let query_string = req.query_string();
-    info!(log, "retrieve_study: query_string {}", query_string);
-    // 手动解析查询参数
-    let query_params = parse_query_string_case_insensitive(query_string);
-
-    // 处理 charset 参数
-    // if let Some(charset) = get_param_case_insensitive(&query_params, WADO_CHARSET) {
-    //     if let Some(value) = charset.first() {
-    //         info!(log, "Charset: {}", value);
-    //     }
-    // }
-    //
-    // // 处理 anonymize 参数
-    // if let Some(anonymize) = get_param_case_insensitive(&query_params, WADO_ANONYMIZE) {
-    //     if let Some(value) = anonymize.first() {
-    //         match value.to_lowercase().as_str() {
-    //             "true" => info!(log, "Anonymize: true"),
-    //             "false" => info!(log, "Anonymize: false"),
-    //             _ => info!(log, "Anonymize: invalid value"),
-    //         }
-    //     }
-    // }
-    //
-    // // 处理 includeField 参数
-    // if let Some(include_fields) = get_param_case_insensitive(&query_params, WADO_INCLUDE_FIELD) {
-    //     if !include_fields.is_empty() {
-    //         info!(log, "Include Fields: {:?}", include_fields);
-    //     }
-    // }
-    //
-    // // 处理 excludeField 参数
-    // if let Some(exclude_fields) = get_param_case_insensitive(&query_params, WADO_EXCLUDE_FIELD) {
-    //     if !exclude_fields.is_empty() {
-    //         info!(log, "Exclude Fields: {:?}", exclude_fields);
-    //     }
-    // }
-
-    let params = StudyQueryParams {
-        charset: get_param_case_insensitive(&query_params, WADO_CHARSET)
-            .and_then(|v| v.first().map(|s| s.trim().to_string())),
-        anonymize: get_param_case_insensitive(&query_params, WADO_ANONYMIZE)
-            .and_then(|v| v.first().map(|s| s.to_lowercase() == "true")),
-        include_field: get_param_case_insensitive(&query_params, WADO_INCLUDE_FIELD).cloned(),
-        exclude_field: get_param_case_insensitive(&query_params, WADO_EXCLUDE_FIELD).cloned(),
-    };
-    info!(&log, "Study Query Params: {:?}", params);
-
-    HttpResponse::Ok().body(format!("Hello world! {}", study_uid))
-}
-
 #[get("/studies/{study_instance_uid}/metadata")]
 async fn retrieve_study_metadata(
     study_instance_uid: Path<String>,
@@ -182,19 +122,6 @@ async fn retrieve_study_metadata(
     }
 }
 
-#[get("/studies/{study_instance_uid}/series/{series_instance_uid}")]
-async fn retrieve_series(
-    path: Path<(String, String)>,
-    app_state: web::Data<AppState>,
-) -> impl Responder {
-    let log = app_state.log.clone();
-    let (study_uid, series_uid) = path.into_inner();
-    info!(
-        log,
-        "retrieve_series: study_instance_uid={}, series_instance_uid={}", study_uid, series_uid
-    );
-    HttpResponse::Ok().body(format!("Hello world! {} {}", study_uid, series_uid))
-}
 
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}/metadata")]
 async fn retrieve_series_metadata(
@@ -216,7 +143,8 @@ async fn retrieve_series_metadata(
     let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
 
     if let Some(accept_str) = accept {
-        if !is_accept_type_supported(accept_str, ACCEPT_DICOM_JSON_TYPE)  && !is_accept_type_supported(accept_str, ACCEPT_JSON_TYPE)
+        if !is_accept_type_supported(accept_str, ACCEPT_DICOM_JSON_TYPE)
+            && !is_accept_type_supported(accept_str, ACCEPT_JSON_TYPE)
         {
             return HttpResponse::NotAcceptable().body(format!(
                 "retrieve_study_metadata Accept header must be {} and {}",
@@ -230,8 +158,6 @@ async fn retrieve_series_metadata(
         ));
     }
     // ... existing code ...
-
-
 
     let series_info = match app_state.db.get_series_info(&tenant_id, &series_uid).await {
         Ok(Some(info)) => info,
@@ -249,7 +175,6 @@ async fn retrieve_series_metadata(
         }
     };
     info!(log, "Study Info: {:?}", series_info);
-
 
     let dicom_dir = format!(
         "{}/{}/{}/{}/{}",
@@ -308,17 +233,13 @@ async fn retrieve_series_metadata(
         arr.push(sop_json);
     }
     match serde_json::to_string(&arr) {
-        Ok(json_str) =>  {
-            HttpResponse::Ok()
-                .content_type(ACCEPT_DICOM_JSON_TYPE)
-                .body(json_str)
-        },
-        Err(e) => {
-            HttpResponse::InternalServerError().body(format!(
-                "retrieve_study_metadata Failed to walk directory: {}",
-                e
-            ))
-        }
+        Ok(json_str) => HttpResponse::Ok()
+            .content_type(ACCEPT_DICOM_JSON_TYPE)
+            .body(json_str),
+        Err(e) => HttpResponse::InternalServerError().body(format!(
+            "retrieve_study_metadata Failed to walk directory: {}",
+            e
+        )),
     }
 }
 
@@ -328,87 +249,8 @@ async fn retrieve_instance(
     req: HttpRequest,
     app_state: web::Data<AppState>,
 ) -> impl Responder {
-    let log = app_state.log.clone();
     let (study_uid, series_uid, sop_uid) = path.into_inner();
-    info!(
-        log,
-        "retrieve_instance: study_instance_uid={}, series_instance_uid={}, sop_instance_uid={}",
-        study_uid,
-        series_uid,
-        sop_uid
-    );
-    let tenant_id = common_utils::get_tenant_from_handler(&req);
-    info!(
-        log,
-        "retrieve_instance Tenant ID: {}  and StudyUID:{} ", tenant_id, study_uid
-    );
-    let study_info = match app_state.db.get_study_info(&tenant_id, &study_uid).await {
-        Ok(Some(info)) => info,
-        Ok(None) => {
-            return HttpResponse::NotFound().body(format!(
-                "retrieve_instance not found: {},{}",
-                tenant_id, study_uid
-            ));
-        }
-        Err(e) => {
-            return HttpResponse::InternalServerError().body(format!(
-                "retrieve_instance Failed to retrieve study info: {}",
-                e
-            ));
-        }
-    };
-    info!(log, "Study Info: {:?}", study_info);
-    let dicom_dir = format!(
-        "{}/{}/{}/{}",
-        app_state.local_storage_config.dicom_store_path,
-        tenant_id,
-        study_info.patient_id,
-        study_uid
-    );
-    if !std::path::Path::new(&dicom_dir).exists() {
-        return HttpResponse::NotFound().body(format!("DICOM directory not found: {}", dicom_dir));
-    }
-
-    let dicom_file = format!("{}/{}/{}.dcm", dicom_dir, series_uid, sop_uid);
-    let dicom_bytes = match std::fs::read(&dicom_file) {
-        Ok(bytes) => bytes,
-        Err(_) => {
-            return HttpResponse::NotFound().body(format!("DICOM file not found: {}", dicom_file));
-        }
-    };
-    HttpResponse::Ok()
-        .content_type(ACCEPT_DICOM_TYPE)
-        .body(dicom_bytes)
-}
-
-#[get(
-    "/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}/metadata"
-)]
-async fn retrieve_instance_metadata(
-    path: Path<(String, String, String)>,
-    req: HttpRequest,
-    app_state: web::Data<AppState>,
-) -> impl Responder {
-    let log = app_state.log.clone();
-    let (study_uid, series_uid, sop_uid) = path.into_inner();
-    info!(
-        log,
-        "retrieve_instance_metadata: study_instance_uid={}, series_instance_uid={}, sop_instance_uid={}",
-        study_uid,
-        series_uid,
-        sop_uid
-    );
-    // 检查 Accept 头
-    let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
-
-    if accept != Some(ACCEPT_DICOM_JSON_TYPE) {
-        return HttpResponse::NotAcceptable()
-            .body(format!("Accept header must be {}", ACCEPT_DICOM_JSON_TYPE));
-    }
-    HttpResponse::Ok().body(format!(
-        "Hello world! {} {} {}",
-        study_uid, series_uid, sop_uid
-    ))
+    retrieve_instance_impl(study_uid, series_uid, sop_uid, 1, req, app_state).await
 }
 
 #[get(
@@ -419,8 +261,28 @@ async fn retrieve_instance_frames(
     req: HttpRequest,
     app_state: web::Data<AppState>,
 ) -> impl Responder {
+    let (study_uid, series_uid, sop_uid, frames) = path.into_inner();
+    retrieve_instance_impl(study_uid, series_uid, sop_uid, frames, req, app_state).await
+}
+
+// 通用函数处理 retrieve_instance 和 retrieve_instance_frames 的共同逻辑
+async fn retrieve_instance_impl(
+    study_uid: String,
+    series_uid: String,
+    sop_uid: String,
+    frames: u32,
+    req: HttpRequest,
+    app_state: web::Data<AppState>,
+) -> HttpResponse {
     let log = app_state.log.clone();
-    let (study_uid, series_uid, sop_uid,frames) = path.into_inner();
+
+    if frames > 1 {
+        return HttpResponse::NotImplemented().body(format!(
+            "retrieve_instance_frames not implemented for more than one frame: {}",
+            frames
+        ));
+    }
+
     info!(
         log,
         "retrieve_instance: study_instance_uid={}, series_instance_uid={}, sop_instance_uid={}",
@@ -428,12 +290,15 @@ async fn retrieve_instance_frames(
         series_uid,
         sop_uid
     );
+
     let tenant_id = common_utils::get_tenant_from_handler(&req);
     info!(
         log,
         "retrieve_instance Tenant ID: {}  and StudyUID:{} ", tenant_id, study_uid
     );
-    let study_info = match app_state.db.get_study_info(&tenant_id, &study_uid).await {
+
+    // 获取 series_info (用于两个 endpoint)
+    let series_info = match app_state.db.get_series_info(&tenant_id, &series_uid).await {
         Ok(Some(info)) => info,
         Ok(None) => {
             return HttpResponse::NotFound().body(format!(
@@ -448,14 +313,17 @@ async fn retrieve_instance_frames(
             ));
         }
     };
-    info!(log, "Study Info: {:?}", study_info);
+
+    info!(log, "series_info  : {:?}", series_info);
+
     let dicom_dir = format!(
         "{}/{}/{}/{}",
         app_state.local_storage_config.dicom_store_path,
         tenant_id,
-        study_info.patient_id,
+        series_info.patient_id,
         study_uid
     );
+
     if !std::path::Path::new(&dicom_dir).exists() {
         return HttpResponse::NotFound().body(format!("DICOM directory not found: {}", dicom_dir));
     }
@@ -467,6 +335,7 @@ async fn retrieve_instance_frames(
             return HttpResponse::NotFound().body(format!("DICOM file not found: {}", dicom_file));
         }
     };
+
     HttpResponse::Ok()
         .content_type(ACCEPT_DICOM_TYPE)
         .body(dicom_bytes)

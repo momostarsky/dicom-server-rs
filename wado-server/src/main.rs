@@ -1,7 +1,10 @@
 pub mod common_utils;
 mod wado_rs_controller;
 
-use crate::wado_rs_controller::{echo, manual_hello, retrieve_instance, retrieve_instance_frames, retrieve_instance_metadata, retrieve_series, retrieve_series_metadata, retrieve_study, retrieve_study_metadata, retrieve_study_metadata_octstream, retrieve_study_metadata_wadouri};
+use crate::wado_rs_controller::{
+    echo, manual_hello, retrieve_instance, retrieve_instance_frames, retrieve_series_metadata,
+    retrieve_study_metadata,
+};
 use actix_cors::Cors;
 use actix_web::{App, HttpServer, middleware, web};
 use common::database_provider::DbProvider;
@@ -106,13 +109,9 @@ async fn main() -> std::io::Result<()> {
             .wrap(middleware::Compress::default())
             .wrap(cors)
             .app_data(web::Data::new(app_state.clone()))
-            .service(retrieve_study)
             .service(retrieve_study_metadata)
-         
-            .service(retrieve_series)
             .service(retrieve_series_metadata)
             .service(retrieve_instance)
-            .service(retrieve_instance_metadata)
             .service(retrieve_instance_frames)
             .service(echo)
             .route("/hey", web::get().to(manual_hello))
