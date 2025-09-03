@@ -84,20 +84,30 @@ async fn retrieve_study_metadata(
         }
     };
     info!(log, "Study Info: {:?}", study_info);
+    let dicom_storage_path = app_state
+        .config
+        .local_storage
+        .as_ref()
+        .unwrap()
+        .dicom_store_path
+        .clone();
     let dicom_dir = format!(
         "{}/{}/{}/{}",
-        app_state.local_storage_config.dicom_store_path,
-        tenant_id,
-        study_info.patient_id,
-        study_uid
+        dicom_storage_path, tenant_id, study_info.patient_id, study_uid
     );
     if !std::path::Path::new(&dicom_dir).exists() {
         return HttpResponse::NotFound().body(format!("DICOM directory not found: {}", dicom_dir));
     }
-
+    let json_save_path = app_state
+        .config
+        .local_storage
+        .as_ref()
+        .unwrap()
+        .json_store_path
+        .clone();
     let json_dir = format!(
         "{}/{}/{:?}",
-        app_state.local_storage_config.json_store_path, tenant_id, study_info.study_date
+        json_save_path, tenant_id, study_info.study_date
     );
     if !std::path::Path::new(&json_dir).exists() {
         std::fs::create_dir_all(&json_dir).expect("create_dir_all failed for JSON directory");
@@ -122,7 +132,6 @@ async fn retrieve_study_metadata(
     }
 }
 
-
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}/metadata")]
 async fn retrieve_series_metadata(
     path: Path<(String, String)>,
@@ -138,7 +147,18 @@ async fn retrieve_series_metadata(
         series_uid
     );
     let tenant_id = common_utils::get_tenant_from_handler(&req);
-
+    let json_file_path = format!("./{}.json", series_uid);
+    //如果json_file_path 存在,则输出json
+    if std::path::Path::new(&json_file_path).exists() {
+        match std::fs::read_to_string(&json_file_path) {
+            Ok(json_content) => {
+                return HttpResponse::Ok()
+                    .content_type(ACCEPT_DICOM_JSON_TYPE)
+                    .body(json_content);
+            }
+            Err(_) => {}
+        }
+    }
     // 检查 Accept 头
     let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
 
@@ -175,10 +195,16 @@ async fn retrieve_series_metadata(
         }
     };
     info!(log, "Study Info: {:?}", series_info);
-
+    let storage_path = app_state
+        .config
+        .local_storage
+        .as_ref()
+        .unwrap()
+        .dicom_store_path
+        .clone();
     let dicom_dir = format!(
         "{}/{}/{}/{}/{}",
-        app_state.local_storage_config.dicom_store_path,
+        storage_path,
         tenant_id,
         series_info.patient_id,
         series_info.study_instance_uid,
@@ -233,9 +259,16 @@ async fn retrieve_series_metadata(
         arr.push(sop_json);
     }
     match serde_json::to_string(&arr) {
-        Ok(json_str) => HttpResponse::Ok()
-            .content_type(ACCEPT_DICOM_JSON_TYPE)
-            .body(json_str),
+        Ok(json_str) => {
+            // 根据series_uid 将json_str 写入当前目录下面,文件路径为:./{series_uid}.json
+
+            if let Err(e) = std::fs::write(&json_file_path, &json_str) {
+                error!(log, "Failed to write JSON file {}: {}", json_file_path, e);
+            }
+            HttpResponse::Ok()
+                .content_type(ACCEPT_DICOM_JSON_TYPE)
+                .body(json_str)
+        }
         Err(e) => HttpResponse::InternalServerError().body(format!(
             "retrieve_study_metadata Failed to walk directory: {}",
             e
@@ -315,13 +348,16 @@ async fn retrieve_instance_impl(
     };
 
     info!(log, "series_info  : {:?}", series_info);
-
+    let storage_path = app_state
+        .config
+        .local_storage
+        .as_ref()
+        .unwrap()
+        .dicom_store_path
+        .clone();
     let dicom_dir = format!(
         "{}/{}/{}/{}",
-        app_state.local_storage_config.dicom_store_path,
-        tenant_id,
-        series_info.patient_id,
-        study_uid
+        storage_path, tenant_id, series_info.patient_id, study_uid
     );
 
     if !std::path::Path::new(&dicom_dir).exists() {

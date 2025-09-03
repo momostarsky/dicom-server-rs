@@ -1,4 +1,7 @@
 {
+  "redis":{
+    "url": "redis://192.168.1.14:6379/"
+  },
   "database": {
     "dbtype": "MYSQL",
     "host": "192.168.1.14",

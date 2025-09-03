@@ -3,8 +3,13 @@ use dotenv::dotenv;
 use serde::Deserialize;
 use std::env;
 
+#[derive(Debug, Deserialize,Clone)]
+pub struct RedisConfig {
+    pub url: String, //连接地址
+}
+
 // 定义配置结构体
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize,Clone)]
 pub struct DatabaseConfig {
     pub dbtype: String, //数据库类型 POSTGRES  MYSQL SQLITE
     pub host: String,
@@ -14,7 +19,7 @@ pub struct DatabaseConfig {
     pub database: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize,Clone)]
 pub struct ServerConfig {
     pub port: u16,
     pub host: String,
@@ -31,13 +36,13 @@ pub struct LocalStorageConfig {
     pub json_store_path: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize,Clone)]
 pub struct DicomStoreScpConfig {
     pub port: u16,
     pub ae_title: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize,Clone)]
 pub struct KafkaConfig {
     pub brokers: String,
     pub consumer_group_id: String,
@@ -49,15 +54,16 @@ pub struct KafkaConfig {
     pub compression_codec: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize,Clone)]
 pub struct MessageQueueConfig {
     pub topic_main: String,
     pub topic_change_transfer_syntax: String,
     pub topic_multi_frames: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize,Clone)]
 pub struct AppConfig {
+    pub redis: Option<RedisConfig>,
     pub kafka: Option<KafkaConfig>,
     pub database: Option<DatabaseConfig>,
     pub server: Option<ServerConfig>,
@@ -65,7 +71,6 @@ pub struct AppConfig {
     pub dicom_store_scp: Option<DicomStoreScpConfig>,
     pub message_queue: Option<MessageQueueConfig>,
 }
-
 
 static APP_ENV: &str = "APP_ENV";
 static APP_PREFIX: &str = "DICOM";
@@ -99,6 +104,11 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
     // 5. 解析配置到结构体
     let app_config: AppConfig = settings.try_deserialize()?;
     match &app_config {
+        AppConfig {
+            redis: Some(redis), ..
+        } => {
+            println!("redis:url {:?}", redis.url);
+        }
         AppConfig {
             database: Some(database),
             ..

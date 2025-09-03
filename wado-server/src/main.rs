@@ -8,7 +8,7 @@ use crate::wado_rs_controller::{
 use actix_cors::Cors;
 use actix_web::{App, HttpServer, middleware, web};
 use common::database_provider::DbProvider;
-use common::server_config::LocalStorageConfig;
+use common::server_config::{AppConfig, LocalStorageConfig, ServerConfig};
 use common::{database_factory, server_config};
 use slog;
 use slog::{Drain, Logger, error, info, o};
@@ -31,8 +31,8 @@ fn configure_log() -> Logger {
 #[derive(Clone)]
 struct AppState {
     log: Logger,
-    local_storage_config: LocalStorageConfig,
     db: Arc<dyn DbProvider + Send + Sync>,
+    config: AppConfig,
     // 可以添加其他配置
 }
 
@@ -52,6 +52,7 @@ async fn main() -> std::io::Result<()> {
         }
     };
 
+    let g_config = config.clone();
     // let db_config = config.database.unwrap();
     let server_config = config.server.unwrap();
     let local_storage_config = config.local_storage.unwrap();
@@ -76,8 +77,8 @@ async fn main() -> std::io::Result<()> {
     let db_instance = db_provider.unwrap();
     let app_state = AppState {
         log: log.clone(),
-        local_storage_config: local_storage_config.clone(),
         db: db_instance as Arc<dyn DbProvider + Send + Sync>, // 正确的类型转换
+        config: g_config,
     };
 
     HttpServer::new(move || {
