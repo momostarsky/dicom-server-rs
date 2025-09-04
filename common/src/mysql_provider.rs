@@ -467,6 +467,154 @@ ImageType = VALUES(ImageType), ImageOrientationPatient = VALUES(ImageOrientation
             }
         }
     }
+
+    async fn fetch_one_with_convert<T, A, F>(
+        &self,
+        command_text: &str,
+        args: &[A],
+        factory: F,
+    ) -> Result<T, DbError>
+    where
+        T: Send + Unpin,
+        A: for<'r> sqlx::Encode<'r, MySql> + sqlx::Type<MySql> + Send + Sync,
+        F: Fn(&MySqlRow) -> Result<T, sqlx::Error> + Send + Sync,
+    {
+        let pool = self.pool.clone();
+        let mut query = sqlx::query(command_text);
+
+        for arg in args {
+            query = query.bind(arg);
+        }
+        match query.fetch_one(&pool).await {
+            Ok(row) => match factory(&row) {
+                Ok(entity) => Ok(entity),
+                Err(e) => {
+                    error!("Failed to deserialize entity: {}", e);
+                    Err(DbError::DatabaseError(e))
+                }
+            },
+            Err(e) => {
+                error!("Failed to execute query: {}", e);
+                Err(DbError::DatabaseError(e))
+            }
+        }
+    }
+
+    async fn fetch_one<T, A>(&self, command_text: &str, args: &[A]) -> Result<T, DbError>
+    where
+        T: for<'r> FromRow<'r, MySqlRow> + Send + Unpin,
+        A: for<'r> sqlx::Encode<'r, MySql> + sqlx::Type<MySql> + Send + Sync,
+    {
+        let pool = self.pool.clone();
+        let mut query = sqlx::query(command_text);
+
+        for arg in args {
+            query = query.bind(arg);
+        }
+
+        match query.fetch_one(&pool).await {
+            Ok(row) => match T::from_row(&row) {
+                Ok(entity) => Ok(entity),
+                Err(e) => {
+                    error!("Failed to deserialize entity: {}", e);
+                    Err(DbError::DatabaseError(e))
+                }
+            },
+            Err(e) => {
+                error!("Failed to execute query: {}", e);
+                Err(DbError::DatabaseError(e))
+            }
+        }
+    }
+    async fn fetch_all<T, A>(&self, command_text: &str, args: &[A]) -> Result<Vec<T>, DbError>
+    where
+        T: for<'r> FromRow<'r, MySqlRow> + Send + Unpin,
+        A: for<'q> sqlx::Encode<'q, MySql> + sqlx::Type<MySql> + Send + Sync,
+    {
+        let pool = self.pool.clone();
+        let mut query = sqlx::query(command_text);
+
+        // 正确绑定参数
+        for arg in args {
+            query = query.bind(arg);
+        }
+
+        match query.fetch_all(&pool).await {
+            Ok(rows) => {
+                let mut entities = Vec::with_capacity(rows.len());
+                for row in rows {
+                    match T::from_row(&row) {
+                        Ok(entity) => entities.push(entity),
+                        Err(e) => {
+                            error!("Failed to deserialize entity: {}", e);
+                            return Err(DbError::DatabaseError(e));
+                        }
+                    }
+                }
+                Ok(entities)
+            }
+            Err(e) => {
+                error!("Failed to execute query: {}", e);
+                Err(DbError::DatabaseError(e))
+            }
+        }
+    }
+
+    /// 返回 (研究实体列表, (系列数量, 图像数量))
+    async fn fetch_study_statistics(
+        &self,
+        study_uid: &str,
+    ) -> Result<(Vec<StudyEntity>, (i32, i32)), DbError> {
+        let mut tx = self.pool.begin().await.map_err(DbError::DatabaseError)?;
+        // 查询Study基本信息
+        let study_query = "SELECT tenant_id, StudyInstanceUID, PatientID,
+                          COALESCE(StudyDate, '') as StudyDate,
+                          COALESCE(StudyTime, '') as StudyTime,
+                          AccessionNumber, StudyID, StudyDescription, ReferringPhysicianName,
+                          PatientAge, PatientSize, PatientWeight, MedicalAlerts, Allergies,
+                          PregnancyStatus, Occupation, AdditionalPatientHistory, PatientComments,
+                          AdmissionID, PerformingPhysicianName, ProcedureCodeSequence,
+                          ReceivedInstances,
+                          SpaceSize,CreatedTime, UpdatedTime
+                   FROM StudyEntity
+                   WHERE StudyInstanceUID = ?";
+        // 查询Study基本信息
+        let study_query = sqlx::query_as::<_, StudyEntity>(study_query).bind(study_uid);
+        let study_result = study_query
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(DbError::DatabaseError)?;
+
+        // 查询Series统计信息
+        let series_stats_query = sqlx::query(
+            "SELECT COUNT(*) as series_count FROM SeriesEntity WHERE StudyInstanceUID = ?",
+        )
+        .bind(study_uid);
+        let series_stats = series_stats_query
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(DbError::DatabaseError)?;
+
+        // 查询Image统计信息
+        let image_stats_query = sqlx::query(
+            "SELECT COUNT(*) as image_count   FROM ImageEntity WHERE StudyInstanceUID = ?",
+        )
+        .bind(study_uid);
+        let image_stats = image_stats_query
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(DbError::DatabaseError)?;
+
+        tx.commit().await.map_err(DbError::DatabaseError)?;
+
+        Ok((
+            study_result,
+            (
+                series_stats.get("series_count"),
+                image_stats.get("image_count"),
+            ),
+        ))
+    }
 }
 
 static BATCH_SIZE: usize = 10;
@@ -964,7 +1112,7 @@ mod tests {
         let config = match config {
             Ok(config) => config,
             Err(e) => {
-                tracing::log::error!("{:?}", e);
+                println!("Failed to load config: {:?}", e);
                 std::process::exit(-2);
             }
         };
@@ -982,6 +1130,98 @@ mod tests {
             .await
             .expect("Failed to connect to MySQL");
         MySqlProvider { pool }
+    }
+
+    #[derive(FromRow, Debug)]
+    struct StateInfo2 {
+        #[sqlx(rename = "SeriesInstanceUID")]
+        ssid: String,
+        #[sqlx(rename = "Images")]
+        sub_images: i32,
+    }
+
+    #[tokio::test]
+    async fn test_fetch_one() {
+        let provider = setup_test_database().await;
+        let user_id = "1.2.156.112605.0.1685486876.2025061710152134339.2.1.1";
+        let result = provider.fetch_one::<StateInfo2, _>(
+            "select SeriesInstanceUID, count(*) as Images from ImageEntity where StudyInstanceUID = ? group by SeriesInstanceUID order by Images desc limit 1;",
+            &[&user_id]
+        ).await;
+
+        let state_info = result.unwrap();
+        assert_eq!(state_info.sub_images, 367, "ImageCount == 367");
+    }
+    //fetch_all
+    #[tokio::test]
+    async fn test_fetch_all() {
+        let provider = setup_test_database().await;
+        let user_id = "1.2.156.112605.0.1685486876.2025061710152134339.2.1.1";
+        let result = provider.fetch_all::<StateInfo2, _>(
+            "select SeriesInstanceUID, count(*) as Images from ImageEntity where StudyInstanceUID = ? group by SeriesInstanceUID order by Images desc",
+            &[&user_id]
+        ).await;
+
+        let state_infos = result.unwrap();
+        assert!(!state_infos.is_empty(), "Should have at least one result");
+
+        // 检查第一个结果（图像数最多的序列）
+        if let Some(first) = state_infos.first() {
+            assert_eq!(first.sub_images, 367, "First series should have 367 images");
+        }
+    }
+    struct StateInfo {
+        ssid: String,
+        sub_images: i32,
+    }
+    #[tokio::test]
+    async fn test_fetch_one_with_convert() {
+        let provider = setup_test_database().await;
+        // 或者使用自定义工厂函数
+        let user_id = "1.2.156.112605.0.1685486876.2025061710152134339.2.1.1";
+        let result = provider.fetch_one_with_convert(
+            "select SeriesInstanceUID, count(*) as Images from ImageEntity where  StudyInstanceUID = ? group by SeriesInstanceUID order by Images desc  limit 1 ;",
+            &[&user_id],
+            |row| {
+                Ok(StateInfo {
+                    ssid: row.get("SeriesInstanceUID"),
+                    sub_images: row.get("Images"),
+                })
+            }
+        ).await;
+
+        let rk = result.unwrap();
+        assert_eq!(rk.sub_images, 367, "ImageCount == 367");
+    }
+    #[tokio::test]
+    async fn test_fetch_study_statistics() {
+        let provider = setup_test_database().await;
+        let study_uid = "1.2.156.112605.0.1685486876.2025061710152134339.2.1.1";
+
+        let (studies, (series, images)) = provider.fetch_study_statistics(study_uid).await.unwrap();
+
+        // 验证Study信息存在
+        assert_eq!(studies.is_empty(), false);
+        assert!(series > 0);
+        assert!(images > 0);
+    }
+    #[tokio::test]
+    async fn test_fetch_one_with_convert2() {
+        let provider = setup_test_database().await;
+        // 或者使用自定义工厂函数
+        let user_id = "1.2.156.112605.0.1685486876.2025061710152134339.2.1.1";
+        let result = provider.fetch_one_with_convert(
+            "select SeriesInstanceUID, count(*) as Images from ImageEntity where  StudyInstanceUID = ? group by SeriesInstanceUID order by Images desc limit 1;",
+            &[&user_id],
+            |row| {
+                Ok(
+                    Ok::<(std::string::String, i32), DbError>((row.get("SeriesInstanceUID"), row.get("Images")))
+                )
+            }
+        ).await;
+
+        let (_, image_count): (String, i32) = result.unwrap().expect("REASON");
+        assert_eq!(image_count, 367, "ImageCount == 367");
     }
 
     // 创建测试用的 DICOM 对象

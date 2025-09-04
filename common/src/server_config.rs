@@ -104,7 +104,10 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
     };
 
     // 5. 解析配置到结构体
-    let app_config: AppConfig = settings.try_deserialize()?;
+    let app_config: AppConfig =match  settings.try_deserialize() {
+        Ok(app_config) => app_config,
+        Err(err) => panic!("Error parsing config: {}", err),
+    };
 
     // 打印配置信息
     println!("redis:url {:?}", app_config.redis.url);
