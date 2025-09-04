@@ -1,6 +1,5 @@
 use common::server_config::RedisConfig;
 use redis::Commands;
-use std::env;
 
 // 通过配置创建Redis连接
 pub fn connect_with_config(config: &RedisConfig) -> redis::Connection {
