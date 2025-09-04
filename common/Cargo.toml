@@ -17,7 +17,12 @@ dicom-dictionary-std = { version = "0.8.1" }
 dicom-transfer-syntax-registry = { version = "0.8.2" }
 dicom-pixeldata = { version = "0.8.2", features = ["gdcm","rayon","image","rle","jpeg"] }
 async-trait = "0.1"
-sqlx = { version = "0.8.6", features = ["mysql", "chrono", "runtime-tokio-native-tls"] }
+sqlx = { version = "0.8.6", features = ["mysql", "chrono",
+    "runtime-tokio",
+    "mysql",
+    "macros",
+
+    "runtime-tokio-native-tls"] }
 tracing = "0.1.41"
 tokio = { version = "1.47.1", features = ["full"] }
 urlencoding = "2.1.3"

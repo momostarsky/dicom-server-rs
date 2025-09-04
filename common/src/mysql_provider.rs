@@ -6,7 +6,8 @@ use crate::database_provider_base::DbProviderBase;
 use crate::dicom_utils::{parse_dicom_date_from_sql, parse_dicom_time_from_sql};
 use async_trait::async_trait;
 use dicom_object::DefaultDicomObject;
-use sqlx::{MySql, MySqlPool, Row, Transaction};
+use sqlx::mysql::MySqlRow;
+use sqlx::{FromRow, MySql, MySqlPool, Row, Transaction};
 use tracing::{error, info};
 
 #[async_trait]
@@ -88,11 +89,97 @@ impl DbEntity for ImageEntity {
     }
 }
 
+impl FromRow<'_, MySqlRow> for SeriesEntity {
+    fn from_row(row: &MySqlRow) -> Result<Self, sqlx::Error> {
+        Ok(SeriesEntity {
+            tenant_id: row.get("tenant_id"),
+            series_instance_uid: row.get("SeriesInstanceUID"),
+            study_instance_uid: row.get("StudyInstanceUID"),
+            patient_id: row.get("PatientID"),
+            modality: row.get("Modality"),
+            series_number: row.get("SeriesNumber"),
+            series_date: parse_dicom_date_from_sql(row.get("series_date")),
+            series_time: parse_dicom_time_from_sql(row.get("series_time")),
+            series_description: row.get("SeriesDescription"),
+            body_part_examined: row.get("BodyPartExamined"),
+            protocol_name: row.get("ProtocolName"),
+            acquisition_number: row.get("AcquisitionNumber"),
+            acquisition_time: parse_dicom_time_from_sql(row.get("acquisition_time")),
+            acquisition_date: parse_dicom_date_from_sql(row.get("acquisition_date")),
+            acquisition_date_time: row.get("AcquisitionDateTime"),
+            performing_physician_name: row.get("PerformingPhysicianName"),
+            operators_name: row.get("OperatorsName"),
+            number_of_series_related_instances: row.get("NumberOfSeriesRelatedInstances"),
+            received_instances: row.get("ReceivedInstances"),
+            space_size: row.get("SpaceSize"),
+            created_time: row.get("CreatedTime"),
+            updated_time: row.get("UpdatedTime"),
+        })
+    }
+}
+
+impl FromRow<'_, MySqlRow> for StudyEntity {
+    fn from_row(row: &MySqlRow) -> Result<Self, sqlx::Error> {
+        Ok(StudyEntity {
+            tenant_id: row.get("tenant_id"),
+            study_instance_uid: row.get("StudyInstanceUID"),
+            patient_id: row.get("PatientID"),
+            study_date: parse_dicom_date_from_sql(row.get("StudyDate")),
+            study_time: parse_dicom_time_from_sql(row.get("StudyTime")),
+            accession_number: row.get("AccessionNumber"),
+            study_id: row.get("StudyID"),
+            study_description: row.get("StudyDescription"),
+            referring_physician_name: row.get("ReferringPhysicianName"),
+            patient_age: row.get("PatientAge"),
+            patient_size: row.get("PatientSize"),
+            patient_weight: row.get("PatientWeight"),
+            medical_alerts: row.get("MedicalAlerts"),
+            allergies: row.get("Allergies"),
+            pregnancy_status: row.get("PregnancyStatus"),
+            occupation: row.get("Occupation"),
+            additional_patient_history: row.get("AdditionalPatientHistory"),
+            patient_comments: row.get("PatientComments"),
+            admission_id: row.get("AdmissionID"),
+            performing_physician_name: row.get("PerformingPhysicianName"),
+            procedure_code_sequence: row.get("ProcedureCodeSequence"),
+            received_instances: row.get("ReceivedInstances"),
+            space_size: row.get("SpaceSize"),
+            created_time: row.get("CreatedTime"),
+            updated_time: row.get("UpdatedTime"),
+        })
+    }
+}
+
 pub struct MySqlProvider {
     pub pool: MySqlPool,
 }
 
 impl MySqlProvider {
+    const GET_SERIES_INFO_QUERY: &'static str = r#"SELECT tenant_id, SeriesInstanceUID, StudyInstanceUID, PatientID, Modality, SeriesNumber,
+                    COALESCE(SeriesDate, '') as series_date,
+                    COALESCE(SeriesTime, '') as series_time,
+                    SeriesDescription, BodyPartExamined, ProtocolName,
+                    AcquisitionNumber,
+                    COALESCE(AcquisitionTime, '') as acquisition_time,
+                    COALESCE(AcquisitionDate, '') as acquisition_date,
+                    AcquisitionDateTime,
+                    PerformingPhysicianName,
+                    OperatorsName, NumberOfSeriesRelatedInstances, ReceivedInstances, SpaceSize,
+                    CreatedTime, UpdatedTime
+             FROM SeriesEntity
+             WHERE tenant_id = ? AND SeriesInstanceUID = ?"#;
+
+    const GET_STUDY_INFO_QUERY: &'static str = r#"SELECT tenant_id, StudyInstanceUID, PatientID,
+                  COALESCE(StudyDate, '') as StudyDate,
+                  COALESCE(StudyTime, '') as StudyTime,
+                  AccessionNumber, StudyID, StudyDescription, ReferringPhysicianName,
+                  PatientAge, PatientSize, PatientWeight, MedicalAlerts, Allergies,
+                  PregnancyStatus, Occupation, AdditionalPatientHistory, PatientComments,
+                  AdmissionID, PerformingPhysicianName, ProcedureCodeSequence,
+                  ReceivedInstances,
+                  SpaceSize,CreatedTime, UpdatedTime
+           FROM StudyEntity
+           WHERE tenant_id = ? AND StudyInstanceUID = ?"#;
     pub fn new(pool: MySqlPool) -> Self {
         info!("MySqlProvider created with pool: {:?}", pool);
 
@@ -821,68 +908,21 @@ impl DbProvider for MySqlProvider {
         study_uid: &str,
     ) -> Result<Option<StudyEntity>, DbError> {
         let pool = self.pool.clone();
-
-        match sqlx::query(
-            r#"SELECT tenant_id, StudyInstanceUID, PatientID,
-                  COALESCE(StudyDate, '') as StudyDate,
-                  COALESCE(StudyTime, '') as StudyTime,
-                  AccessionNumber, StudyID, StudyDescription, ReferringPhysicianName,
-                  PatientAge, PatientSize, PatientWeight, MedicalAlerts, Allergies,
-                  PregnancyStatus, Occupation, AdditionalPatientHistory, PatientComments,
-                  AdmissionID, PerformingPhysicianName, ProcedureCodeSequence,
-                  ReceivedInstances,
-                  SpaceSize,CreatedTime, UpdatedTime
-           FROM StudyEntity 
-           WHERE tenant_id = ? AND StudyInstanceUID = ?"#,
-        )
-        .bind(tenant_id)
-        .bind(study_uid)
-        .fetch_optional(&pool)
-        .await
+        match sqlx::query_as(Self::GET_STUDY_INFO_QUERY)
+            .bind(tenant_id)
+            .bind(study_uid)
+            .fetch_optional(&pool)
+            .await
         {
-            Ok(Some(row)) => {
-                let study = StudyEntity {
-                    tenant_id: row.get("tenant_id"),
-                    study_instance_uid: row.get("StudyInstanceUID"),
-                    patient_id: row.get("PatientID"),
-                    study_date: parse_dicom_date_from_sql(row.get("StudyDate")),
-                    study_time: parse_dicom_time_from_sql(row.get("StudyTime")),
-                    accession_number: row.get("AccessionNumber"),
-                    study_id: row.get("StudyID"),
-                    study_description: row.get("StudyDescription"),
-                    referring_physician_name: row.get("ReferringPhysicianName"),
-                    patient_age: row.get("PatientAge"),
-                    patient_size: row.get("PatientSize"),
-                    patient_weight: row.get("PatientWeight"),
-                    medical_alerts: row.get("MedicalAlerts"),
-                    allergies: row.get("Allergies"),
-                    pregnancy_status: row.get("PregnancyStatus"),
-                    occupation: row.get("Occupation"),
-                    additional_patient_history: row.get("AdditionalPatientHistory"),
-                    patient_comments: row.get("PatientComments"),
-                    admission_id: row.get("AdmissionID"),
-                    performing_physician_name: row.get("PerformingPhysicianName"),
-                    procedure_code_sequence: row.get("ProcedureCodeSequence"),
-                    received_instances: row.get("ReceivedInstances"),
-                    space_size: row.get("SpaceSize"),
-                    created_time: row.get("CreatedTime"),
-                    updated_time: row.get("UpdatedTime"),
-                };
-                Ok(Some(study))
-            }
-            Ok(None) => {
-                info!(
-                    "Study not found for tenant_id: {}, study_uid: {}",
-                    tenant_id, study_uid
-                );
-                Ok(None)
-            }
+            Ok(result) => Ok(result),
             Err(e) => {
-                error!("Failed to get study info: {}", e);
+                error!("Failed to get series info: {}", e);
                 Err(DbError::DatabaseError(e))
             }
         }
     }
+
+    // 查询语句常量
 
     async fn get_series_info(
         &self,
@@ -891,59 +931,13 @@ impl DbProvider for MySqlProvider {
     ) -> Result<Option<SeriesEntity>, DbError> {
         let pool = self.pool.clone();
 
-        match sqlx::query(
-            r#"SELECT tenant_id, SeriesInstanceUID, StudyInstanceUID, PatientID, Modality, SeriesNumber,
-                    COALESCE(SeriesDate, '') as series_date,
-                    COALESCE(SeriesTime, '') as series_time,
-                    SeriesDescription, BodyPartExamined, ProtocolName,
-                    AcquisitionNumber,
-                    COALESCE(AcquisitionTime, '') as acquisition_time,
-                    COALESCE(AcquisitionDate, '') as acquisition_date,
-                    AcquisitionDateTime,
-                    PerformingPhysicianName,
-                    OperatorsName, NumberOfSeriesRelatedInstances, ReceivedInstances, SpaceSize,
-                    CreatedTime, UpdatedTime
-             FROM SeriesEntity
-             WHERE tenant_id = ? AND SeriesInstanceUID = ?"#
-        )
+        match sqlx::query_as(Self::GET_SERIES_INFO_QUERY)
             .bind(tenant_id)
             .bind(series_uid)
             .fetch_optional(&pool)
-            .await {
-            Ok(Some(row)) => {
-                let series = SeriesEntity {
-                    tenant_id: row.get("tenant_id"),
-                    series_instance_uid: row.get("SeriesInstanceUID"),
-                    study_instance_uid: row.get("StudyInstanceUID"),
-                    patient_id: row.get("PatientID"),
-                    modality: row.get("Modality"),
-                    series_number: row.get("SeriesNumber"),
-                    series_date: parse_dicom_date_from_sql(row.get("series_date")),
-                    series_time: parse_dicom_time_from_sql(row.get("series_time")),
-                    series_description: row.get("SeriesDescription"),
-                    body_part_examined: row.get("BodyPartExamined"),
-                    protocol_name: row.get("ProtocolName"),
-                    acquisition_number: row.get("AcquisitionNumber"),
-                    acquisition_time: parse_dicom_time_from_sql(row.get("acquisition_time")),
-                    acquisition_date: parse_dicom_date_from_sql(row.get("acquisition_date")),
-                    acquisition_date_time: row.get("AcquisitionDateTime"),
-                    performing_physician_name: row.get("PerformingPhysicianName"),
-                    operators_name: row.get("OperatorsName"),
-                    number_of_series_related_instances: row.get("NumberOfSeriesRelatedInstances"),
-                    received_instances: row.get("ReceivedInstances"),
-                    space_size: row.get("SpaceSize"),
-                    created_time: row.get("CreatedTime"),
-                    updated_time: row.get("UpdatedTime"),
-                };
-                Ok(Some(series))
-            }
-            Ok(None) => {
-                info!(
-                    "Series not found for tenant_id: {}, series_uid: {}",
-                    tenant_id, series_uid
-                );
-                Ok(None)
-            }
+            .await
+        {
+            Ok(result) => Ok(result),
             Err(e) => {
                 error!("Failed to get series info: {}", e);
                 Err(DbError::DatabaseError(e))
