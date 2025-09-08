@@ -32,3 +32,4 @@ uuid = {  version = "1.18.1", features = ["v4", "v7"]  }
 chrono = "0.4.41"
 redis = { version = "0.27.6", features = ["tokio-comp"] }
 url = "2.5.4"
+gdcm_conv = "0.1.7"

@@ -7,6 +7,7 @@ use common::dicom_json_helper;
 use common::dicom_json_helper::walk_directory;
 use common::dicom_utils::get_tag_values;
 use dicom_dictionary_std::tags;
+use dicom_object::OpenFileOptions;
 use serde::Deserialize;
 use serde_json::{Map, json};
 use slog::{error, info};
@@ -32,7 +33,8 @@ static WADO_EXCLUDE_FIELD: &str = "excludeField";
 static ACCEPT_DICOM_JSON_TYPE: &str = "application/dicom+json";
 static ACCEPT_JSON_TYPE: &str = "application/json";
 static ACCEPT_DICOM_TYPE: &str = "application/dicom";
-static ACCEPT_OCTET_STREAM_TYPE: &str = "multipart/related; type=application/octet-stream";
+static ACCEPT_OCTET_STREAM: &str = "application/octet-stream";
+static MULIPART_ACCEPT_OCTET_STREAM: &str = "multipart/related; type=application/octet-stream";
 
 // 检查Accept头部是否包含指定的MIME类型（不区分大小写）
 fn is_accept_type_supported(accept_header: &str, expected_type: &str) -> bool {
@@ -63,13 +65,7 @@ async fn get_series_info_with_cache(
             Some(cached_json) => {
                 // 如果Redis中有缓存，尝试反序列化
                 match serde_json::from_str::<SeriesEntity>(&cached_json) {
-                    Ok(info) => {
-                        info!(log, "Retrieved series_info from Redis cache");
-                        info!(log, "series_info: {:?}", info);
-                        info!(log, "Redis key: {}", redis_key);
-                        info!(log, "Cached JSON: {}", cached_json);
-                        Some(info)
-                    }
+                    Ok(info) => Some(info),
                     Err(e) => {
                         error!(
                             log,
@@ -80,7 +76,6 @@ async fn get_series_info_with_cache(
                 }
             }
             None => {
-                info!(log, "No cached series_info found in Redis");
                 None
             }
         };
@@ -101,7 +96,6 @@ async fn get_series_info_with_cache(
                                 &series_info_json,
                                 2 * 60 * 60, // 2小时过期时间
                             );
-                            info!(log, "Cached series_info to Redis with key: {}", redis_key);
                         }
                         Err(e) => {
                             error!(
@@ -240,7 +234,7 @@ async fn retrieve_series_metadata(
     let series_info = match get_series_info_with_cache(&tenant_id, &series_uid, &app_state).await {
         Ok(info) => info,
         Err(response) => return response,
-    }; 
+    };
     let json_dir = format!(
         "{}/{}/series",
         &app_state.config.local_storage.json_store_path, tenant_id
@@ -330,7 +324,6 @@ async fn retrieve_series_metadata(
             match serde_json::to_string(&series_info) {
                 Ok(series_info_json) => {
                     let redis_config = &app_state.config.redis;
-
                     set_redis_value_with_expiry_and_config::<String>(
                         redis_config,
                         &get_redis_key_for_seirs(&tenant_id, &series_uid),
@@ -385,49 +378,48 @@ async fn retrieve_instance_impl(
     app_state: web::Data<AppState>,
 ) -> HttpResponse {
     let log = app_state.log.clone();
-
     if frames > 1 {
         return HttpResponse::NotImplemented().body(format!(
             "retrieve_instance_frames not implemented for more than one frame: {}",
             frames
         ));
     }
-
-    info!(
-        log,
-        "retrieve_instance: study_instance_uid={}, series_instance_uid={}, sop_instance_uid={}",
-        study_uid,
-        series_uid,
-        sop_uid
-    );
-
     let tenant_id = common_utils::get_tenant_from_handler(&req);
     info!(
         log,
-        "retrieve_instance Tenant ID: {}  and StudyUID:{} ", tenant_id, study_uid
+        "retrieve_instance: Tenant ID: {},study_instance_uid={}, series_instance_uid={}, sop_instance_uid={}",
+        tenant_id,
+        study_uid,
+        series_uid,
+        sop_uid
     );
     // 获取series_info (使用提取的函数)
     let series_info = match get_series_info_with_cache(&tenant_id, &series_uid, &app_state).await {
         Ok(info) => info,
         Err(response) => return response,
     };
-
     let storage_path = &app_state.config.local_storage.dicom_store_path;
     let dicom_dir = format!(
         "{}/{}/{}/{}",
         storage_path, tenant_id, series_info.patient_id, study_uid
     );
-
     if !std::path::Path::new(&dicom_dir).exists() {
-        return HttpResponse::NotFound().body(format!("DICOM directory not found: {}", dicom_dir));
+        return HttpResponse::NotFound().body(format!("DICOM dir not found: {}", dicom_dir));
     }
-
     let dicom_file = format!("{}/{}/{}.dcm", dicom_dir, series_uid, sop_uid);
-    match std::fs::read(&dicom_file) {
-        Ok(bytes) => HttpResponse::Ok()
-            .content_type(ACCEPT_DICOM_TYPE)
-            .body(bytes),
-        Err(_) => HttpResponse::NotFound().body(format!("DICOM file not found: {}", dicom_file)),
+    match OpenFileOptions::new().open_file(&dicom_file) {
+        Ok(obj) => match obj.get(tags::PIXEL_DATA) {
+            Some(element) => match element.to_bytes() {
+                Ok(pxl_data) => HttpResponse::Ok()
+                    .content_type(ACCEPT_DICOM_TYPE)
+                    .body(pxl_data.into_owned()),
+                Err(_) => HttpResponse::NotFound()
+                    .body(format!("dicom file PixelData not found: {}", &dicom_file)),
+            },
+            None => HttpResponse::NotFound().body(
+                format!("dicom file PixelData element not found: {}",&dicom_file)),
+        },
+        Err(_) => HttpResponse::NotFound().body(format!("DICOM file not found: {}", &dicom_file)),
     }
 }
 
