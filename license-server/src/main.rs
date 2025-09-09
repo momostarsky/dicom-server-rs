@@ -42,6 +42,7 @@ async fn main() -> std::io::Result<()> {
     // )
     // .expect("生成客户端证书失败!");
     parse_client_cert("./client_HZ109999.crt").expect("解析客户端证书失败!");
+    encrypt_with_cert_and_decrypt_with_key( ).expect("加密解密失败!");
     let log = configure_log();
     let app_state = AppState { log: log.clone() };
     HttpServer::new(move || {
@@ -191,6 +192,62 @@ fn parse_client_cert(cert_file: &str) -> Result<(), Box<dyn std::error::Error>> 
     }
     Ok(())
 }
+
+fn encrypt_with_cert_and_decrypt_with_key() -> Result<(), Box<dyn std::error::Error>> {
+    // 读取客户端证书 (用于加密)
+    let cert_pem = std::fs::read("./client_HZ109999.crt")?;
+    let cert = X509::from_pem(&cert_pem)?;
+
+    // 获取证书中的公钥
+    let pub_key = cert.public_key()?;
+
+    // 要加密的数据
+    let data = b"Hello, this is a secret message!";
+    println!("原始数据: {}", String::from_utf8_lossy(data));
+
+    // 使用公钥加密数据
+    let mut encrypter = openssl::encrypt::Encrypter::new(&pub_key)?;
+    encrypter.set_rsa_padding(openssl::rsa::Padding::PKCS1)?;
+
+    // 计算加密后数据的长度
+    let buffer_len = encrypter.encrypt_len(data)?;
+    let mut encrypted = vec![0; buffer_len];
+
+    // 执行加密
+    let encrypted_len = encrypter.encrypt(data, &mut encrypted)?;
+    encrypted.truncate(encrypted_len);
+
+    println!("加密后的数据 (HEX): {}", hex::encode(&encrypted));
+
+    // 读取客户端私钥 (用于解密)
+    let private_key_pem = std::fs::read("./client_HZ109999.key")?;
+    let private_key = PKey::private_key_from_pem(&private_key_pem)?;
+
+    // 使用私钥解密数据
+    let mut decrypter = openssl::encrypt::Decrypter::new(&private_key)?;
+    decrypter.set_rsa_padding(openssl::rsa::Padding::PKCS1)?;
+
+    // 计算解密后数据的长度
+    let buffer_len = decrypter.decrypt_len(&encrypted)?;
+    let mut decrypted = vec![0; buffer_len];
+
+    // 执行解密
+    let decrypted_len = decrypter.decrypt(&encrypted, &mut decrypted)?;
+    decrypted.truncate(decrypted_len);
+
+    println!("解密后的数据: {}", String::from_utf8_lossy(&decrypted));
+
+    // 验证解密是否成功
+    if data == decrypted.as_slice() {
+        println!("✅ 加密/解密成功!");
+    } else {
+        println!("❌ 加密/解密失败!");
+    }
+
+    Ok(())
+}
+
+// ... existing code ...
 // ... existing code ...
 /// 简单示例函数：判断一个 OID 是否是“众所周知的标准 OID”
 /// 注意：这是一个非常简化的判断，实际项目中你可能需要维护一个更全面的 OID 列表

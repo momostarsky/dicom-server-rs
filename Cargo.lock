@@ -2455,6 +2455,7 @@ dependencies = [
  "der",
  "futures",
  "futures-util",
+ "hex",
  "http 0.2.12",
  "http-body-util",
  "mime",
