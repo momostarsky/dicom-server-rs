@@ -283,7 +283,7 @@ async fn retrieve_series_metadata(
     // 添加每个 DICOM 文件作为 multipart 中的一部分
     for file_path in &files {
         // 读取 DICOM 文件内容
-        let sop_json = match dicom_object::OpenFileOptions::new()
+        let sop_json = match OpenFileOptions::new()
             .read_until(tags::PIXEL_DATA)
             .open_file(file_path)
         {
@@ -380,7 +380,7 @@ async fn retrieve_instance_impl(
     let log = app_state.log.clone();
     if frames > 1 {
         return HttpResponse::NotImplemented().body(format!(
-            "retrieve_instance_frames not implemented for more than one frame: {}",
+            "retrieve_instance_frames not implemented for frames >1: {}",
             frames
         ));
     }
@@ -411,10 +411,10 @@ async fn retrieve_instance_impl(
         Ok(obj) => match obj.get(tags::PIXEL_DATA) {
             Some(element) => match element.to_bytes() {
                 Ok(pxl_data) => HttpResponse::Ok()
-                    .content_type(ACCEPT_DICOM_TYPE)
+                    .content_type(ACCEPT_OCTET_STREAM)
                     .body(pxl_data.into_owned()),
                 Err(_) => HttpResponse::NotFound()
-                    .body(format!("dicom file PixelData not found: {}", &dicom_file)),
+                    .body(format!("dicom file PixelData to_bytes failed: {}", &dicom_file)),
             },
             None => HttpResponse::NotFound().body(
                 format!("dicom file PixelData element not found: {}",&dicom_file)),
