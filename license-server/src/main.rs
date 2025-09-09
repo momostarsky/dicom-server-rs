@@ -43,6 +43,7 @@ async fn main() -> std::io::Result<()> {
     // .expect("生成客户端证书失败!");
     parse_client_cert("./client_HZ109999.crt").expect("解析客户端证书失败!");
     encrypt_with_cert_and_decrypt_with_key( ).expect("加密解密失败!");
+    sign_and_verify_with_cert().expect("签名验证失败!");
     let log = configure_log();
     let app_state = AppState { log: log.clone() };
     HttpServer::new(move || {
@@ -192,7 +193,48 @@ fn parse_client_cert(cert_file: &str) -> Result<(), Box<dyn std::error::Error>> 
     }
     Ok(())
 }
+fn sign_and_verify_with_cert() -> Result<(), Box<dyn std::error::Error>> {
+    // 读取客户端私钥 (用于签名)
+    let private_key_pem = std::fs::read("./client_HZ109999.key")?;
+    let private_key = PKey::private_key_from_pem(&private_key_pem)?;
 
+    // 要签名的数据
+    let data = b"This is the data to be signed";
+    println!("原始数据: {}", String::from_utf8_lossy(data));
+
+    // 使用私钥对数据进行签名
+    let mut signer = openssl::sign::Signer::new(openssl::hash::MessageDigest::sha256(), &private_key)?;
+    signer.update(data)?;
+    let signature = signer.sign_to_vec()?;
+
+    println!("签名数据 (HEX): {}", hex::encode(&signature));
+
+    // 读取客户端证书 (用于验证签名)
+    let cert_pem = std::fs::read("./client_HZ109999.crt")?;
+    let cert = X509::from_pem(&cert_pem)?;
+
+    // 获取证书中的公钥
+    let pub_key = cert.public_key()?;
+
+    // 使用公钥验证签名
+    let mut verifier = openssl::sign::Verifier::new(openssl::hash::MessageDigest::sha256(), &pub_key)?;
+    verifier.update(data)?;
+    let valid = verifier.verify(&signature)?;
+
+    println!("签名验证结果: {}", if valid { "✅ 有效" } else { "❌ 无效" });
+
+    // 验证篡改数据的签名（应该失败）
+    let tampered_data = b"This is the tampered data";
+    let mut verifier2 = openssl::sign::Verifier::new(openssl::hash::MessageDigest::sha256(), &pub_key)?;
+    verifier2.update(tampered_data)?;
+    let tampered_valid = verifier2.verify(&signature)?;
+
+    println!("篡改数据签名验证结果: {}", if tampered_valid { "✅ 有效" } else { "❌ 无效" });
+
+    Ok(())
+}
+
+// ... existing code ...
 fn encrypt_with_cert_and_decrypt_with_key() -> Result<(), Box<dyn std::error::Error>> {
     // 读取客户端证书 (用于加密)
     let cert_pem = std::fs::read("./client_HZ109999.crt")?;
