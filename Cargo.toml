@@ -6,7 +6,7 @@ members = [
     "consumer-storage-kafka",
     "charset-helper",
     "mysql-demo",
-    "change-transfer-kafka",
+    "change-transfer-kafka", "license-server",
 ]
 
 # use edition 2021 resolver
