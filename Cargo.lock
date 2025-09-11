@@ -832,6 +832,7 @@ dependencies = [
  "chrono",
  "clap",
  "config",
+ "der",
  "dicom-core",
  "dicom-dictionary-std",
  "dicom-encoding",
@@ -844,19 +845,28 @@ dependencies = [
  "futures",
  "futures-util",
  "gdcm_conv",
- "log",
- "log4rs",
+ "hex",
+ "lazy_static",
+ "openssl",
+ "pem",
  "rayon",
  "rdkafka",
+ "regex",
  "rstest",
  "serde",
  "serde_json",
+ "slog",
+ "slog-async",
+ "slog-scope",
+ "slog-stdlog",
+ "slog-term",
  "sqlx",
  "thiserror 2.0.12",
  "tokio",
  "tracing",
  "url",
  "urlencoding",
+ "x509-parser",
 ]
 
 [[package]]
@@ -3842,6 +3852,28 @@ dependencies = [
  "slog",
  "take_mut",
  "thread_local",
+]
+
+[[package]]
+name = "slog-scope"
+version = "4.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f95a4b4c3274cd2869549da82b57ccc930859bdbf5bcea0424bc5f140b3c786"
+dependencies = [
+ "arc-swap",
+ "lazy_static",
+ "slog",
+]
+
+[[package]]
+name = "slog-stdlog"
+version = "4.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6706b2ace5bbae7291d3f8d2473e2bfab073ccd7d03670946197aec98471fa3e"
+dependencies = [
+ "log",
+ "slog",
+ "slog-scope",
 ]
 
 [[package]]

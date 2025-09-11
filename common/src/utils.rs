@@ -1,3 +1,4 @@
+
 use crate::change_file_transfer::convert_ts_with_pixel_data;
 use crate::cornerstonejs::SUPPORTED_TRANSFER_SYNTAXES;
 use crate::database_entities::{
@@ -9,12 +10,14 @@ use crate::message_sender::MessagePublisher;
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu::Whatever;
 use dicom_object::ReadError;
-use log::error;
+
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 use tracing::info;
-
+use slog::Drain;
+use std::fs::OpenOptions;
+use slog::LevelFilter;
 pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let path = std::path::Path::new(p0);
 
@@ -62,56 +65,44 @@ pub fn collect_dicom_files(
 
     Ok(())
 }
+
+
+
 // 设置日志记录，日志文件按大小滚动，保留最近7个文件
-pub fn setup_logging(policy_name: &str) {
-    use log::LevelFilter;
-    use log4rs::append::console::ConsoleAppender;
-    use log4rs::append::rolling_file::RollingFileAppender;
-    use log4rs::append::rolling_file::policy::compound::CompoundPolicy;
-    use log4rs::append::rolling_file::policy::compound::roll::delete::DeleteRoller;
-    use log4rs::append::rolling_file::policy::compound::trigger::size::SizeTrigger;
-    use log4rs::config::{Appender, Config, Logger, Root};
-    use log4rs::encode::pattern::PatternEncoder;
-    // 创建控制台appender
-    let stdout = ConsoleAppender::builder()
-        .encoder(Box::new(PatternEncoder::new(
-            "{d(%Y-%m-%d %H:%M:%S)} {l} [{M}] {m}{n}",
-        )))
-        .build();
+pub fn setup_logging(policy_name: &str)-> slog::Logger {
 
-    // 创建基于文件大小的触发器 (例如: 5MB)
-    let trigger = Box::new(SizeTrigger::new(5 * 1024 * 1024)); // 10MB
 
-    // 创建删除旧文件的roller (保留最多7个文件，相当于最近7天)
-    let roller = Box::new(DeleteRoller::new());
 
-    // 创建复合策略
-    let policy = Box::new(CompoundPolicy::new(trigger, roller));
+        // 创建控制台logger
+        let stdout_decorator = slog_term::TermDecorator::new().build();
+        let stdout_drain = slog_term::FullFormat::new(stdout_decorator).build().fuse();
+        let stdout_drain = slog_async::Async::new(stdout_drain).build().fuse();
 
-    // 创建滚动文件appender
-    let logfile = RollingFileAppender::builder()
-        .encoder(Box::new(PatternEncoder::new(
-            "{d(%Y-%m-%d %H:%M:%S)} {l} [{M}] {m}{n}",
-        )))
-        .build(format!("./logs/{}.log", policy_name), policy)
-        .unwrap();
+        // 创建文件logger
+        fs::create_dir_all("./logs").unwrap_or(());
+        let file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(format!("./logs/{}.log", policy_name))
+            .unwrap();
 
-    // 构建配置
-    let config = Config::builder()
-        .appender(Appender::builder().build("stdout", Box::new(stdout)))
-        .appender(Appender::builder().build("logfile", Box::new(logfile)))
-        .logger(Logger::builder().build("app", LevelFilter::Debug))
-        .build(
-            Root::builder()
-                .appender("stdout")
-                .appender("logfile")
-                .build(LevelFilter::Info),
+        let file_decorator = slog_term::PlainDecorator::new(file);
+        let file_drain = slog_term::FullFormat::new(file_decorator).build().fuse();
+        let file_drain = slog_async::Async::new(file_drain).build().fuse();
+
+        // 组合drains
+        let drain = slog::Duplicate::new(stdout_drain, file_drain).map(slog::Fuse);
+        let drain = LevelFilter::new(drain, slog::Level::Info).map(slog::Fuse);
+
+         slog::Logger::root(
+            drain,
+            slog::o!("version" => env!("CARGO_PKG_VERSION"))
         )
-        .unwrap();
+        .into()
 
-    // 初始化log4rs
-    let _handle = log4rs::init_config(config).unwrap();
 }
+// ... existing code ...
 
 pub fn get_unique_tenant_ids(message: &[DicomObjectMeta]) -> Vec<String> {
     let tenant_ids: HashSet<String> = message.iter().map(|m| m.tenant_id.clone()).collect();
@@ -321,9 +312,9 @@ pub async fn process_storage_messages(
     if messages_to_process.is_empty() {
         return;
     }
-    tracing::info!("Processing batch of {} messages", messages_to_process.len());
+    info!("Processing batch of {} messages", messages_to_process.len());
     let unique_tenant_ids = get_unique_tenant_ids(&messages_to_process);
-    tracing::info!("Processing data for tenant IDs: {:?}", unique_tenant_ids);
+    info!("Processing data for tenant IDs: {:?}", unique_tenant_ids);
 
     for tenant_id in unique_tenant_ids {
         let tenant_msg = messages_to_process
@@ -397,7 +388,7 @@ pub async fn publish_messages(
             info!("Successfully publish_messages");
         }
         Err(e) => {
-            error!("Failed to publish_messages: {}", e);
+            tracing::error!("Failed to publish_messages: {}", e);
         }
     }
     Ok(())

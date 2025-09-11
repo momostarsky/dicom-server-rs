@@ -13,6 +13,7 @@ pub mod database_provider_base;
 pub mod message_sender;
 pub mod message_sender_kafka;
 pub mod change_file_transfer;
+pub mod cert_helper;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DicomMessage {

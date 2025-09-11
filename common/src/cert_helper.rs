@@ -7,11 +7,10 @@ use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
 use openssl::x509::{X509Extension, X509NameBuilder, X509Req, X509};
 use openssl::x509::extension::{BasicConstraints, ExtendedKeyUsage, KeyUsage};
-use slog::info;
 use x509_parser::der_parser::Oid;
 use x509_parser::parse_x509_certificate;
 
-fn read_machine_id() -> Result<String, Box<dyn std::error::Error>> {
+pub fn read_machine_id() -> Result<String, Box<dyn std::error::Error>> {
     let path = "/etc/machine-id";
     let contents = fs::read_to_string(path)?;
     // 通常内容为一行 UUID，可能带换行，trim一下
@@ -22,7 +21,7 @@ fn read_machine_id() -> Result<String, Box<dyn std::error::Error>> {
     Ok(id)
 }
 
-fn get_primary_mac_address() -> Result<String, Box<dyn std::error::Error>> {
+pub fn get_primary_mac_address() -> Result<String, Box<dyn std::error::Error>> {
     let net_dir = std::path::Path::new("/sys/class/net");
     let mut mac = None;
 
@@ -67,7 +66,7 @@ fn get_primary_mac_address() -> Result<String, Box<dyn std::error::Error>> {
 }
 
 // ... existing code ...
-fn parse_client_cert(cert_file: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn parse_client_cert(cert_file: &str) -> Result<(), Box<dyn std::error::Error>> {
     // 1. 读取 client.crt 文件内容
     let cert_bytes = fs::read(cert_file)?;
 
@@ -136,9 +135,9 @@ fn parse_client_cert(cert_file: &str) -> Result<(), Box<dyn std::error::Error>> 
     }
     Ok(())
 }
-fn sign_and_verify_with_cert() -> Result<(), Box<dyn std::error::Error>> {
+pub fn sign_and_verify_with_cert(cert_file: &str, key_file: &str) -> Result<(), Box<dyn std::error::Error>> {
     // 读取客户端私钥 (用于签名)
-    let private_key_pem = std::fs::read("./client_HZ109999.key")?;
+    let private_key_pem = fs::read(key_file)?;
     let private_key = PKey::private_key_from_pem(&private_key_pem)?;
 
     // 要签名的数据
@@ -153,14 +152,14 @@ fn sign_and_verify_with_cert() -> Result<(), Box<dyn std::error::Error>> {
     println!("签名数据 (HEX): {}", hex::encode(&signature));
 
     // 读取客户端证书 (用于验证签名)
-    let cert_pem = std::fs::read("./client_HZ109999.crt")?;
+    let cert_pem = fs::read(cert_file)?;
     let cert = X509::from_pem(&cert_pem)?;
 
     // 获取证书中的公钥
     let pub_key = cert.public_key()?;
 
     // 使用公钥验证签名
-    let mut verifier = openssl::sign::Verifier::new(openssl::hash::MessageDigest::sha256(), &pub_key)?;
+    let mut verifier = openssl::sign::Verifier::new(MessageDigest::sha256(), &pub_key)?;
     verifier.update(data)?;
     let valid = verifier.verify(&signature)?;
 
@@ -168,7 +167,7 @@ fn sign_and_verify_with_cert() -> Result<(), Box<dyn std::error::Error>> {
 
     // 验证篡改数据的签名（应该失败）
     let tampered_data = b"This is the tampered data";
-    let mut verifier2 = openssl::sign::Verifier::new(openssl::hash::MessageDigest::sha256(), &pub_key)?;
+    let mut verifier2 = openssl::sign::Verifier::new(MessageDigest::sha256(), &pub_key)?;
     verifier2.update(tampered_data)?;
     let tampered_valid = verifier2.verify(&signature)?;
 
@@ -178,9 +177,9 @@ fn sign_and_verify_with_cert() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 // ... existing code ...
-fn encrypt_with_cert_and_decrypt_with_key() -> Result<(), Box<dyn std::error::Error>> {
+pub fn encrypt_with_cert_and_decrypt_with_key(cert_file: &str, key_file: &str) -> Result<(), Box<dyn std::error::Error>> {
     // 读取客户端证书 (用于加密)
-    let cert_pem = std::fs::read("./client_HZ109999.crt")?;
+    let cert_pem = std::fs::read(cert_file)?;
     let cert = X509::from_pem(&cert_pem)?;
 
     // 获取证书中的公钥
@@ -205,7 +204,7 @@ fn encrypt_with_cert_and_decrypt_with_key() -> Result<(), Box<dyn std::error::Er
     println!("加密后的数据 (HEX): {}", hex::encode(&encrypted));
 
     // 读取客户端私钥 (用于解密)
-    let private_key_pem = std::fs::read("./client_HZ109999.key")?;
+    let private_key_pem = fs::read(key_file)?;
     let private_key = PKey::private_key_from_pem(&private_key_pem)?;
 
     // 使用私钥解密数据
@@ -232,8 +231,7 @@ fn encrypt_with_cert_and_decrypt_with_key() -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
-// ... existing code ...
-// ... existing code ...
+
 /// 简单示例函数：判断一个 OID 是否是“众所周知的标准 OID”
 /// 注意：这是一个非常简化的判断，实际项目中你可能需要维护一个更全面的 OID 列表
 /// 或者使用第三方 crate 如 `oid-registry`（如果有）
@@ -265,7 +263,7 @@ fn is_well_known_oid(oid: &Oid) -> bool {
 
     known_oids.contains(&oid_str.as_str())
 }
-pub(crate) fn generate_client_and_sign(
+pub fn generate_client_and_sign(
     client_org: &str,
     client_id: &str,
     machine_id: &str,  //客户端的MAC地址
@@ -290,11 +288,11 @@ pub(crate) fn generate_client_and_sign(
     }
 
     // 读取CA证书
-    let ca_cert_pem = std::fs::read("/opt/dicom-server/ca.pem").expect("读取CA证书失败!");
+    let ca_cert_pem = fs::read("/opt/dicom-server/ca.pem").expect("读取CA证书失败!");
     let ca_cert = X509::from_pem(&ca_cert_pem)?;
 
     // 读取CA私钥
-    let ca_key_pem = std::fs::read("/opt/dicom-server/ca_key.pem").expect("读取CA私钥失败!");
+    let ca_key_pem = fs::read("/opt/dicom-server/ca_key.pem").expect("读取CA私钥失败!");
     let ca_pkey = PKey::private_key_from_pem(&ca_key_pem)?;
 
     // =============================
@@ -399,7 +397,7 @@ pub(crate) fn generate_client_and_sign(
     Ok((client_cert_pem, client_key_pem))
 }
 
-fn generate_ca_root() -> Result<(), Box<dyn std::error::Error>> {
+pub fn generate_ca_root(ca_file: &str, ca_key_file: &str) -> Result<(), Box<dyn std::error::Error>> {
     // =============================
     // 1. 生成 CA（根证书，模拟授权机构）
     // =============================
@@ -457,13 +455,13 @@ fn generate_ca_root() -> Result<(), Box<dyn std::error::Error>> {
     let ca_cert_pem = ca_cert.to_pem()?; // ✅ 正确
     let ca_key_pem = ca_pkey.private_key_to_pem_pkcs8()?;
 
-    match std::fs::write("./ca.pem", ca_cert_pem) {
+    match fs::write(ca_file, ca_cert_pem) {
         Ok(_) => {
             println!("✅ [CA] 授权根证书已保存");
         }
         Err(e) => panic!("❌ [CA] 授权根证书保存失败: {}", e),
     }
-    match std::fs::write("./ca_key.pem", ca_key_pem) {
+    match std::fs::write(ca_key_file, ca_key_pem) {
         Ok(_) => {
             println!("✅ [CA] 根证书私钥已保存");
             Ok(())

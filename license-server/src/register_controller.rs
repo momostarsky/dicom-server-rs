@@ -1,8 +1,10 @@
-use crate::{AppState, cert_helper};
-use actix_web::{HttpRequest, HttpResponse, Responder, get, post, web};
-use slog::info;
+use crate::AppState;
+use actix_web::{get, post, web, HttpRequest, HttpResponse, Responder};
+
 use regex::Regex;
 use lazy_static::lazy_static;
+use slog::info;
+use common::cert_helper;
 
 #[derive(serde::Deserialize)]
 struct ClientRegisterParams {
@@ -258,20 +260,6 @@ async fn process_client_registration(
         .body(client_cert)
 }
 
-#[get("/client/validate")]
-async fn client_validate(
-    client_id: String,     // 客户端ID
-    client_seckey: String, // 结束时间
-    req: HttpRequest,
-    app_state: web::Data<AppState>,
-) -> impl Responder {
-    let log = &app_state.log;
-    info!(log, "retrieve_study_metadata  client_id:{} ", client_id);
-    return HttpResponse::NotAcceptable().body(format!(
-        "retrieve_study_metadata Accept header must be {}",
-        "application/json"
-    ));
-}
 pub(crate) async fn manual_hello() -> impl Responder {
     HttpResponse::Ok().body("Hey there!")
 }
