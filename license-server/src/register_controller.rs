@@ -64,6 +64,30 @@ impl ClientRegisterParams {
     }
 }
 
+/// 处理客户端注册
+///
+/// # Arguments
+///
+/// * `req` - HTTP请求对象
+/// * `app_state` - 应用状态数据
+/// * `params` - 客户端注册参数
+///
+/// # Returns
+///
+/// * `impl Responder` - HTTP响应对象
+///
+/// # 说明
+///
+/// 该函数处理客户端注册请求，根据请求参数生成客户端证书并返回。
+/// curl "http://116.63.110.45:8888/client/registe?client_id=HZ10000XXX1&client_name=Sky.LTD&client_machine_id=898989398398moioio2xio22332&client_mac_address=OA:IB:OC:E3:GC:8B&end_date=20261231"
+///
+/// # 示例
+///
+/// 注册一个客户端：
+///
+/// ```sh
+/// curl "http://116.63.110.45:8888/client/registe?client_id=HZ10000XXX1&client_name=Sky.LTD&client_machine_id=898989398398moioio2xio22332&client_mac_address=OA:IB:OC:E3:GC:8B&end_date=20261231"
+/// ```
 #[get("/client/registe")]
 async fn client_registe_get(
     req: HttpRequest,
@@ -73,6 +97,67 @@ async fn client_registe_get(
     process_client_registration(req, app_state, params.into_inner()).await
 }
 
+/// 处理客户端注册
+///
+/// # Arguments
+///
+/// * `req` - HTTP请求对象
+/// * `app_state` - 应用状态数据
+/// * `params` - 客户端注册参数
+///
+/// # Returns
+///
+/// * `impl Responder` - HTTP响应对象
+///
+/// # 说明
+///
+/// 该函数处理客户端注册请求，根据请求参数生成客户端证书并返回。
+/// 支持两种请求方式：GET和POST。
+///
+/// # 示例
+///
+/// 注册一个客户端：
+///
+/// ```sh
+/// curl -X POST \
+//   -H "Content-Type: application/x-www-form-urlencoded" \
+//   -d "client_id=HZ100001&client_name=Sky.LTD&client_machine_id=898989398398moioio2xio22332&client_mac_address=OA:IB:OC:E3:GC:8B&end_date=20261231" \
+//   http://116.63.110.45:8888/client/registe
+/// ```
+///
+/// 注册成功后，服务器会返回一个包含客户端证书的响应。
+///
+/// 证书内容示例：
+///
+/// ```
+/// -----BEGIN CERTIFICATE-----
+// MIIE0zCCArugAwIBAgIBATANBgkqhkiG9w0BAQsFADCBwjELMAkGA1UEBhMCQ04x
+// ETAPBgNVBAgMCFpoZWppYW5nMREwDwYDVQQHDAhIYW5nemhvdTEXMBUGA1UECgwO
+// TGljZW5zZSBTZXJ2ZXIxFTATBgNVBAMMDGRpY29tLm9yZy5jbjEfMB0GCSqGSIb3
+// DQEJARYQNDExNTkyMTQ4QHFxLmNvbTEbMBkGCgmSJomT8ixkAQEMCzE1OTY3MTMy
+// MTcyMQwwCgYDVQQEDANkYWkxETAPBgNVBCoMCGhhbnpoYW5nMB4XDTI1MDkxMTAz
+// NTcwNloXDTI2MDkxMTAzNTcwNlowMjELMAkGA1UEBhMCQ04xEDAOBgNVBAoMB1Nr
+// eS5MVEQxETAPBgNVBAMMCEhaMTAwMDAxMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A
+// MIIBCgKCAQEAzOw0DG0O+TIzn8b6TrB14DA7FkQ1+l7q8G9xZI787O0Oj7FBw5VO
+// B2KHUABbslpSH086sRak3EgzuiQUmMtTbdSVhckuT1Pp4nOVU0u+9toSBHJpGkRZ
+// B2kdUR4fhQBJB+HGo745vDsmnPsk5s4VmpBCkb7lwbpKL8zpE6owRjhf1B6JDVV7
+// TOKTMFv2/1/Am62kYC71vqtYjdIFmtrPehvvyeUyhjS+Utpi3pxCvoS//ocbVhWm
+// /L07w7VZ0CN6JqIDUTtmAGqA+pJvmwpVI8VucKskR4CK90pzk1xpLZeWYxhQnnFl
+// CVAGIcPhyyNCc7I97RbhVVe3ZjaiI/uKzQIDAQABo2MwYTATBgNVHSUEDDAKBggr
+// BgEFBQcDAjApBgorBgEEu73ctAwBBBs4OTg5ODkzOTgzOThtb2lvaW8yeGlvMjIz
+// MzIwHwYKKwYBBLu93LQMAgQRT0E6SUI6T0M6RTM6R0M6OEIwDQYJKoZIhvcNAQEL
+// BQADggIBAGyO/gqGNl9ywUc+GVh0N4t2ts4nvw+uX1MQHxCOWZwzs3DafMY6qoG5
+// wb5/OObHIJAKDjvC7aPIKtVY90pO2CRmaMas9Cuf6sdnt41LQrQO5V32wgg6AjaJ
+// ilZhAuFREBdNAUgAr+xcfS8Ob5y6qtSPcpgSKBSp2kVCxepxQxHo9zt7mmzAhFq9
+// Om4YhzC67PDwC1/96Bh/w8PYeNw1Fs4e9MJl4aAQPt/zgJjEs2BG+kBHumk2/WvI
+// DK7vRxFayLD7AclKYstW8roITOPvZW12aL1yZE2ggUSuWmcKwdH3VKXm95Y5qhEB
+// /O1+29lxE8QwBqTKZrjJgodXLWRHit3b8bsgzCk+nMKakznt/RMXL19IVful5opx
+// LfuhhWmBRBxnurusnytYWCTgPkkfwaIRGtFQoTLZ52YcrQrp1WALVL2aqgnHIfkq
+// +/hy4asqkqZbypIz//aexavdZytOQcgwmqbWn6Glp0RirrpYVvZah+bPyja0mC5Z
+// Ia00R+biBySj+ZdNJY/9RwuzOsxVukYEbYwiMo64bEsalIYrSVl7XEIRRwDjnYP1
+// PeLK2igwTS32KfHQh6LfJGv9ozW2trx2r/A3yIUHZx6xfIkui3iE+O1Ru6Dyp9qW
+// HuJIB6TAV0KcmXlk8J0wODpl01GCV1fwQ6Z/mNsQfawBLP0Pg8QE
+/// -----END CERTIFICATE-----
 #[post("/client/registe")]
 async fn client_registe_post(
     req: HttpRequest,
