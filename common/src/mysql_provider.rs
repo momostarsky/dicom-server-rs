@@ -993,7 +993,9 @@ impl DbProvider for MySqlProvider {
         match sqlx::query(
             "SELECT COUNT(*) FROM ImageEntity
              INNER JOIN StudyEntity ON ImageEntity.StudyInstanceUID = StudyEntity.StudyInstanceUID
-             WHERE ImageEntity.tenant_id = ? AND StudyEntity.PatientID = ? AND ImageEntity.StudyInstanceUID = ? AND ImageEntity.SeriesInstanceUID = ? AND ImageEntity.SOPInstanceUID = ?"
+             WHERE ImageEntity.tenant_id = ? AND StudyEntity.PatientID = ?
+               AND ImageEntity.StudyInstanceUID = ? AND ImageEntity.SeriesInstanceUID = ?
+               AND ImageEntity.SOPInstanceUID = ?"
         )
             .bind(tenant_id)
             .bind(patient_id)

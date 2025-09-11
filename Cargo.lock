@@ -861,6 +861,7 @@ dependencies = [
  "slog-stdlog",
  "slog-term",
  "sqlx",
+ "tempfile",
  "thiserror 2.0.12",
  "tokio",
  "tracing",

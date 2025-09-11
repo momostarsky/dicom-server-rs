@@ -13,7 +13,7 @@ use dicom_object::ReadError;
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::sync::{Arc, Once};
+use std::sync::{Arc};
 use tracing::info;
 use slog::Drain;
 use std::fs::OpenOptions;

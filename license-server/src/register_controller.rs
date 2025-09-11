@@ -15,6 +15,9 @@ struct ClientRegisterParams {
     end_date: String,
 }
 
+const CA_FILE:&str=        "/opt/dicom-server/ca_root.pem";
+const CA_KEY_FILE:&str=   "/opt/dicom-server/ca_key_root.pem";
+
 impl ClientRegisterParams {
     fn validate(&self) -> Result<(), String> {
         // Validate client_id: 字母数字组合，16位
@@ -220,6 +223,8 @@ async fn process_client_registration(
         &params.client_machine_id,
         &params.client_mac_address,
         &params.end_date,
+        &CA_FILE,
+        &CA_KEY_FILE,
     ) {
         Ok(result) => result,
         Err(e) => {

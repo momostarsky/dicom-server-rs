@@ -1,12 +1,12 @@
-use std::fs;
-use std::time::{SystemTime, UNIX_EPOCH};
 use openssl::asn1::{Asn1Integer, Asn1Object, Asn1OctetString, Asn1Time};
 use openssl::bn::BigNum;
 use openssl::hash::MessageDigest;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
-use openssl::x509::{X509Extension, X509NameBuilder, X509Req, X509};
 use openssl::x509::extension::{BasicConstraints, ExtendedKeyUsage, KeyUsage};
+use openssl::x509::{X509Extension, X509NameBuilder, X509};
+use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
 use x509_parser::der_parser::Oid;
 use x509_parser::parse_x509_certificate;
 
@@ -269,6 +269,9 @@ pub fn generate_client_and_sign(
     machine_id: &str,  //客户端的MAC地址
     mac_address: &str, //客户端的IP地址
     end_date: &str,    // 结束时间YYYYMMDD 的格式
+
+    ca_file: &str,
+    ca_key_file: &str,
 ) -> Result<(Vec<u8>,Vec<u8>), Box<dyn std::error::Error>> {
     // 验证输入参数不为空
     if client_org.is_empty() {
@@ -288,11 +291,11 @@ pub fn generate_client_and_sign(
     }
 
     // 读取CA证书
-    let ca_cert_pem = fs::read("/opt/dicom-server/ca.pem").expect("读取CA证书失败!");
+    let ca_cert_pem = fs::read(ca_file).expect("读取CA证书失败!");
     let ca_cert = X509::from_pem(&ca_cert_pem)?;
 
     // 读取CA私钥
-    let ca_key_pem = fs::read("/opt/dicom-server/ca_key.pem").expect("读取CA私钥失败!");
+    let ca_key_pem = fs::read(ca_key_file).expect("读取CA私钥失败!");
     let ca_pkey = PKey::private_key_from_pem(&ca_key_pem)?;
 
     // =============================
@@ -307,16 +310,6 @@ pub fn generate_client_and_sign(
     client_name.append_entry_by_text("O", client_org)?;
     client_name.append_entry_by_text("CN", client_id)?; // 客户端唯一标识
     let client_name = client_name.build();
-
-    // 创建证书请求
-    let mut req_builder = X509Req::builder()?;
-    req_builder.set_version(0)?;
-    req_builder.set_subject_name(&client_name)?;
-    req_builder.set_pubkey(&client_pkey)?;
-    req_builder.sign(&client_pkey, MessageDigest::sha256())?;
-    let client_req = req_builder.build();
-
-
 
     // =============================
     // 3. 用 CA 签发客户端证书（授权证书）
@@ -406,17 +399,17 @@ pub fn generate_ca_root(ca_file: &str, ca_key_file: &str) -> Result<(), Box<dyn 
     let ca_rsa = Rsa::generate(4096)?;
     let ca_pkey = PKey::from_rsa(ca_rsa)?;
 
-    // 构造 CA 证书的 Subject
+    // 构造 CA 证书的 Subject（主题信息）
     let mut ca_name = X509NameBuilder::new()?;
-    ca_name.append_entry_by_text("C", "CN")?;
-    ca_name.append_entry_by_text("ST", "Zhejiang")?;
-    ca_name.append_entry_by_text("L", "Hangzhou")?;
-    ca_name.append_entry_by_text("O",  "License Server")?;
-    ca_name.append_entry_by_text("CN", "dicom.org.cn")?;
-    ca_name.append_entry_by_text("emailAddress", "411592148@qq.com")?;
-    ca_name.append_entry_by_text("UID", "15967132172")?;
-    ca_name.append_entry_by_text("SN", "dai")?;
-    ca_name.append_entry_by_text("GN", "hanzhang")?;
+    ca_name.append_entry_by_text("C", "CN")?;  // 国家代码
+    ca_name.append_entry_by_text("ST", "Zhejiang")?;  // 省份
+    ca_name.append_entry_by_text("L", "Hangzhou")?;  // 城市
+    ca_name.append_entry_by_text("O",  "License Server")?;  // 组织
+    ca_name.append_entry_by_text("CN", "dicom.org.cn")?;  // 通用名称
+    ca_name.append_entry_by_text("emailAddress", "411592148@qq.com")?;  // 邮箱
+    ca_name.append_entry_by_text("UID", "15967132172")?;  // 用户ID
+    ca_name.append_entry_by_text("SN", "dai")?;  // 姓
+    ca_name.append_entry_by_text("GN", "hanzhang")?;  // 名
     let ca_name = ca_name.build();
 
     // 构建 CA 证书
@@ -428,18 +421,22 @@ pub fn generate_ca_root(ca_file: &str, ca_key_file: &str) -> Result<(), Box<dyn 
     let serial = Asn1Integer::from_bn(&serial)?;
     ca_builder.set_serial_number(&serial)?;
 
+    // 设置证书的主体和颁发者（自签名证书，两者相同）
     ca_builder.set_subject_name(&ca_name)?;
     ca_builder.set_issuer_name(&ca_name)?; // 自签名
-    ca_builder.set_pubkey(&ca_pkey)?;
+    ca_builder.set_pubkey(&ca_pkey)?;  // 设置公钥
 
+
+    // 设置证书有效期（当前时间到10年后）
     let not_before = Asn1Time::days_from_now(0)?;
     let not_after = Asn1Time::days_from_now(365 * 10)?; // 10 年有效期
     ca_builder.set_not_before(&not_before)?;
     ca_builder.set_not_after(&not_after)?;
 
+
     // 添加 CA 扩展：BasicConstraints 和 KeyUsage
     ca_builder.append_extension(BasicConstraints::new().critical().ca().pathlen(2).build()?)?;
-
+    // 添加密钥用法扩展：允许证书签名和CRL签名
     ca_builder.append_extension(
         KeyUsage::new()
             .critical()
@@ -447,25 +444,243 @@ pub fn generate_ca_root(ca_file: &str, ca_key_file: &str) -> Result<(), Box<dyn 
             .crl_sign()
             .build()?,
     )?;
-
+    // 使用CA私钥对证书进行签名
     ca_builder.sign(&ca_pkey, MessageDigest::sha256())?;
-
+    // 构建最终的证书对象
     let ca_cert = ca_builder.build();
-    // 然后才可以调用：
+    // 将证书和私钥转换为PEM格式
     let ca_cert_pem = ca_cert.to_pem()?; // ✅ 正确
     let ca_key_pem = ca_pkey.private_key_to_pem_pkcs8()?;
 
+    // 将证书和私钥写入文件
     match fs::write(ca_file, ca_cert_pem) {
         Ok(_) => {
             println!("✅ [CA] 授权根证书已保存");
         }
         Err(e) => panic!("❌ [CA] 授权根证书保存失败: {}", e),
     }
-    match std::fs::write(ca_key_file, ca_key_pem) {
+    match fs::write(ca_key_file, ca_key_pem) {
         Ok(_) => {
             println!("✅ [CA] 根证书私钥已保存");
             Ok(())
         }
         Err(e) => panic!("❌ [CA] 根证书私钥保存失败: {}", e),
+    }
+}
+
+ // ... existing code ...
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+    use x509_parser::der_parser::Oid;
+
+    #[test]
+    fn test_is_well_known_oid() {
+        // 测试已知的OID
+        let known_oid = Oid::from_str("2.5.29.14").unwrap();
+        assert!(is_well_known_oid(&known_oid));
+
+        // 测试未知的OID
+        let unknown_oid = Oid::from_str("1.2.3.4.5").unwrap();
+        assert!(!is_well_known_oid(&unknown_oid));
+    }
+
+    #[test]
+    fn test_generate_ca_root() {
+        // 创建临时目录用于测试
+        let temp_dir = tempfile::tempdir().expect("无法创建临时目录");
+        let ca_cert_path = temp_dir.path().join("ca_test.crt");
+        let ca_key_path = temp_dir.path().join("ca_test.key");
+
+        // 调用函数生成CA根证书
+        let result = generate_ca_root(
+            ca_cert_path.to_str().unwrap(),
+            ca_key_path.to_str().unwrap()
+        );
+
+        // 验证函数执行成功
+        assert!(result.is_ok());
+
+        // 验证证书文件已创建
+        assert!(ca_cert_path.exists());
+
+        // 验证私钥文件已创建
+        assert!(ca_key_path.exists());
+
+        // 验证证书文件不为空
+        let cert_content = fs::read(&ca_cert_path).expect("无法读取证书文件");
+        assert!(!cert_content.is_empty());
+        assert!(String::from_utf8(cert_content).unwrap().contains("-----BEGIN CERTIFICATE-----"));
+
+        // 验证私钥文件不为空
+        let key_content = fs::read(&ca_key_path).expect("无法读取私钥文件");
+        assert!(!key_content.is_empty());
+        assert!(String::from_utf8(key_content).unwrap().contains("-----BEGIN PRIVATE KEY-----"));
+    }
+
+    #[test]
+    fn test_generate_client_and_sign() {
+        // 创建临时目录用于测试
+        let temp_dir = tempfile::tempdir().expect("无法创建临时目录");
+        let ca_cert_path = temp_dir.path().join("ca_test.crt");
+        let ca_key_path = temp_dir.path().join("ca_test.key");
+
+        // 首先生成CA根证书
+        let ca_result = generate_ca_root(
+            ca_cert_path.to_str().unwrap(),
+            ca_key_path.to_str().unwrap()
+        );
+        assert!(ca_result.is_ok());
+
+        // 测试生成客户端证书
+        let client_result = generate_client_and_sign(
+            "Test Organization",
+            "test-client-001",
+            "machine-uuid-123",
+            "00:11:22:33:44:55",
+            "20301231",
+            ca_cert_path.to_str().unwrap(),
+            ca_key_path.to_str().unwrap()
+        );
+
+        // 验证函数执行成功
+        assert!(client_result.is_ok());
+
+        // 获取返回的证书和私钥
+        let (client_cert_pem, client_key_pem) = client_result.unwrap();
+
+        // 验证证书和私钥不为空
+        assert!(!client_cert_pem.is_empty());
+        assert!(!client_key_pem.is_empty());
+
+        // 验证证书是有效的PEM格式
+        let cert_string = String::from_utf8(client_cert_pem).expect("证书不是有效的UTF-8");
+        assert!(cert_string.contains("-----BEGIN CERTIFICATE-----"));
+        assert!(cert_string.contains("-----END CERTIFICATE-----"));
+
+        // 验证私钥是有效的PEM格式
+        let key_string = String::from_utf8(client_key_pem).expect("私钥不是有效的UTF-8");
+        assert!(key_string.contains("-----BEGIN PRIVATE KEY-----"));
+        assert!(key_string.contains("-----END PRIVATE KEY-----"));
+    }
+
+    #[test]
+    fn test_sign_and_verify_with_cert() {
+        // 创建临时目录用于测试
+        let temp_dir = tempfile::tempdir().expect("无法创建临时目录");
+        let ca_cert_path = temp_dir.path().join("ca_test.crt");
+        let ca_key_path = temp_dir.path().join("ca_test.key");
+        let client_cert_path = temp_dir.path().join("client_test.crt");
+        let client_key_path = temp_dir.path().join("client_test.key");
+
+        // 首先生成CA根证书
+        let ca_result = generate_ca_root(
+            ca_cert_path.to_str().unwrap(),
+            ca_key_path.to_str().unwrap()
+        );
+        assert!(ca_result.is_ok());
+
+        // 生成客户端证书
+        let (client_cert_pem, client_key_pem) = generate_client_and_sign(
+            "Test Organization",
+            "test-client-001",
+            "machine-uuid-123",
+            "00:11:22:33:44:55",
+            "20301231",
+            ca_cert_path.to_str().unwrap(),
+            ca_key_path.to_str().unwrap()
+        ).expect("无法生成客户端证书");
+
+        // 将证书和密钥写入文件
+        fs::write(&client_cert_path, &client_cert_pem).expect("无法写入客户端证书文件");
+        fs::write(&client_key_path, &client_key_pem).expect("无法写入客户端密钥文件");
+
+        // 测试签名和验证功能
+        let result = sign_and_verify_with_cert(
+            client_cert_path.to_str().unwrap(),
+            client_key_path.to_str().unwrap()
+        );
+
+        // 验证函数执行成功（输出会被打印，但我们只检查是否成功执行）
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_encrypt_with_cert_and_decrypt_with_key() {
+        // 创建临时目录用于测试
+        let temp_dir = tempfile::tempdir().expect("无法创建临时目录");
+        let ca_cert_path = temp_dir.path().join("ca_test.crt");
+        let ca_key_path = temp_dir.path().join("ca_test.key");
+        let client_cert_path = temp_dir.path().join("client_test.crt");
+        let client_key_path = temp_dir.path().join("client_test.key");
+
+        // 首先生成CA根证书
+        let ca_result = generate_ca_root(
+            ca_cert_path.to_str().unwrap(),
+            ca_key_path.to_str().unwrap()
+        );
+        assert!(ca_result.is_ok());
+
+        // 生成客户端证书
+        let (client_cert_pem, client_key_pem) = generate_client_and_sign(
+            "Test Organization",
+            "test-client-001",
+            "machine-uuid-123",
+            "00:11:22:33:44:55",
+            "20301231",
+            ca_cert_path.to_str().unwrap(),
+            ca_key_path.to_str().unwrap()
+        ).expect("无法生成客户端证书");
+
+        // 将证书和密钥写入文件
+        fs::write(&client_cert_path, &client_cert_pem).expect("无法写入客户端证书文件");
+        fs::write(&client_key_path, &client_key_pem).expect("无法写入客户端密钥文件");
+
+        // 测试加密和解密功能
+        let result = encrypt_with_cert_and_decrypt_with_key(
+            client_cert_path.to_str().unwrap(),
+            client_key_path.to_str().unwrap()
+        );
+
+        // 验证函数执行成功
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_client_cert() {
+        // 创建临时目录用于测试
+        let temp_dir = tempfile::tempdir().expect("无法创建临时目录");
+        let ca_cert_path = temp_dir.path().join("ca_test.crt");
+        let ca_key_path = temp_dir.path().join("ca_test.key");
+        let client_cert_path = temp_dir.path().join("client_test.crt");
+
+        // 首先生成CA根证书
+        let ca_result = generate_ca_root(
+            ca_cert_path.to_str().unwrap(),
+            ca_key_path.to_str().unwrap()
+        );
+        assert!(ca_result.is_ok());
+
+        // 生成客户端证书
+        let (client_cert_pem, _client_key_pem) = generate_client_and_sign(
+            "Test Organization",
+            "test-client-001",
+            "machine-uuid-123",
+            "00:11:22:33:44:55",
+            "20301231",
+            ca_cert_path.to_str().unwrap(),
+            ca_key_path.to_str().unwrap()
+        ).expect("无法生成客户端证书");
+
+        // 将证书写入文件
+        fs::write(&client_cert_path, &client_cert_pem).expect("无法写入客户端证书文件");
+
+        // 测试解析证书功能
+        let result = parse_client_cert(client_cert_path.to_str().unwrap());
+
+        // 验证函数执行成功
+        assert!(result.is_ok());
     }
 }
