@@ -25,6 +25,8 @@ dist
 .next/cache
 .next/server/pages
 .next/server/static
+.rustfmt.toml
+.rustc_info.json
 target/debug
 target/release
 */target
