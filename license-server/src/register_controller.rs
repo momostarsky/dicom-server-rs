@@ -1,10 +1,11 @@
 use crate::AppState;
-use actix_web::{get, post, web, HttpRequest, HttpResponse, Responder};
+use actix_web::{HttpRequest, HttpResponse, Responder, get, post, web};
+use std::fs;
 
-use regex::Regex;
-use lazy_static::lazy_static;
-use slog::info;
 use common::cert_helper;
+use lazy_static::lazy_static;
+use regex::Regex;
+use slog::info;
 
 #[derive(serde::Deserialize)]
 struct ClientRegisterParams {
@@ -15,8 +16,8 @@ struct ClientRegisterParams {
     end_date: String,
 }
 
-const CA_FILE:&str=        "/opt/dicom-server/ca_root.pem";
-const CA_KEY_FILE:&str=   "/opt/dicom-server/ca_key_root.pem";
+const CA_FILE: &str = "/opt/dicom-server/ca_root.pem";
+const CA_KEY_FILE: &str = "/opt/dicom-server/ca_key_root.pem";
 
 impl ClientRegisterParams {
     fn validate(&self) -> Result<(), String> {
@@ -25,7 +26,10 @@ impl ClientRegisterParams {
             static ref CLIENT_ID_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9]{16}$").unwrap();
         }
         if !CLIENT_ID_REGEX.is_match(&self.client_id) {
-            return Err("client_id must be 16 characters long and contain only letters and numbers".to_string());
+            return Err(
+                "client_id must be 16 characters long and contain only letters and numbers"
+                    .to_string(),
+            );
         }
 
         // Validate client_name: 字母数字组合并支持,. 10到64位
@@ -38,7 +42,8 @@ impl ClientRegisterParams {
 
         // Validate client_machine_id: 字母数字组合，16~128位
         lazy_static! {
-            static ref CLIENT_MACHINE_ID_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9]{16,128}$").unwrap();
+            static ref CLIENT_MACHINE_ID_REGEX: Regex =
+                Regex::new(r"^[a-zA-Z0-9]{16,128}$").unwrap();
         }
         if !CLIENT_MACHINE_ID_REGEX.is_match(&self.client_machine_id) {
             return Err("client_machine_id must be between 16 and 128 characters long and contain only letters and numbers".to_string());
@@ -46,7 +51,8 @@ impl ClientRegisterParams {
 
         // Validate client_mac_address: 网卡地址格式 (MAC地址格式)
         lazy_static! {
-            static ref MAC_ADDRESS_REGEX: Regex = Regex::new(r"^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$").unwrap();
+            static ref MAC_ADDRESS_REGEX: Regex =
+                Regex::new(r"^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$").unwrap();
         }
         if !MAC_ADDRESS_REGEX.is_match(&self.client_mac_address) {
             return Err("client_mac_address must be in MAC address format (e.g., 00:1A:2B:3C:4D:5E or 00-1A-2B-3C-4D-5E)".to_string());
@@ -102,6 +108,43 @@ async fn client_registe_get(
     process_client_registration(req, app_state, params.into_inner()).await
 }
 
+/// 获取CA公钥证书
+///
+/// # Arguments
+///
+/// * `app_state` - 应用状态数据
+///
+/// # Returns
+///
+/// * `impl Responder` - 包含CA公钥证书的JSON响应
+///
+/// # 说明
+///
+/// 该函数返回CA公钥证书，客户端可以使用此证书验证由该CA签发的证书。
+#[get("/ca")]
+async fn get_ca_certificate(app_state: web::Data<AppState>) -> impl Responder {
+    let log = &app_state.log;
+
+    // 读取CA证书内容
+    let ca_cert_content = match fs::read_to_string(CA_FILE) {
+        Ok(content) => content,
+        Err(e) => {
+            slog::error!(log, "Failed to read CA certificate file: {}", e);
+            return HttpResponse::InternalServerError()
+                .body(format!("Failed to read CA certificate: {}", e));
+        }
+    };
+
+    // 创建JSON响应
+    let response_data = serde_json::json!({
+        "ca_cert": ca_cert_content,
+        "status": "success"
+    });
+
+    HttpResponse::Ok()
+        .append_header(("Content-Type", "application/json"))
+        .json(response_data)
+}
 /// 处理客户端注册
 ///
 /// # Arguments
@@ -136,32 +179,7 @@ async fn client_registe_get(
 ///
 /// ```
 /// -----BEGIN CERTIFICATE-----
-// MIIE0zCCArugAwIBAgIBATANBgkqhkiG9w0BAQsFADCBwjELMAkGA1UEBhMCQ04x
-// ETAPBgNVBAgMCFpoZWppYW5nMREwDwYDVQQHDAhIYW5nemhvdTEXMBUGA1UECgwO
-// TGljZW5zZSBTZXJ2ZXIxFTATBgNVBAMMDGRpY29tLm9yZy5jbjEfMB0GCSqGSIb3
-// DQEJARYQNDExNTkyMTQ4QHFxLmNvbTEbMBkGCgmSJomT8ixkAQEMCzE1OTY3MTMy
-// MTcyMQwwCgYDVQQEDANkYWkxETAPBgNVBCoMCGhhbnpoYW5nMB4XDTI1MDkxMTAz
-// NTcwNloXDTI2MDkxMTAzNTcwNlowMjELMAkGA1UEBhMCQ04xEDAOBgNVBAoMB1Nr
-// eS5MVEQxETAPBgNVBAMMCEhaMTAwMDAxMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A
-// MIIBCgKCAQEAzOw0DG0O+TIzn8b6TrB14DA7FkQ1+l7q8G9xZI787O0Oj7FBw5VO
-// B2KHUABbslpSH086sRak3EgzuiQUmMtTbdSVhckuT1Pp4nOVU0u+9toSBHJpGkRZ
-// B2kdUR4fhQBJB+HGo745vDsmnPsk5s4VmpBCkb7lwbpKL8zpE6owRjhf1B6JDVV7
-// TOKTMFv2/1/Am62kYC71vqtYjdIFmtrPehvvyeUyhjS+Utpi3pxCvoS//ocbVhWm
-// /L07w7VZ0CN6JqIDUTtmAGqA+pJvmwpVI8VucKskR4CK90pzk1xpLZeWYxhQnnFl
-// CVAGIcPhyyNCc7I97RbhVVe3ZjaiI/uKzQIDAQABo2MwYTATBgNVHSUEDDAKBggr
-// BgEFBQcDAjApBgorBgEEu73ctAwBBBs4OTg5ODkzOTgzOThtb2lvaW8yeGlvMjIz
-// MzIwHwYKKwYBBLu93LQMAgQRT0E6SUI6T0M6RTM6R0M6OEIwDQYJKoZIhvcNAQEL
-// BQADggIBAGyO/gqGNl9ywUc+GVh0N4t2ts4nvw+uX1MQHxCOWZwzs3DafMY6qoG5
-// wb5/OObHIJAKDjvC7aPIKtVY90pO2CRmaMas9Cuf6sdnt41LQrQO5V32wgg6AjaJ
-// ilZhAuFREBdNAUgAr+xcfS8Ob5y6qtSPcpgSKBSp2kVCxepxQxHo9zt7mmzAhFq9
-// Om4YhzC67PDwC1/96Bh/w8PYeNw1Fs4e9MJl4aAQPt/zgJjEs2BG+kBHumk2/WvI
-// DK7vRxFayLD7AclKYstW8roITOPvZW12aL1yZE2ggUSuWmcKwdH3VKXm95Y5qhEB
-// /O1+29lxE8QwBqTKZrjJgodXLWRHit3b8bsgzCk+nMKakznt/RMXL19IVful5opx
-// LfuhhWmBRBxnurusnytYWCTgPkkfwaIRGtFQoTLZ52YcrQrp1WALVL2aqgnHIfkq
-// +/hy4asqkqZbypIz//aexavdZytOQcgwmqbWn6Glp0RirrpYVvZah+bPyja0mC5Z
-// Ia00R+biBySj+ZdNJY/9RwuzOsxVukYEbYwiMo64bEsalIYrSVl7XEIRRwDjnYP1
-// PeLK2igwTS32KfHQh6LfJGv9ozW2trx2r/A3yIUHZx6xfIkui3iE+O1Ru6Dyp9qW
-// HuJIB6TAV0KcmXlk8J0wODpl01GCV1fwQ6Z/mNsQfawBLP0Pg8QE
+/// XXXXXXXXXXXXXX
 /// -----END CERTIFICATE-----
 #[post("/client/registe")]
 async fn client_registe_post(
@@ -170,9 +188,10 @@ async fn client_registe_post(
     params: Option<web::Form<ClientRegisterParams>>,
     json_params: Option<web::Json<ClientRegisterParams>>,
 ) -> impl Responder {
-
     // 检查Content-Type头
-    let content_type = req.headers().get("Content-Type")
+    let content_type = req
+        .headers()
+        .get("Content-Type")
         .and_then(|ct| ct.to_str().ok())
         .map(|ct| ct.to_string())
         .unwrap_or_default();
@@ -237,7 +256,10 @@ async fn process_client_registration(
     let client_key_file_path = format!("/opt/client-cert/client_{}.key", &params.client_id);
     match std::fs::write(&client_cert_file_path, &client_cert) {
         Ok(_) => {
-            info!(log, "write client cert file success:{}", client_cert_file_path);
+            info!(
+                log,
+                "write client cert file success:{}", client_cert_file_path
+            );
         }
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -247,10 +269,14 @@ async fn process_client_registration(
 
     match std::fs::write(&client_key_file_path, &client_seckey) {
         Ok(_) => {
-            info!(log, "write client key file success:{}", client_key_file_path);
+            info!(
+                log,
+                "write client key file success:{}", client_key_file_path
+            );
         }
         Err(e) => {
-            return HttpResponse::InternalServerError().body(format!("write client key file error:{}", e));
+            return HttpResponse::InternalServerError()
+                .body(format!("write client key file error:{}", e));
         }
     };
 

@@ -1,6 +1,6 @@
 mod register_controller;
 
-use crate::register_controller::{client_registe_get, client_registe_post, manual_hello};
+use crate::register_controller::{client_registe_get, client_registe_post, get_ca_certificate, manual_hello};
 use actix_cors::Cors;
 use actix_web::{App, HttpServer, middleware, web};
 
@@ -34,6 +34,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(app_state.clone()))
             .service(client_registe_get)
             .service(client_registe_post)
+            .service(get_ca_certificate)
             .route("/hey", web::get().to(manual_hello))
     })
     .bind(("0.0.0.0", 8888))?
