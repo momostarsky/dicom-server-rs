@@ -233,36 +233,53 @@ async fn process_client_registration(
         }
     };
 
-    let cert_file_path = format!("/opt/client-cert/client_{}.crt", &params.client_id);
-    let key_file_path = format!("/opt/client-cert/client_{}.key", &params.client_id);
-    match std::fs::write(&cert_file_path, &client_cert) {
+    let client_cert_file_path = format!("/opt/client-cert/client_{}.crt", &params.client_id);
+    let client_key_file_path = format!("/opt/client-cert/client_{}.key", &params.client_id);
+    match std::fs::write(&client_cert_file_path, &client_cert) {
         Ok(_) => {
-            info!(log, "write cert file success:{}", cert_file_path);
+            info!(log, "write client cert file success:{}", client_cert_file_path);
         }
         Err(e) => {
             return HttpResponse::InternalServerError()
-                .body(format!("write cert file error:{}", e));
+                .body(format!("write client cert file error:{}", e));
         }
     };
 
-    match std::fs::write(&key_file_path, &client_seckey) {
+    match std::fs::write(&client_key_file_path, &client_seckey) {
         Ok(_) => {
-            info!(log, "write key file success:{}", key_file_path);
+            info!(log, "write client key file success:{}", client_key_file_path);
         }
         Err(e) => {
-            return HttpResponse::InternalServerError().body(format!("write key file error:{}", e));
+            return HttpResponse::InternalServerError().body(format!("write client key file error:{}", e));
         }
     };
 
-    let filename = std::path::Path::new(&cert_file_path)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("client.crt");
+    // 读取CA证书内容
+    let ca_cert = match std::fs::read_to_string(&CA_FILE) {
+        Ok(cert) => cert,
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .body(format!("read CA cert file error:{}", e));
+        }
+    };
+
+    // 将客户端证书转换为字符串
+    let client_cert_str = match String::from_utf8(client_cert) {
+        Ok(cert) => cert,
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .body(format!("convert client cert to string error:{}", e));
+        }
+    };
+    // 创建JSON响应
+    let response_data = serde_json::json!({
+        "client_cert": client_cert_str,
+        "ca_cert": ca_cert,
+    });
 
     HttpResponse::Ok()
-        .append_header(("Content-Type", "application/octet-stream"))
-        .append_header(("Content-Disposition", format!("attachment; filename=\"{}\"", filename)))
-        .body(client_cert)
+        .append_header(("Content-Type", "application/json"))
+        .json(response_data)
 }
 
 pub(crate) async fn manual_hello() -> impl Responder {
