@@ -1,6 +1,7 @@
 .idea
 .vscode
 logs
+target
 .git
 .DS_Store
 .env
