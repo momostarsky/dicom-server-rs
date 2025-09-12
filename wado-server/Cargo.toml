@@ -2,7 +2,9 @@
 name = "wado-server"
 version = "0.1.0"
 edition = "2024"
-
+[profile.release]
+lto = true
+opt-level = "s"
 [dependencies]
 dicom-core = { version = "0.8.2" }
 dicom-ul = { version = "0.8.2", features = ["async"] }

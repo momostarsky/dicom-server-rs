@@ -3,7 +3,9 @@ name = "storescp"
 version = "0.1.0"
 authors = ["Victor Saase <vsaase@gmail.com>", "Eduardo Pinho <enet4mikeenet@gmail.com>"]
 edition = "2021"
-
+[profile.release]
+lto = true
+opt-level = "s"
 
 [dependencies]
 clap = { version = "4.5.43", features = ["derive"] }
