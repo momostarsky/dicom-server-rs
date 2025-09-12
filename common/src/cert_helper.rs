@@ -25,7 +25,6 @@ pub fn get_primary_mac_address() -> Result<String, Box<dyn std::error::Error>> {
     let net_dir = std::path::Path::new("/sys/class/net");
 
     let mut mac = None;
-    let mut ip: String = "".to_string();
     for entry in std::fs::read_dir(net_dir)? {
         let entry = entry?;
         let name = entry.file_name();

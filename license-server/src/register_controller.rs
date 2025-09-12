@@ -267,7 +267,7 @@ async fn process_client_registration(
         }
     };
 
-    match std::fs::write(&client_key_file_path, &client_seckey) {
+    match fs::write(&client_key_file_path, &client_seckey) {
         Ok(_) => {
             info!(
                 log,
@@ -280,14 +280,7 @@ async fn process_client_registration(
         }
     };
 
-    // 读取CA证书内容
-    let ca_cert = match std::fs::read_to_string(&CA_FILE) {
-        Ok(cert) => cert,
-        Err(e) => {
-            return HttpResponse::InternalServerError()
-                .body(format!("read CA cert file error:{}", e));
-        }
-    };
+
 
     // 将客户端证书转换为字符串
     let client_cert_str = match String::from_utf8(client_cert) {
@@ -299,8 +292,8 @@ async fn process_client_registration(
     };
     // 创建JSON响应
     let response_data = serde_json::json!({
-        "client_cert": client_cert_str,
-        "ca_cert": ca_cert,
+        "client_cert": client_cert_str
+
     });
 
     HttpResponse::Ok()
