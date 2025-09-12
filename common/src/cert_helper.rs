@@ -1,3 +1,4 @@
+use std::fmt::format;
 use openssl::asn1::{Asn1Integer, Asn1Object, Asn1OctetString, Asn1Time};
 use openssl::bn::BigNum;
 use openssl::hash::MessageDigest;
@@ -291,11 +292,11 @@ pub fn generate_client_and_sign(
     }
 
     // 读取CA证书
-    let ca_cert_pem = fs::read(ca_file).expect("读取CA证书失败!");
+    let ca_cert_pem = fs::read(ca_file).expect(format!("读取CA证书失败!:{}",ca_file).as_str());
     let ca_cert = X509::from_pem(&ca_cert_pem)?;
 
     // 读取CA私钥
-    let ca_key_pem = fs::read(ca_key_file).expect("读取CA私钥失败!");
+    let ca_key_pem = fs::read(ca_key_file).expect(format!("读取CA私钥失败!:{}",ca_key_file).as_str());
     let ca_pkey = PKey::private_key_from_pem(&ca_key_pem)?;
 
     // =============================
