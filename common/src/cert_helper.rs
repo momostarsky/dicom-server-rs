@@ -21,6 +21,53 @@ pub fn read_machine_id() -> Result<String, Box<dyn std::error::Error>> {
     Ok(id)
 }
 
+ pub fn mac_address_exists(mac: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let net_dir = std::path::Path::new("/sys/class/net");
+
+    for entry in std::fs::read_dir(net_dir)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy().to_lowercase(); // 转小写便于比较
+
+        // ===== 排除虚拟/容器/回环网络接口 =====
+        if name_str == "lo"
+            || name_str.starts_with("docker")
+            || name_str.starts_with("veth")
+            || name_str.starts_with("virbr")
+            || name_str.starts_with("tun")
+            || name_str.starts_with("tap")
+            || name_str.starts_with("br-")
+            || name_str.starts_with("cni")
+            || name_str.starts_with("kube")
+            || name_str.starts_with("flannel")
+        {
+            continue;
+        }
+
+        // 检查是否为物理网卡
+        let device_path = entry.path().join("device");
+        if !device_path.exists() {
+            // 如果没有 device 目录，则不是物理网卡
+            continue;
+        }
+
+        let mac_path = entry.path().join("address");
+        if !mac_path.exists() {
+            continue;
+        }
+
+        let content = std::fs::read_to_string(mac_path)?;
+        let mac_trimmed = content.trim().to_string();
+
+        if mac_trimmed.eq_ignore_ascii_case(mac) {
+            return Ok(());
+        }
+    }
+
+    Err(format!("未找到指定的 MAC 地址: {}", mac).into())
+}
+
+
 pub fn get_primary_mac_address() -> Result<String, Box<dyn std::error::Error>> {
     let net_dir = std::path::Path::new("/sys/class/net");
 
@@ -42,6 +89,12 @@ pub fn get_primary_mac_address() -> Result<String, Box<dyn std::error::Error>> {
             || name_str.starts_with("kube")
             || name_str.starts_with("flannel")
         {
+            continue;
+        }
+        // 检查是否为物理网卡
+        let device_path = entry.path().join("device");
+        if !device_path.exists() {
+            // 如果没有 device 目录，则不是物理网卡
             continue;
         }
 
