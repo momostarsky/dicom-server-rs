@@ -40,5 +40,14 @@
     "queue_buffering_max_ms": 100,
     "linger_ms": "100",
     "compression_codec": "snappy"
+  },
+  "dicom_license_server": {
+    "url": "http://116.63.110.45:8888",
+    "client_id": "HZXS100100000001",
+    "client_name": "Chenxi Technology Co., Ltd., Xiasha,Hangzhou",
+    "machine_id": "c417aa4802b3441d931c135cbdaab367",
+    "mac_address": "98:97:CC:82:C4:5A",
+    "end_date": "20251231",
+    "license_key": "./dicom-client-HZXS100100000001.pem"
   }
 }

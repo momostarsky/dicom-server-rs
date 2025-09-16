@@ -1,6 +1,6 @@
 pub mod common_utils;
-mod wado_rs_controller;
 mod redis_helper;
+mod wado_rs_controller;
 
 use crate::wado_rs_controller::{
     echo, manual_hello, retrieve_instance, retrieve_instance_frames, retrieve_series_metadata,
@@ -8,9 +8,10 @@ use crate::wado_rs_controller::{
 };
 use actix_cors::Cors;
 use actix_web::{App, HttpServer, middleware, web};
+use common::ca_helper::{client_register, get_public_ca_from_server};
 use common::database_provider::DbProvider;
-use common::server_config::{AppConfig};
-use common::{database_factory, server_config};
+use common::server_config::AppConfig;
+use common::{cert_helper, database_factory, server_config};
 use slog;
 use slog::{Drain, Logger, error, info, o};
 use slog_async;
@@ -40,6 +41,8 @@ struct AppState {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let log = configure_log();
+    let machine_id = cert_helper::read_machine_id();
+    info!(log, "Machine ID: {:?}", machine_id);
 
     let config = server_config::load_config();
     let config = match config {
@@ -52,12 +55,99 @@ async fn main() -> std::io::Result<()> {
             return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
         }
     };
-    
+    let license = match &config.dicom_license_server {
+        None => {
+            info!(log, "Dicom License Server Config is None");
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Dicom License Server Config is None",
+            ));
+        }
+        Some(license_server) => license_server,
+    };
+    info!(
+        log,
+        "Config License Server License Server URL: {:?}", license.url
+    );
+    info!(
+        log,
+        "Config License Server Machine ID: {:?}", license.machine_id
+    );
+    info!(
+        log,
+        "Config License Server Mac Address: {:?}", license.mac_address
+    );
+    info!(
+        log,
+        "Config License Server Client ID: {:?}", license.client_id
+    );
+    info!(
+        log,
+        "Config License Server Client Name : {:?}", license.client_name
+    );
+    info!(
+        log,
+        "Config License Server End Date: {:?}", license.end_date
+    );
+
+    let public_ca_file = "./ca.crt";
+    match get_public_ca_from_server(&license.url, public_ca_file).await {
+        Ok(_) => {
+            info!(log, "Get Public CA Success");
+        }
+        Err(e) => {
+            error!(log, "Get Public CA Error: {:?}", e);
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Get Public CA Error: {:?}", e),
+            ));
+        }
+    };
+
+    match std::fs::exists(&license.license_key.as_str()) {
+        Ok(true) => {
+            info!(log, "License Key File Exists");
+        }
+        Ok(false) => {
+            match client_register(&license, &license.url).await {
+                Ok(_) => {
+                    info!(log, "Client Register Success");
+                }
+                Err(e) => {
+                    error!(log, "Client Register Error: {:?}", e);
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Client Register Error: {:?}", e),
+                    ));
+                }
+            }
+        }
+        _ => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("客户端授权证书错误: {:?}", &license.license_key),
+            ));
+        }
+    };
+
+    match cert_helper::validate_my_certificate(&license.license_key, public_ca_file) {
+        Ok(_) => {
+            info!(log, "Validate My Certificate Success");
+            info!(log,"✅ 证书验证成功");
+        }
+        Err(e) => {
+            error!(log, "Validate My Certificate Error: {:?}", e);
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Validate My Certificate Error: {:?}", e),
+            ));
+        }
+    }
 
     let g_config = config.clone();
     // let db_config = config.database.unwrap();
-    let server_config = config.server ;
-    let local_storage_config = config.local_storage ;
+    let server_config = config.server;
+    let local_storage_config = config.local_storage;
 
     info!(
         log,

@@ -64,6 +64,24 @@ pub struct MessageQueueConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct LicenseServerConfig {
+    /// DICOM 许可服务器地址
+    pub url: String,
+    /// DICOM 许可服务器的 API 密钥  16位字母或是数字字符串
+    pub client_id: String,
+    /// DICOM 许可服务器的 API 密钥  小于64为长度的字符串
+    pub client_name: String,
+    /// DICOM 许可服务器的机器 ID  /etc/machine-id 或 /sys/class/dmi/id/product_uuid
+    pub machine_id: String,
+    /// DICOM 许可服务器的 MAC 地址, 物理 地址格式 (MAC地址)
+    pub mac_address: String,
+    /// DICOM 许可到期时间, 格式为 "20231231"
+    pub end_date: String,
+    /// DICOM 许可密钥文件地址, PEM文件格式
+    pub license_key: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
     pub redis: RedisConfig,
     pub kafka: KafkaConfig,
@@ -72,6 +90,7 @@ pub struct AppConfig {
     pub local_storage: LocalStorageConfig,
     pub dicom_store_scp: DicomStoreScpConfig,
     pub message_queue: MessageQueueConfig,
+    pub dicom_license_server: Option<LicenseServerConfig>,
 }
 
 static APP_ENV: &str = "APP_ENV";
@@ -81,15 +100,21 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
     // 1. 加载 .env 文件
     dotenv().ok();
     // 打印当前工作目录
-    match env::current_dir() {
-        Ok(path) => println!("Current working directory: {:?}", path),
-        Err(e) => println!("Failed to get current directory: {}", e),
-    }
+    let cdir = match env::current_dir() {
+        Ok(path) => {
+            println!("Current working directory: {:?}", path);
+            path
+        },
+        Err(e) => {
+            println!("Failed to get current directory: {}", e);
+            std::path::PathBuf::from("./")
+        }
+    };
     // 2. 从 .env 获取当前环境 (默认 dev)
     let env = env::var(APP_ENV).unwrap_or_else(|_| "dev".into());
 
     // 3. 动态加载配置文件 (如 application.dev.json)
-    let config_path = format!("application.{}.json", env);
+    let config_path = format!("{}/application.{}.json", cdir.display(), env);
 
     // 4. 使用 config 库加载配置
     let settings = Config::builder()
@@ -104,7 +129,7 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
     };
 
     // 5. 解析配置到结构体
-    let app_config: AppConfig =match  settings.try_deserialize() {
+    let app_config: AppConfig = match settings.try_deserialize() {
         Ok(app_config) => app_config,
         Err(err) => panic!("Error parsing config: {}", err),
     };
@@ -171,6 +196,29 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
         "message_queue:topic_multi_frames {:?}",
         app_config.message_queue.topic_multi_frames
     );
+    if let Some(license_server) = app_config.dicom_license_server.as_ref() {
+        println!("dicom_license_server:url {:?}", license_server.url);
+        println!(
+            "dicom_license_server:client_id {:?}",
+            license_server.client_id
+        );
+        println!(
+            "dicom_license_server:client_name {:?}",
+            license_server.client_name
+        );
+        println!(
+            "dicom_license_server:machine_id {:?}",
+            license_server.machine_id
+        );
+        println!(
+            "dicom_license_server:mac_address {:?}",
+            license_server.mac_address
+        );
+        println!(
+            "dicom_license_server:end_date {:?}",
+            license_server.end_date
+        );
+    }
 
     Ok(app_config)
 }

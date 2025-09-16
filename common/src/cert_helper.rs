@@ -4,7 +4,7 @@ use openssl::hash::MessageDigest;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
 use openssl::x509::extension::{BasicConstraints, ExtendedKeyUsage, KeyUsage};
-use openssl::x509::{X509Extension, X509NameBuilder, X509};
+use openssl::x509::{X509, X509Extension, X509NameBuilder};
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 use x509_parser::der_parser::Oid;
@@ -21,7 +21,7 @@ pub fn read_machine_id() -> Result<String, Box<dyn std::error::Error>> {
     Ok(id)
 }
 
- pub fn mac_address_exists(mac: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn mac_address_exists(mac: &str) -> Result<(), Box<dyn std::error::Error>> {
     let net_dir = std::path::Path::new("/sys/class/net");
 
     for entry in std::fs::read_dir(net_dir)? {
@@ -66,7 +66,6 @@ pub fn read_machine_id() -> Result<String, Box<dyn std::error::Error>> {
 
     Err(format!("未找到指定的 MAC 地址: {}", mac).into())
 }
-
 
 pub fn get_primary_mac_address() -> Result<String, Box<dyn std::error::Error>> {
     let net_dir = std::path::Path::new("/sys/class/net");
@@ -633,8 +632,10 @@ pub fn validate_my_certificate(
 
     // 3. 验证自定义扩展（machine_id和mac_address）
     // 获取系统中的machine_id和mac地址用于验证
-    let expected_machine_id = read_machine_id()?;
-    let expected_mac_address = get_primary_mac_address()?;
+    let expected_machine_id = match read_machine_id() {
+        Ok(machine_id) => machine_id,
+        Err(e) => return Err(format!("无法获取machine_id: {}", e).into()),
+    };
 
     // 使用x509-parser查找machine_id扩展（OID: 1.3.6.1.4.15967132172.1）
     let mut actual_machine_id = None;
@@ -662,7 +663,10 @@ pub fn validate_my_certificate(
             }
         }
     }
-
+    // 4. 验证扩展密钥用法是否包含客户端认证
+    if !has_client_auth {
+        return Err("证书未授权用于客户端认证".into());
+    }
     let actual_machine_id = actual_machine_id.ok_or("未找到machine_id扩展")?;
     if actual_machine_id != expected_machine_id {
         return Err(format!(
@@ -673,20 +677,13 @@ pub fn validate_my_certificate(
     }
 
     let actual_mac_address = actual_mac_address.ok_or("未找到mac_address扩展")?;
-    if actual_mac_address != expected_mac_address {
-        return Err(format!(
-            "mac_address不匹配：期望{}，实际{}",
-            expected_mac_address, actual_mac_address
-        )
-        .into());
+    match mac_address_exists(&actual_mac_address) {
+        Ok(_) => {}
+        Err(e) => {
+            return Err(format!("检查mac_address存在性失败: {}", e).into());
+        }
     }
-
-    // 4. 验证扩展密钥用法是否包含客户端认证
-    if !has_client_auth {
-        return Err("证书未授权用于客户端认证".into());
-    }
-
-    println!("✅ 证书验证成功");
+  
     Ok(())
 }
 // ... existing code ...
@@ -916,7 +913,6 @@ mod tests {
         assert!(result.is_ok());
     }
 
-
     // ... existing code ...
     #[test]
     fn test_validate_my_certificate() {
@@ -991,6 +987,4 @@ mod tests {
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("证书文件不存在"));
     }
- 
-
 }
