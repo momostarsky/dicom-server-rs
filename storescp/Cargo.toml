@@ -29,3 +29,6 @@ config = "0.13"  # 配置文件解析
 dotenv = "0.15"  # 加载 .env 文件
 futures = "0.3.31"
 futures-util = "0.3.31"
+slog = "2.7.0"
+slog-term = "2.9.1"
+slog-async = "2.8.0"

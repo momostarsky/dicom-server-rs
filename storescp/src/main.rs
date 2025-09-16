@@ -6,13 +6,14 @@ use std::{
 };
 
 use clap::Parser;
-use common::server_config;
+use common::{cert_helper, server_config};
 use dicom_core::{dicom_value, DataElement, VR};
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu;
 use dicom_object::{InMemDicomObject, StandardDataDictionary};
 use snafu::Report;
-use tracing::{error, info, Level};
+use slog::{Drain, Logger, error, info, o};
+use tracing::Level;
 
 mod dicom_file_handler;
 mod store_async;
@@ -61,6 +62,7 @@ struct App {
 
     #[arg(short = 'j', long = "json-store-path", default_value = ".")]
     json_store_path: PathBuf,
+
 }
 
 fn create_cstore_response(
@@ -110,9 +112,22 @@ fn create_cecho_response(message_id: u16) -> InMemDicomObject<StandardDataDictio
         DataElement::new(tags::STATUS, VR::US, dicom_value!(U16, [0x0000])),
     ])
 }
+fn configure_log() -> Logger {
+    let decorator = slog_term::TermDecorator::new().build();
+    let console_drain = slog_term::FullFormat::new(decorator).build().fuse();
 
+    // It is used for Synchronization
+    let console_drain = slog_async::Async::new(console_drain).build().fuse();
+
+    // Root logger
+    Logger::root(console_drain, o!("v"=>env!("CARGO_PKG_VERSION")))
+}
 #[tokio::main]
 async fn main() {
+    let log = configure_log();
+    let machine_id = cert_helper::read_machine_id();
+    info!(log, "Machine ID: {:?}", machine_id);
+
     let config = server_config::load_config();
     let config = match config {
         Ok(config) => config,
@@ -154,20 +169,20 @@ async fn main() {
             .build()
             .unwrap()
             .block_on(async move {
-                run_async(app).await.unwrap_or_else(|e| {
-                    println!("{:?}", e);
+                run_async(app,log.clone()).await.unwrap_or_else(|e| {
+                    error!(log, "{:?}", e);
                     std::process::exit(-2);
                 });
             });
     } else {
-        run_sync(app).await.unwrap_or_else(|e| {
-            println!("{:?}", e);
+        run_sync(app,log.clone()).await.unwrap_or_else(|e| {
+            error!(log, "{:?}", e);
             std::process::exit(-2);
         });
     }
 }
 
-async fn run_async(args: App) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_async(args: App,logger: Logger) -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
     let args = Arc::new(args);
     tracing::subscriber::set_global_default(
@@ -188,7 +203,7 @@ async fn run_async(args: App) -> Result<(), Box<dyn std::error::Error>> {
 
     let listen_addr = SocketAddrV4::new(Ipv4Addr::from(0), args.port);
     let listener = tokio::net::TcpListener::bind(listen_addr).await?;
-    info!(
+    info!(&logger,
         "{} listening on: tcp://{}",
         &args.calling_ae_title, listen_addr
     );
@@ -196,15 +211,16 @@ async fn run_async(args: App) -> Result<(), Box<dyn std::error::Error>> {
     loop {
         let (socket, _addr) = listener.accept().await?;
         let args = args.clone();
+        let logs =  logger.clone();
         tokio::task::spawn(async move {
             if let Err(e) = run_store_async(socket, &args).await {
-                error!("{}", Report::from_error(e));
+                error!(logs, "{}", Report::from_error(e));
             }
         });
     }
 }
 
-async fn run_sync(args: App) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_sync(args: App,logger: Logger) -> Result<(), Box<dyn std::error::Error>> {
     tracing::subscriber::set_global_default(
         tracing_subscriber::FmtSubscriber::builder()
             .with_max_level(if args.verbose {
@@ -223,7 +239,7 @@ async fn run_sync(args: App) -> Result<(), Box<dyn std::error::Error>> {
 
     let listen_addr = SocketAddrV4::new(Ipv4Addr::from(0), args.port);
     let listener = std::net::TcpListener::bind(listen_addr)?;
-    info!(
+    info!(&logger,
         "{} listening on: tcp://{}",
         &args.calling_ae_title, listen_addr
     );
@@ -232,11 +248,11 @@ async fn run_sync(args: App) -> Result<(), Box<dyn std::error::Error>> {
         match stream {
             Ok(scu_stream) => {
                 if let Err(e) = run_store_sync(scu_stream, &args).await {
-                    error!("{}", snafu::Report::from_error(e));
+                    error!(&logger, "{}", snafu::Report::from_error(e));
                 }
             }
             Err(e) => {
-                error!("{}", snafu::Report::from_error(e));
+                error!(&logger, "{}", snafu::Report::from_error(e));
             }
         }
     }
