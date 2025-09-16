@@ -6,13 +6,14 @@ use std::{
 };
 
 use clap::Parser;
+use common::ca_helper::client_register;
 use common::{cert_helper, server_config};
 use dicom_core::{dicom_value, DataElement, VR};
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu;
 use dicom_object::{InMemDicomObject, StandardDataDictionary};
+use slog::{error, info, o, Drain, Logger};
 use snafu::Report;
-use slog::{Drain, Logger, error, info, o};
 use tracing::Level;
 
 mod dicom_file_handler;
@@ -57,12 +58,11 @@ struct App {
     #[arg(short, default_value = "11111")]
     port: u16,
     /// Run in non-blocking mode (spins up an async task to handle each incoming stream)
-    #[arg(short, long)]
+    #[arg(short, long, default_value = "true")]
     non_blocking: bool,
 
     #[arg(short = 'j', long = "json-store-path", default_value = ".")]
     json_store_path: PathBuf,
-
 }
 
 fn create_cstore_response(
@@ -137,6 +137,68 @@ async fn main() {
         }
     };
 
+    let license = match &config.dicom_license_server {
+        None => {
+            info!(log, "Dicom License Server Config is None");
+            std::process::exit(-2);
+        }
+        Some(license_server) => license_server,
+    };
+    info!(
+        log,
+        "Config License Server License Server URL: {:?}", license.url
+    );
+    info!(
+        log,
+        "Config License Server Machine ID: {:?}", license.machine_id
+    );
+    info!(
+        log,
+        "Config License Server Mac Address: {:?}", license.mac_address
+    );
+    info!(
+        log,
+        "Config License Server Client ID: {:?}", license.client_id
+    );
+    info!(
+        log,
+        "Config License Server Client Name : {:?}", license.client_name
+    );
+    info!(
+        log,
+        "Config License Server End Date: {:?}", license.end_date
+    );
+    match std::fs::exists(&license.license_key.as_str()) {
+        Ok(true) => {
+            info!(log, "License Key File Exists");
+        }
+        Ok(false) => match client_register(&license, &license.url).await {
+            Ok(_) => {
+                info!(log, "Client Register Success");
+            }
+            Err(e) => {
+                error!(log, "Client Register Error: {:?}", e);
+                std::process::exit(-2);
+            }
+        },
+        _ => {
+            error!(log, "客户端授权证书错误 Key File Error");
+            std::process::exit(-2);
+        }
+    };
+    //
+    //  match cert_helper::validate_client_certificate_only(&license.license_key,"./dicom-org-cn.pem") {
+    match cert_helper::validate_client_certificate_only(&license.license_key) {
+        Ok(_) => {
+            info!(log, "Validate My Certificate Success");
+            info!(log, "✅ 证书验证成功");
+        }
+        Err(e) => {
+            error!(log, "Validate My Certificate Error: {:?}", e);
+            std::process::exit(-2);
+        }
+    }
+
     let mut app = App::parse();
     let scp_config = config.dicom_store_scp;
 
@@ -149,40 +211,127 @@ async fn main() {
     app.json_store_path = store_cfg.json_store_path.parse().unwrap();
 
     let out_dir = std::fs::exists(&app.out_dir);
-    if out_dir.unwrap() == false {
-        std::fs::create_dir_all(&app.out_dir).unwrap_or_else(|e| {
-            println!("Could not create output directory: {}", e);
-            std::process::exit(-2);
-        });
+    match out_dir {
+        Ok(exists) => {
+            if exists {
+                info!(log, "Output Directory Exists");
+            } else {
+                std::fs::create_dir_all(&app.out_dir).unwrap_or_else(|e| {
+                    error!(log, "Could not create output directory: {}", e);
+                    std::process::exit(-2);
+                });
+            }
+        }
+        Err(_) => {
+            std::fs::create_dir_all(&app.out_dir).unwrap_or_else(|e| {
+                error!(log, "Could not create output directory: {}", e);
+                std::process::exit(-2);
+            });
+        }
     }
 
     let json_dir = std::fs::exists(&app.json_store_path);
-    if json_dir.unwrap() == false {
-        std::fs::create_dir_all(&app.json_store_path).unwrap_or_else(|e| {
-            println!("Could not create output directory: {}", e);
-            std::process::exit(-2);
-        });
-    }
-    if app.non_blocking {
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(async move {
-                run_async(app,log.clone()).await.unwrap_or_else(|e| {
-                    error!(log, "{:?}", e);
+
+    match json_dir {
+        Ok(exists) => {
+            if exists {
+                info!(log, "Json Store Directory Exists");
+            } else {
+                std::fs::create_dir_all(&app.json_store_path).unwrap_or_else(|e| {
+                    error!(log, "Could not create json store directory: {}", e);
                     std::process::exit(-2);
                 });
+            }
+        }
+        Err(_) => {
+            std::fs::create_dir_all(&app.json_store_path).unwrap_or_else(|e| {
+                error!(log, "Could not create json store directory: {}", e);
+                std::process::exit(-2);
             });
-    } else {
-        run_sync(app,log.clone()).await.unwrap_or_else(|e| {
-            error!(log, "{:?}", e);
-            std::process::exit(-2);
-        });
+        }
     }
+
+    match app.non_blocking {
+        true => {
+            info!(log, "工作在非阻塞模式");
+            // 使用已有的tokio运行时
+            //可以设置最大并发连接数等参数
+            run_async(app, log.clone()).await.unwrap_or_else(|e| {
+                error!(log, "{:?}", e);
+                std::process::exit(-2);
+            });
+        }
+        false => {
+            info!(log, "工作在同步模式");
+            // 为同步模式创建专用的运行时
+            // 同步模式适用于简单部署或调试场景
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap_or_else(|e| {
+                    error!(log, "Could not create tokio runtime: {}", e);
+                    std::process::exit(-2);
+                });
+
+            std::thread::spawn(move || {
+                rt.block_on(async {
+                    run_sync(app, log.clone()).await.unwrap_or_else(|e| {
+                        error!(log, "{:?}", e);
+                        std::process::exit(-2);
+                    });
+                });
+            })
+            .join()
+            .unwrap();
+        }
+    }
+
+    // if app.non_blocking {
+    //     tokio::runtime::Builder::new_multi_thread()
+    //         .enable_all()
+    //         .build()
+    //         .unwrap()
+    //         .block_on(async move {
+    //             run_async(app,log.clone()).await.unwrap_or_else(|e| {
+    //                 error!(log, "{:?}", e);
+    //                 std::process::exit(-2);
+    //             });
+    //         });
+    // } else {
+    //     run_sync(app,log.clone()).await.unwrap_or_else(|e| {
+    //         error!(log, "{:?}", e);
+    //         std::process::exit(-2);
+    //     });
+    // }
+    // match app.non_blocking {
+    //     true => {
+    //         info!(log, "Non Blocking Mode");
+    //         run_sync(app, log.clone()).await.unwrap_or_else(|e| {
+    //             error!(log, "{:?}", e);
+    //             std::process::exit(-2);
+    //         })
+    //     }
+    //     false => {
+    //         match tokio::runtime::Builder::new_multi_thread()
+    //             .enable_all()
+    //             .build()
+    //         {
+    //             Ok(rt) => rt.block_on(async move {
+    //                 run_async(app, log.clone()).await.unwrap_or_else(|e| {
+    //                     error!(log, "{:?}", e);
+    //                     std::process::exit(-2);
+    //                 })
+    //             }),
+    //             Err(_) => {
+    //                 error!(log, "Could not create tokio runtime");
+    //                 std::process::exit(-2);
+    //             }
+    //         }
+    //     }
+    // }
 }
 
-async fn run_async(args: App,logger: Logger) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_async(args: App, logger: Logger) -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
     let args = Arc::new(args);
     tracing::subscriber::set_global_default(
@@ -203,15 +352,15 @@ async fn run_async(args: App,logger: Logger) -> Result<(), Box<dyn std::error::E
 
     let listen_addr = SocketAddrV4::new(Ipv4Addr::from(0), args.port);
     let listener = tokio::net::TcpListener::bind(listen_addr).await?;
-    info!(&logger,
-        "{} listening on: tcp://{}",
-        &args.calling_ae_title, listen_addr
+    info!(
+        &logger,
+        "{} listening on: tcp://{}", &args.calling_ae_title, listen_addr
     );
 
     loop {
         let (socket, _addr) = listener.accept().await?;
         let args = args.clone();
-        let logs =  logger.clone();
+        let logs = logger.clone();
         tokio::task::spawn(async move {
             if let Err(e) = run_store_async(socket, &args).await {
                 error!(logs, "{}", Report::from_error(e));
@@ -220,7 +369,7 @@ async fn run_async(args: App,logger: Logger) -> Result<(), Box<dyn std::error::E
     }
 }
 
-async fn run_sync(args: App,logger: Logger) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_sync(args: App, logger: Logger) -> Result<(), Box<dyn std::error::Error>> {
     tracing::subscriber::set_global_default(
         tracing_subscriber::FmtSubscriber::builder()
             .with_max_level(if args.verbose {
@@ -239,9 +388,9 @@ async fn run_sync(args: App,logger: Logger) -> Result<(), Box<dyn std::error::Er
 
     let listen_addr = SocketAddrV4::new(Ipv4Addr::from(0), args.port);
     let listener = std::net::TcpListener::bind(listen_addr)?;
-    info!(&logger,
-        "{} listening on: tcp://{}",
-        &args.calling_ae_title, listen_addr
+    info!(
+        &logger,
+        "{} listening on: tcp://{}", &args.calling_ae_title, listen_addr
     );
 
     for stream in listener.incoming() {

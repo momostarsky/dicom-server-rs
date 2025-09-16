@@ -93,20 +93,18 @@ async fn main() -> std::io::Result<()> {
         Ok(true) => {
             info!(log, "License Key File Exists");
         }
-        Ok(false) => {
-            match client_register(&license, &license.url).await {
-                Ok(_) => {
-                    info!(log, "Client Register Success");
-                }
-                Err(e) => {
-                    error!(log, "Client Register Error: {:?}", e);
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Client Register Error: {:?}", e),
-                    ));
-                }
+        Ok(false) => match client_register(&license, &license.url).await {
+            Ok(_) => {
+                info!(log, "Client Register Success");
             }
-        }
+            Err(e) => {
+                error!(log, "Client Register Error: {:?}", e);
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Client Register Error: {:?}", e),
+                ));
+            }
+        },
         _ => {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -114,11 +112,12 @@ async fn main() -> std::io::Result<()> {
             ));
         }
     };
-
-    match cert_helper::validate_my_certificate(&license.license_key,"./dicom-org-cn.pem") {
+    //
+    //  match cert_helper::validate_client_certificate_only(&license.license_key,"./dicom-org-cn.pem") {
+    match cert_helper::validate_client_certificate_only(&license.license_key) {
         Ok(_) => {
             info!(log, "Validate My Certificate Success");
-            info!(log,"✅ 证书验证成功");
+            info!(log, "✅ 证书验证成功");
         }
         Err(e) => {
             error!(log, "Validate My Certificate Error: {:?}", e);
