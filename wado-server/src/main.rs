@@ -89,21 +89,6 @@ async fn main() -> std::io::Result<()> {
         log,
         "Config License Server End Date: {:?}", license.end_date
     );
-
-    let public_ca_file = "./ca_public.crt";
-    match get_public_ca_from_server(&license.url, public_ca_file).await {
-        Ok(_) => {
-            info!(log, "Get Public CA Success");
-        }
-        Err(e) => {
-            error!(log, "Get Public CA Error: {:?}", e);
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Get Public CA Error: {:?}", e),
-            ));
-        }
-    };
-
     match std::fs::exists(&license.license_key.as_str()) {
         Ok(true) => {
             info!(log, "License Key File Exists");
@@ -130,7 +115,7 @@ async fn main() -> std::io::Result<()> {
         }
     };
 
-    match cert_helper::validate_my_certificate(&license.license_key, public_ca_file) {
+    match cert_helper::validate_my_certificate(&license.license_key,"./dicom-org-cn.pem") {
         Ok(_) => {
             info!(log, "Validate My Certificate Success");
             info!(log,"✅ 证书验证成功");

@@ -42,7 +42,7 @@
     "compression_codec": "snappy"
   },
   "dicom_license_server": {
-    "url": "http://116.63.110.45:8888",
+    "url": "https://dicom.org.cn:8443",
     "client_id": "HZXS100100000001",
     "client_name": "Hangzhou,Xiasha,StarskyTechlogy.LTD",
     "machine_id": "c417aa4802b3441d931c135cbdaab367",

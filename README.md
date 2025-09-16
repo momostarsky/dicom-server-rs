@@ -16,3 +16,8 @@ TransferSynatx, SopInstancheUID, StudyInstanceUID,SeriesInstanceUID, PatientID, 
 1. 存储队列: 存储文件信息,文件存储路径,文件大小.
 2. 索引队列: 提取文件TAG信息, 包括PatientInfomation, StudyInformation, SeriesInformation, ImageInformation.并写入Doris库
 3. 转换队列: 对于部分传输语法,因为Cornerstone3D无法解析,需要转换成CornerstoneJS能够解析的格式.转换失败的写入Doris转换记录表.
+# 需要安装 dicom-org-cn-CA_Cert.pem 文件到浏览器的证书目录.
+```bash
+sudo cp ./dicom-org-cn.pem  /usr/local/share/ca-certificates/dicom-org-cn.crt  
+sudo update-ca-trust
+```

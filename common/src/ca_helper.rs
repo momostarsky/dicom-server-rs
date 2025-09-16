@@ -254,7 +254,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_public_ca_from_server_success() {
         // 使用实际的服务器地址进行测试
-        let server_url = "http://116.63.110.45:8888";
+        let server_url = "https://dicom.org.cn:8443";
         let ca_file_path = "/tmp/test_ca_cert.pem";
 
         // 调用函数
