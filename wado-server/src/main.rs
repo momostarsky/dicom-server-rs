@@ -90,7 +90,7 @@ async fn main() -> std::io::Result<()> {
         "Config License Server End Date: {:?}", license.end_date
     );
 
-    let public_ca_file = "./ca.crt";
+    let public_ca_file = "./ca_public.crt";
     match get_public_ca_from_server(&license.url, public_ca_file).await {
         Ok(_) => {
             info!(log, "Get Public CA Success");
