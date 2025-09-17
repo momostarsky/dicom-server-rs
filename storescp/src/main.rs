@@ -6,7 +6,6 @@ use std::{
 };
 
 use clap::Parser;
-use common::ca_helper::client_register;
 use common::{cert_helper, server_config};
 use dicom_core::{dicom_value, DataElement, VR};
 use dicom_dictionary_std::tags;
