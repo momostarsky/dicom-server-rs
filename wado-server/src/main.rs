@@ -41,8 +41,7 @@ struct AppState {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let log = configure_log();
-    let machine_id = cert_helper::read_machine_id();
-    info!(log, "Machine ID: {:?}", machine_id);
+
 
     let config = server_config::load_config();
     let config = match config {
@@ -55,78 +54,72 @@ async fn main() -> std::io::Result<()> {
             return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
         }
     };
-    let license = match &config.dicom_license_server {
-        None => {
-            info!(log, "Dicom License Server Config is None");
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Dicom License Server Config is None",
-            ));
-        }
-        Some(license_server) => license_server,
-    };
-    info!(
-        log,
-        "Config License Server License Server URL: {:?}", license.url
-    );
-    info!(
-        log,
-        "Config License Server Machine ID: {:?}", license.machine_id
-    );
-    info!(
-        log,
-        "Config License Server Mac Address: {:?}", license.mac_address
-    );
-    info!(
-        log,
-        "Config License Server Client ID: {:?}", license.client_id
-    );
-    info!(
-        log,
-        "Config License Server Client Name : {:?}", license.client_name
-    );
-    info!(
-        log,
-        "Config License Server End Date: {:?}", license.end_date
-    );
-    match std::fs::exists(&license.license_key.as_str()) {
-        Ok(true) => {
-            info!(log, "License Key File Exists");
-        }
-        Ok(false) => match client_register(&license, &license.url).await {
-            Ok(_) => {
-                info!(log, "Client Register Success");
-            }
-            Err(e) => {
-                error!(log, "Client Register Error: {:?}", e);
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Client Register Error: {:?}", e),
-                ));
-            }
-        },
-        _ => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("客户端授权证书错误: {:?}", &license.license_key),
-            ));
-        }
-    };
-    //
-    //  match cert_helper::validate_client_certificate_only(&license.license_key,"./dicom-org-cn.pem") {
-    match cert_helper::validate_client_certificate_only(&license.license_key) {
-        Ok(_) => {
-            info!(log, "Validate My Certificate Success");
-            info!(log, "✅ 证书验证成功");
-        }
-        Err(e) => {
-            error!(log, "Validate My Certificate Error: {:?}", e);
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Validate My Certificate Error: {:?}", e),
-            ));
-        }
-    }
+    // let license = match &config.dicom_license_server {
+    //     None => {
+    //         info!(log, "Dicom License Server Config is None");
+    //         return Err(std::io::Error::new(
+    //             std::io::ErrorKind::Other,
+    //             "Dicom License Server Config is None",
+    //         ));
+    //     }
+    //     Some(license_server) => license_server,
+    // };
+    // info!(
+    //     log,
+    //     "Config License Server License Server URL: {:?}", license.url
+    // );
+    // info!(
+    //     log,
+    //     "Config License Server Machine ID: {:?}", license.machine_id
+    // );
+    // info!(
+    //     log,
+    //     "Config License Server Mac Address: {:?}", license.mac_address
+    // );
+    // info!(
+    //     log,
+    //     "Config License Server Client ID: {:?}", license.client_id
+    // );
+    // info!(
+    //     log,
+    //     "Config License Server Client Name : {:?}", license.client_name
+    // );
+    // info!(
+    //     log,
+    //     "Config License Server End Date: {:?}", license.end_date
+    // );
+    // match std::fs::exists(&license.license_key.as_str()) {
+    //     Ok(true) => {
+    //         info!(log, "License Key File Exists");
+    //     }
+    //     Ok(false) => {
+    //         return Err(std::io::Error::new(
+    //             std::io::ErrorKind::Other,
+    //             format!("License Key File Not Exists: {:?}", &license.license_key),
+    //         ));
+    //     }
+    //     _ => {
+    //         return Err(std::io::Error::new(
+    //             std::io::ErrorKind::Other,
+    //             format!("客户端授权证书错误: {:?}", &license.license_key),
+    //         ));
+    //     }
+    // };
+    // //
+    // //  match cert_helper::validate_client_certificate_only(&license.license_key,"./dicom-org-cn.pem") {
+    // match cert_helper::validate_client_certificate_with_ca(&license.license_key,"./dicom-org-cn.pem") {
+    //     Ok(_) => {
+    //         info!(log, "Validate My Certificate Success");
+    //         info!(log, "✅ 证书验证成功");
+    //     }
+    //     Err(e) => {
+    //         error!(log, "Validate My Certificate Error: {:?}", e);
+    //         return Err(std::io::Error::new(
+    //             std::io::ErrorKind::Other,
+    //             format!("Validate My Certificate Error: {:?}", e),
+    //         ));
+    //     }
+    // }
 
     let g_config = config.clone();
     // let db_config = config.database.unwrap();

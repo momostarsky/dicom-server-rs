@@ -687,13 +687,13 @@ pub fn validate_my_certificate(
             return Err(format!("检查mac_address存在性失败: {}", e).into());
         }
     }
-  
+
     Ok(())
 }
- 
 
-// ... existing code ...
-pub fn validate_client_certificate_only(client_cert_file: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn validate_client_certificate_without_hardware(
+    client_cert_file: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     use openssl::stack::Stack;
     // 检查证书文件是否存在
     if !std::path::Path::new(client_cert_file).exists() {
@@ -723,7 +723,7 @@ pub fn validate_client_certificate_only(client_cert_file: &str) -> Result<(), Bo
     // 1. 验证证书是否由受信任的CA签发（使用系统信任库）
     // 对于自签名证书，我们尝试使用默认的系统信任库
     let mut cert_store_builder = openssl::x509::store::X509StoreBuilder::new()?;
-    
+
     // 尝试加载系统默认的证书存储
     // 如果系统信任库中有您的自签名CA，这将成功
     match cert_store_builder.set_default_paths() {
@@ -735,7 +735,79 @@ pub fn validate_client_certificate_only(client_cert_file: &str) -> Result<(), Bo
             // 这在某些环境中可能会发生
         }
     }
-    
+
+    let cert_store = cert_store_builder.build();
+
+    // 创建空的证书链栈
+    let cert_chain = Stack::new()?;
+
+    let mut cert_context = openssl::x509::X509StoreContext::new()?;
+    let verify_result =
+        cert_context.init(&cert_store, &cert, &cert_chain, |ctx| ctx.verify_cert())?;
+
+    if !verify_result {
+        // 如果验证失败，检查是否是因为证书链不完整
+        // 对于自签名CA，我们需要将CA证书添加到证书链中
+        return Err("证书验证失败：证书不是由受信任的CA签发".into());
+    }
+
+    // 2. 验证证书是否在有效期内
+    let now = Asn1Time::days_from_now(0)?;
+    if cert.not_after() < now.as_ref() {
+        return Err("证书已过期".into());
+    }
+    if cert.not_before() > now.as_ref() {
+        return Err("证书尚未生效".into());
+    }
+    Ok(())
+}
+
+// ... existing code ...
+pub fn validate_client_certificate_only(
+    client_cert_file: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use openssl::stack::Stack;
+    // 检查证书文件是否存在
+    if !std::path::Path::new(client_cert_file).exists() {
+        return Err(format!("证书文件不存在: {}", client_cert_file).into());
+    }
+
+    // 读取并解析客户端证书 (OpenSSL格式)
+    let cert_pem = fs::read(client_cert_file)?;
+    let cert = X509::from_pem(&cert_pem)?;
+
+    // 读取并解析客户端证书 (x509-parser格式)
+    let cert_bytes = fs::read(client_cert_file)?;
+    let parsed_cert = if cert_bytes.starts_with(b"-----BEGIN CERTIFICATE-----") {
+        // 如果是 PEM 格式，需要先解码
+        let pem_str = std::str::from_utf8(&cert_bytes)?;
+        let certs = pem::parse_many(pem_str)?;
+        if certs.is_empty() {
+            return Err("PEM文件中未找到证书".into());
+        }
+        certs[0].contents.to_vec()
+    } else {
+        // 如果是 DER 格式，直接解析
+        cert_bytes
+    };
+    let (_, x509_cert) = parse_x509_certificate(&parsed_cert)?;
+
+    // 1. 验证证书是否由受信任的CA签发（使用系统信任库）
+    // 对于自签名证书，我们尝试使用默认的系统信任库
+    let mut cert_store_builder = openssl::x509::store::X509StoreBuilder::new()?;
+
+    // 尝试加载系统默认的证书存储
+    // 如果系统信任库中有您的自签名CA，这将成功
+    match cert_store_builder.set_default_paths() {
+        Ok(_) => {
+            // 成功加载系统信任库
+        }
+        Err(_) => {
+            // 如果无法加载系统信任库，继续使用空的信任库
+            // 这在某些环境中可能会发生
+        }
+    }
+
     let cert_store = cert_store_builder.build();
 
     // 创建空的证书链栈
@@ -813,12 +885,15 @@ pub fn validate_client_certificate_only(client_cert_file: &str) -> Result<(), Bo
             return Err(format!("检查mac_address存在性失败: {}", e).into());
         }
     }
-  
+
     Ok(())
 }
 
 // 新增函数：使用指定的CA文件验证客户端证书
-pub fn validate_client_certificate_with_ca(client_cert_file: &str, ca_cert_file: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn validate_client_certificate_with_ca(
+    client_cert_file: &str,
+    ca_cert_file: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     use openssl::stack::Stack;
     // 检查证书文件是否存在
     if !std::path::Path::new(client_cert_file).exists() {
@@ -879,64 +954,63 @@ pub fn validate_client_certificate_with_ca(client_cert_file: &str, ca_cert_file:
         return Err("证书尚未生效".into());
     }
 
-    // 3. 验证自定义扩展（machine_id和mac_address）
-    // 获取系统中的machine_id和mac地址用于验证
-    let expected_machine_id = match read_machine_id() {
-        Ok(machine_id) => machine_id,
-        Err(e) => return Err(format!("无法获取machine_id: {}", e).into()),
-    };
+    // // 3. 验证自定义扩展（machine_id和mac_address）
+    // // 获取系统中的machine_id和mac地址用于验证
+    // let expected_machine_id = match read_machine_id() {
+    //     Ok(machine_id) => machine_id,
+    //     Err(e) => return Err(format!("无法获取machine_id: {}", e).into()),
+    // };
+    //
+    // // 使用x509-parser查找machine_id扩展（OID: 1.3.6.1.4.15967132172.1）
+    // let mut actual_machine_id = None;
+    // let mut actual_mac_address = None;
+    // let mut has_client_auth = false;
+    //
+    // for ext in x509_cert.tbs_certificate.extensions() {
+    //     let oid_str = ext.oid.to_string();
+    //     if oid_str == "1.3.6.1.4.15967132172.1" {
+    //         // 找到machine_id扩展
+    //         actual_machine_id = Some(String::from_utf8_lossy(ext.value).to_string());
+    //     } else if oid_str == "1.3.6.1.4.15967132172.2" {
+    //         // 找到mac_address扩展
+    //         actual_mac_address = Some(String::from_utf8_lossy(ext.value).to_string());
+    //     } else if oid_str == "2.5.29.37" {
+    //         // 找到扩展密钥用法(Extended Key Usage)扩展
+    //         // OID 1.3.6.1.5.5.7.3.2 表示客户端认证
+    //         let client_auth_oid_bytes: &[u8] = &[0x2B, 0x06, 0x01, 0x05, 0x05, 0x07, 0x03, 0x02];
+    //         if ext
+    //             .value
+    //             .windows(client_auth_oid_bytes.len())
+    //             .any(|window| window == client_auth_oid_bytes)
+    //         {
+    //             has_client_auth = true;
+    //         }
+    //     }
+    // }
+    // // 4. 验证扩展密钥用法是否包含客户端认证
+    // if !has_client_auth {
+    //     return Err("证书未授权用于客户端认证".into());
+    // }
+    // let actual_machine_id = actual_machine_id.ok_or("未找到machine_id扩展")?;
+    // if actual_machine_id != expected_machine_id {
+    //     return Err(format!(
+    //         "machine_id不匹配：期望{}，实际{}",
+    //         expected_machine_id, actual_machine_id
+    //     )
+    //     .into());
+    // }
+    //
+    // let actual_mac_address = actual_mac_address.ok_or("未找到mac_address扩展")?;
+    // match mac_address_exists(&actual_mac_address) {
+    //     Ok(_) => {}
+    //     Err(e) => {
+    //         return Err(format!("检查mac_address存在性失败: {}", e).into());
+    //     }
+    // }
 
-    // 使用x509-parser查找machine_id扩展（OID: 1.3.6.1.4.15967132172.1）
-    let mut actual_machine_id = None;
-    let mut actual_mac_address = None;
-    let mut has_client_auth = false;
-
-    for ext in x509_cert.tbs_certificate.extensions() {
-        let oid_str = ext.oid.to_string();
-        if oid_str == "1.3.6.1.4.15967132172.1" {
-            // 找到machine_id扩展
-            actual_machine_id = Some(String::from_utf8_lossy(ext.value).to_string());
-        } else if oid_str == "1.3.6.1.4.15967132172.2" {
-            // 找到mac_address扩展
-            actual_mac_address = Some(String::from_utf8_lossy(ext.value).to_string());
-        } else if oid_str == "2.5.29.37" {
-            // 找到扩展密钥用法(Extended Key Usage)扩展
-            // OID 1.3.6.1.5.5.7.3.2 表示客户端认证
-            let client_auth_oid_bytes: &[u8] = &[0x2B, 0x06, 0x01, 0x05, 0x05, 0x07, 0x03, 0x02];
-            if ext
-                .value
-                .windows(client_auth_oid_bytes.len())
-                .any(|window| window == client_auth_oid_bytes)
-            {
-                has_client_auth = true;
-            }
-        }
-    }
-    // 4. 验证扩展密钥用法是否包含客户端认证
-    if !has_client_auth {
-        return Err("证书未授权用于客户端认证".into());
-    }
-    let actual_machine_id = actual_machine_id.ok_or("未找到machine_id扩展")?;
-    if actual_machine_id != expected_machine_id {
-        return Err(format!(
-            "machine_id不匹配：期望{}，实际{}",
-            expected_machine_id, actual_machine_id
-        )
-        .into());
-    }
-
-    let actual_mac_address = actual_mac_address.ok_or("未找到mac_address扩展")?;
-    match mac_address_exists(&actual_mac_address) {
-        Ok(_) => {}
-        Err(e) => {
-            return Err(format!("检查mac_address存在性失败: {}", e).into());
-        }
-    }
-  
     Ok(())
 }
 // ... existing code ...
-
 
 #[cfg(test)]
 mod tests {

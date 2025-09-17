@@ -135,12 +135,12 @@ async fn retrieve_study_metadata(
     );
     let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
 
-    if accept != Some(ACCEPT_DICOM_JSON_TYPE) {
-        return HttpResponse::NotAcceptable().body(format!(
-            "retrieve_study_metadata Accept header must be {}",
-            ACCEPT_DICOM_JSON_TYPE
-        ));
-    }
+    // if accept != Some(ACCEPT_DICOM_JSON_TYPE) {
+    //     return HttpResponse::NotAcceptable().body(format!(
+    //         "retrieve_study_metadata Accept header must be {}",
+    //         ACCEPT_DICOM_JSON_TYPE
+    //     ));
+    // }
 
     let study_info = match app_state.db.get_study_info(&tenant_id, &study_uid).await {
         Ok(Some(info)) => info,

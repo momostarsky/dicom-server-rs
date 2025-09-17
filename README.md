@@ -19,5 +19,5 @@ TransferSynatx, SopInstancheUID, StudyInstanceUID,SeriesInstanceUID, PatientID, 
 ### 需要安装 dicom-org-cn.pem 文件到证书目录.
 ```bash
 sudo cp ./dicom-org-cn.pem  /usr/local/share/ca-certificates/dicom-org-cn.crt  
-sudo update-ca-trust
+sudo update-ca-certificates
 ```
