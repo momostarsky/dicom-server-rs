@@ -8,7 +8,7 @@ use rdkafka::util::Timeout;
 use std::collections::HashMap;
 use std::error::Error;
 use std::time::Duration;
-use tracing::{debug, info};
+use tracing::{debug, info, error};
 
 use crate::server_config;
 
@@ -24,7 +24,7 @@ impl KafkaMessagePublisher {
         let brokers = config.brokers;
         let producer = ClientConfig::new()
             .set("bootstrap.servers", brokers)
-            .set("message.timeout.ms", "1000")
+            .set("message.timeout.ms", "30000") // 增加消息超时时间到30秒
             // --- 批量发送相关配置 ---
             .set(
                 "queue.buffering.max.messages",
@@ -41,7 +41,9 @@ impl KafkaMessagePublisher {
             .set("batch.num.messages", config.batch_num_messages.to_string()) // 每个批次最大消息数
             .set("linger.ms", config.linger_ms.to_string()) // 等待更多消息以形成更大批次
             .set("compression.codec", config.compression_codec.to_string()) // 启用压缩以减少网络开销
-            // ---------------------------------------------
+            // 添加重试机制
+            .set("retries", "5")
+            .set("retry.backoff.ms", "1000")
             .create()
             .expect("Failed to create KafkaMessagePublisher");
         Self {
@@ -65,13 +67,21 @@ impl MessagePublisher for KafkaMessagePublisher {
         );
         let record: FutureRecord<String, Vec<u8>> =
             FutureRecord::to(&*self.topic).key(&key).payload(&payload);
-        self.producer
-            .send(record, Timeout::After(Duration::from_secs(1)))
+
+        match self.producer
+            .send(record, Timeout::After(Duration::from_secs(10))) // 增加超时时间到10秒
             .await
-            .map_err(|(e, _)| e)?;
-        self.producer.flush(Duration::from_micros(500))?;
-        debug!("Flushed KafkaMessagePublisher");
-        Ok(())
+            .map_err(|(e, _)| e) {
+                Ok(_) => {
+                    self.producer.flush(Duration::from_micros(500))?;
+                    debug!("Flushed KafkaMessagePublisher");
+                    Ok(())
+                },
+                Err(e) => {
+                    error!("Failed to send message to Kafka: {:?}", e);
+                    Err(Box::new(e))
+                }
+            }
     }
 
     async fn send_batch_messages(
@@ -95,7 +105,10 @@ impl MessagePublisher for KafkaMessagePublisher {
                     );
                     wait_message.insert(key.clone(), payload.clone());
                 }
-                Err(e) => return Err(Box::new(e)),
+                Err(e) => {
+                    error!("Failed to serialize message: {:?}", e);
+                    return Err(Box::new(e));
+                }
             }
         }
 
@@ -105,8 +118,9 @@ impl MessagePublisher for KafkaMessagePublisher {
                 let record = FutureRecord::to(&*self.topic)
                     .key(&key[..])
                     .payload(&payload[..]);
+                // 增加超时时间到10秒
                 self.producer
-                    .send(record, Timeout::After(Duration::from_secs(1)))
+                    .send(record, Timeout::After(Duration::from_secs(10)))
             })
             .collect();
 
@@ -119,17 +133,22 @@ impl MessagePublisher for KafkaMessagePublisher {
             match result {
                 Ok(_) => success_count += 1,
                 Err(e) => {
-                    eprintln!("Failed to send message: {:?}", e);
+                    error!("Failed to send message: {:?}", e);
                     error_count += 1;
                 }
             }
         }
 
-        println!(
+        info!(
             "✅ 批量发送完成: 成功 {} 条, 失败 {} 条",
             success_count, error_count
         );
 
-        Ok(())
+        // 如果有错误，返回错误信息
+        if error_count > 0 {
+            Err("Some messages failed to send".into())
+        } else {
+            Ok(())
+        }
     }
 }

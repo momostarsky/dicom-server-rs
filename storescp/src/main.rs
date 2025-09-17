@@ -57,7 +57,7 @@ struct App {
     #[arg(short, default_value = "11111")]
     port: u16,
     /// Run in non-blocking mode (spins up an async task to handle each incoming stream)
-    #[arg(short, long, default_value = "true")]
+    #[arg(short, long, default_value = "false")]
     non_blocking: bool,
 
     #[arg(short = 'j', long = "json-store-path", default_value = ".")]
