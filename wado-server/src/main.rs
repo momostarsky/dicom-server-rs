@@ -8,10 +8,9 @@ use crate::wado_rs_controller::{
 };
 use actix_cors::Cors;
 use actix_web::{App, HttpServer, middleware, web};
-use common::ca_helper::{client_register, get_public_ca_from_server};
 use common::database_provider::DbProvider;
 use common::server_config::AppConfig;
-use common::{cert_helper, database_factory, server_config};
+use common::{database_factory, server_config};
 use slog;
 use slog::{Drain, Logger, error, info, o};
 use slog_async;

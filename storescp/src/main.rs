@@ -137,67 +137,67 @@ async fn main() {
         }
     };
 
-    let license = match &config.dicom_license_server {
-        None => {
-            info!(log, "Dicom License Server Config is None");
-            std::process::exit(-2);
-        }
-        Some(license_server) => license_server,
-    };
-    info!(
-        log,
-        "Config License Server License Server URL: {:?}", license.url
-    );
-    info!(
-        log,
-        "Config License Server Machine ID: {:?}", license.machine_id
-    );
-    info!(
-        log,
-        "Config License Server Mac Address: {:?}", license.mac_address
-    );
-    info!(
-        log,
-        "Config License Server Client ID: {:?}", license.client_id
-    );
-    info!(
-        log,
-        "Config License Server Client Name : {:?}", license.client_name
-    );
-    info!(
-        log,
-        "Config License Server End Date: {:?}", license.end_date
-    );
-    match std::fs::exists(&license.license_key.as_str()) {
-        Ok(true) => {
-            info!(log, "License Key File Exists");
-        }
-        Ok(false) => match client_register(&license, &license.url).await {
-            Ok(_) => {
-                info!(log, "Client Register Success");
-            }
-            Err(e) => {
-                error!(log, "Client Register Error: {:?}", e);
-                std::process::exit(-2);
-            }
-        },
-        _ => {
-            error!(log, "客户端授权证书错误 Key File Error");
-            std::process::exit(-2);
-        }
-    };
-    //
-    //  match cert_helper::validate_client_certificate_only(&license.license_key,"./dicom-org-cn.pem") {
-    match cert_helper::validate_client_certificate_only(&license.license_key) {
-        Ok(_) => {
-            info!(log, "Validate My Certificate Success");
-            info!(log, "✅ 证书验证成功");
-        }
-        Err(e) => {
-            error!(log, "Validate My Certificate Error: {:?}", e);
-            std::process::exit(-2);
-        }
-    }
+    // let license = match &config.dicom_license_server {
+    //     None => {
+    //         info!(log, "Dicom License Server Config is None");
+    //         std::process::exit(-2);
+    //     }
+    //     Some(license_server) => license_server,
+    // };
+    // info!(
+    //     log,
+    //     "Config License Server License Server URL: {:?}", license.url
+    // );
+    // info!(
+    //     log,
+    //     "Config License Server Machine ID: {:?}", license.machine_id
+    // );
+    // info!(
+    //     log,
+    //     "Config License Server Mac Address: {:?}", license.mac_address
+    // );
+    // info!(
+    //     log,
+    //     "Config License Server Client ID: {:?}", license.client_id
+    // );
+    // info!(
+    //     log,
+    //     "Config License Server Client Name : {:?}", license.client_name
+    // );
+    // info!(
+    //     log,
+    //     "Config License Server End Date: {:?}", license.end_date
+    // );
+    // match std::fs::exists(&license.license_key.as_str()) {
+    //     Ok(true) => {
+    //         info!(log, "License Key File Exists");
+    //     }
+    //     Ok(false) => match client_register(&license, &license.url).await {
+    //         Ok(_) => {
+    //             info!(log, "Client Register Success");
+    //         }
+    //         Err(e) => {
+    //             error!(log, "Client Register Error: {:?}", e);
+    //             std::process::exit(-2);
+    //         }
+    //     },
+    //     _ => {
+    //         error!(log, "客户端授权证书错误 Key File Error");
+    //         std::process::exit(-2);
+    //     }
+    // };
+    // //
+    // //  match cert_helper::validate_client_certificate_only(&license.license_key,"./dicom-org-cn.pem") {
+    // match cert_helper::validate_client_certificate_only(&license.license_key) {
+    //     Ok(_) => {
+    //         info!(log, "Validate My Certificate Success");
+    //         info!(log, "✅ 证书验证成功");
+    //     }
+    //     Err(e) => {
+    //         error!(log, "Validate My Certificate Error: {:?}", e);
+    //         std::process::exit(-2);
+    //     }
+    // }
 
     let mut app = App::parse();
     let scp_config = config.dicom_store_scp;
