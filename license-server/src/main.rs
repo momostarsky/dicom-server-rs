@@ -7,6 +7,7 @@ use actix_web::{App, HttpServer, middleware, web};
 use common::utils::setup_logging;
 use slog::Logger;
 use slog::info;
+use common::cert_helper::generate_ca_root;
 // 定义应用状态
 
 #[derive(Clone)]
@@ -16,6 +17,11 @@ struct AppState {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let clog: Logger = configure_log();
+
+    // generate_ca_root("./ca_root.pem", "./ca_key_root.pem", "server.crt", "server.key"
+    // ).expect("生成证书失败");
+
+
     let app_state = AppState { log: clog.clone() };
     info!(clog, "Starting server... 8888");
     HttpServer::new(move || {

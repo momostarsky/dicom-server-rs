@@ -480,12 +480,14 @@ pub fn generate_client_and_sign(
     Ok((client_cert_pem, client_key_pem))
 }
 
-/// 生成 CA 根证书和私钥
+/// 生成 CA 根证书和私钥，同时生成用于 Caddy HTTPS 代理的服务器证书和私钥
 ///
 /// # 参数
 ///
 /// * `ca_file` - CA 根证书文件路径
 /// * `ca_key_file` - CA 根私钥文件路径
+/// * `caddy_server_cert_file` - Caddy 服务器证书文件路径
+/// * `caddy_server_key_file` - Caddy 服务器私钥文件路径
 ///
 /// # 返回值
 ///
@@ -494,12 +496,14 @@ pub fn generate_client_and_sign(
 pub fn generate_ca_root(
     ca_file: &str,
     ca_key_file: &str,
+    caddy_server_cert_file: &str,
+    caddy_server_key_file: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // =============================
     // 1. 生成 CA（根证书，模拟授权机构）
     // =============================
 
-    // 生成 CA 私钥 (RSA 2048)
+    // 生成 CA 私钥 (RSA 4096)
     let ca_rsa = Rsa::generate(4096)?;
     let ca_pkey = PKey::from_rsa(ca_rsa)?;
 
@@ -532,7 +536,7 @@ pub fn generate_ca_root(
 
     // 设置证书有效期（当前时间到10年后）
     let not_before = Asn1Time::days_from_now(0)?;
-    let not_after = Asn1Time::days_from_now(365 * 10)?; // 10 年有效期
+    let not_after = Asn1Time::days_from_now(365 * 30)?; // 10 年有效期
     ca_builder.set_not_before(&not_before)?;
     ca_builder.set_not_after(&not_after)?;
 
@@ -546,7 +550,7 @@ pub fn generate_ca_root(
             .crl_sign()
             .build()?,
     )?;
-    // 使用CA私钥对证书进行签名
+    // 使用CA私钥对证书进行签名，使用SHA256算法
     ca_builder.sign(&ca_pkey, MessageDigest::sha256())?;
     // 构建最终的证书对象
     let ca_cert = ca_builder.build();
@@ -564,9 +568,105 @@ pub fn generate_ca_root(
     match fs::write(ca_key_file, ca_key_pem) {
         Ok(_) => {
             println!("✅ [CA] 根证书私钥已保存");
-            Ok(())
         }
         Err(e) => panic!("❌ [CA] 根证书私钥保存失败: {}", e),
+    }
+
+    // =============================
+    // 2. 生成服务器证书和私钥用于 Caddy HTTPS 代理
+    // =============================
+
+    // 生成服务器私钥 (RSA 4096)
+    let server_rsa = Rsa::generate(4096)?;
+    let server_pkey = PKey::from_rsa(server_rsa)?;
+
+    // 构造服务器证书的 Subject（主题信息）
+    let mut server_name = X509NameBuilder::new()?;
+    server_name.append_entry_by_text("C", "CN")?; // 国家代码
+    server_name.append_entry_by_text("ST", "Zhejiang")?; // 省份
+    server_name.append_entry_by_text("L", "Hangzhou")?; // 城市
+    server_name.append_entry_by_text("O", "DICOM")?; // 组织
+    server_name.append_entry_by_text("CN", "dicom.org.cn")?; // 通用名称
+    let server_name = server_name.build();
+
+    // 构建服务器证书
+    let mut server_builder = X509::builder()?;
+    server_builder.set_version(2)?;
+
+    // 设置序列号
+    let server_serial = BigNum::from_u32(2)?;
+    let server_serial = Asn1Integer::from_bn(&server_serial)?;
+    server_builder.set_serial_number(&server_serial)?;
+
+    // 设置证书的主体和颁发者
+    server_builder.set_subject_name(&server_name)?;
+    server_builder.set_issuer_name(ca_cert.subject_name())?; // 由CA签发
+    server_builder.set_pubkey(&server_pkey)?; // 设置公钥
+
+    // 设置证书有效期（当前时间到30年后）
+    let server_not_before = Asn1Time::days_from_now(0)?;
+    let server_not_after = Asn1Time::days_from_now(365 * 30)?; // 30 年有效期
+    server_builder.set_not_before(&server_not_before)?;
+    server_builder.set_not_after(&server_not_after)?;
+
+    // 构建并添加所有扩展
+    {
+        // 在这个代码块中创建上下文并构建所有扩展，确保在使用完上下文后才添加到证书中
+        let context = server_builder.x509v3_context(Some(&ca_cert), None);
+
+
+        // 构建扩展：Subject Alternative Names
+        let mut san_extension = openssl::x509::extension::SubjectAlternativeName::new();
+        san_extension.dns("localhost");
+        san_extension.dns("dicom.org.cn");
+        san_extension.ip("127.0.0.1");
+        let san = san_extension.build(&context)?;
+
+        // 构建扩展：Basic Constraints
+        let basic_constraints = BasicConstraints::new().build()?;
+
+        // 构建扩展：Key Usage
+        let key_usage = KeyUsage::new()
+            .digital_signature()
+            .non_repudiation()
+            .key_encipherment()
+            .data_encipherment()
+            .build()?;
+
+        // 构建扩展：Extended Key Usage
+        let ext_key_usage = ExtendedKeyUsage::new().server_auth().build()?;
+
+        // 现在添加所有扩展到证书中
+
+        server_builder.append_extension(basic_constraints)?;
+        server_builder.append_extension(key_usage)?;
+        server_builder.append_extension(ext_key_usage)?;
+        server_builder.append_extension(san)?;
+    }
+
+    // 使用CA私钥对服务器证书进行签名，使用SHA256算法
+    server_builder.sign(&ca_pkey, MessageDigest::sha256())?;
+    let server_cert = server_builder.build();
+
+    // 将服务器证书和私钥转换为PEM格式
+    let server_cert_pem = server_cert.to_pem()?;
+    let server_key_pem = server_pkey.private_key_to_pem_pkcs8()?;
+
+    // 将服务器证书和私钥写入文件 (Server.pem 和 ServerKey.pem)
+
+    match fs::write(caddy_server_cert_file, server_cert_pem) {
+        Ok(_) => {
+            println!("✅ [Server] 服务器证书已保存为 {}", caddy_server_cert_file);
+        }
+        Err(e) => panic!("❌ [Server] 服务器证书保存失败: {}", e),
+    }
+
+    match fs::write(caddy_server_key_file, server_key_pem) {
+        Ok(_) => {
+            println!("✅ [Server] 服务器私钥已保存为 {}", caddy_server_key_file);
+            Ok(())
+        }
+        Err(e) => panic!("❌ [Server] 服务器私钥保存失败: {}", e),
     }
 }
 
@@ -1030,45 +1130,73 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_ca_root() {
-        // 创建临时目录用于测试
-        let temp_dir = tempfile::tempdir().expect("无法创建临时目录");
-        let ca_cert_path = temp_dir.path().join("ca_test.crt");
-        let ca_key_path = temp_dir.path().join("ca_test.key");
+fn test_generate_ca_root() {
+    // 创建临时目录用于测试
+    let temp_dir = tempfile::tempdir().expect("无法创建临时目录");
+    let ca_cert_path = temp_dir.path().join("ca_test.crt");
+    let ca_key_path = temp_dir.path().join("ca_test.key");
+    let server_cert_path = temp_dir.path().join("Server.pem");
+    let server_key_path = temp_dir.path().join("ServerKey.pem");
 
-        // 调用函数生成CA根证书
-        let result = generate_ca_root(
-            ca_cert_path.to_str().unwrap(),
-            ca_key_path.to_str().unwrap(),
-        );
+    // 调用函数生成CA根证书
+    let result = generate_ca_root(
+        ca_cert_path.to_str().unwrap(),
+        ca_key_path.to_str().unwrap(),
+        server_cert_path.to_str().unwrap(),
+        server_key_path.to_str().unwrap(),
+    );
 
-        // 验证函数执行成功
-        assert!(result.is_ok());
+    // 验证函数执行成功
+    assert!(result.is_ok());
 
-        // 验证证书文件已创建
-        assert!(ca_cert_path.exists());
+    // 验证CA证书文件已创建
+    assert!(ca_cert_path.exists());
 
-        // 验证私钥文件已创建
-        assert!(ca_key_path.exists());
+    // 验证CA私钥文件已创建
+    assert!(ca_key_path.exists());
 
-        // 验证证书文件不为空
-        let cert_content = fs::read(&ca_cert_path).expect("无法读取证书文件");
-        assert!(!cert_content.is_empty());
-        assert!(
-            String::from_utf8(cert_content)
-                .unwrap()
-                .contains("-----BEGIN CERTIFICATE-----")
-        );
+    // 验证服务器证书文件已创建
+    assert!(server_cert_path.exists());
 
-        // 验证私钥文件不为空
-        let key_content = fs::read(&ca_key_path).expect("无法读取私钥文件");
-        assert!(!key_content.is_empty());
-        assert!(
-            String::from_utf8(key_content)
-                .unwrap()
-                .contains("-----BEGIN PRIVATE KEY-----")
-        );
-    }
+    // 验证服务器私钥文件已创建
+    assert!(server_key_path.exists());
+
+    // 验证CA证书文件不为空
+    let cert_content = fs::read(&ca_cert_path).expect("无法读取CA证书文件");
+    assert!(!cert_content.is_empty());
+    assert!(
+        String::from_utf8(cert_content)
+            .unwrap()
+            .contains("-----BEGIN CERTIFICATE-----")
+    );
+
+    // 验证CA私钥文件不为空
+    let key_content = fs::read(&ca_key_path).expect("无法读取CA私钥文件");
+    assert!(!key_content.is_empty());
+    assert!(
+        String::from_utf8(key_content)
+            .unwrap()
+            .contains("-----BEGIN PRIVATE KEY-----")
+    );
+
+    // 验证服务器证书文件不为空
+    let server_cert_content = fs::read(&server_cert_path).expect("无法读取服务器证书文件");
+    assert!(!server_cert_content.is_empty());
+    assert!(
+        String::from_utf8(server_cert_content)
+            .unwrap()
+            .contains("-----BEGIN CERTIFICATE-----")
+    );
+
+    // 验证服务器私钥文件不为空
+    let server_key_content = fs::read(&server_key_path).expect("无法读取服务器私钥文件");
+    assert!(!server_key_content.is_empty());
+    assert!(
+        String::from_utf8(server_key_content)
+            .unwrap()
+            .contains("-----BEGIN PRIVATE KEY-----")
+    );
+}
 
     #[test]
     fn test_generate_client_and_sign() {
@@ -1076,11 +1204,15 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("无法创建临时目录");
         let ca_cert_path = temp_dir.path().join("ca_test.crt");
         let ca_key_path = temp_dir.path().join("ca_test.key");
+        let svr_cert_path = temp_dir.path().join("svr_test.crt");
+        let svr_key_path = temp_dir.path().join("svr_test.key");
 
         // 首先生成CA根证书
         let ca_result = generate_ca_root(
             ca_cert_path.to_str().unwrap(),
             ca_key_path.to_str().unwrap(),
+            svr_cert_path.to_str().unwrap(),
+            svr_key_path.to_str().unwrap(),
         );
         assert!(ca_result.is_ok());
 
@@ -1124,11 +1256,14 @@ mod tests {
         let ca_key_path = temp_dir.path().join("ca_test.key");
         let client_cert_path = temp_dir.path().join("client_test.crt");
         let client_key_path = temp_dir.path().join("client_test.key");
-
+        let svr_cert_path = temp_dir.path().join("svr_test.crt");
+        let svr_key_path = temp_dir.path().join("svr_test.key");
         // 首先生成CA根证书
         let ca_result = generate_ca_root(
             ca_cert_path.to_str().unwrap(),
             ca_key_path.to_str().unwrap(),
+            svr_cert_path.to_str().unwrap(),
+            svr_key_path.to_str().unwrap(),
         );
         assert!(ca_result.is_ok());
 
@@ -1166,11 +1301,15 @@ mod tests {
         let ca_key_path = temp_dir.path().join("ca_test.key");
         let client_cert_path = temp_dir.path().join("client_test.crt");
         let client_key_path = temp_dir.path().join("client_test.key");
+        let svr_cert_path = temp_dir.path().join("svr_test.crt");
+        let svr_key_path = temp_dir.path().join("svr_test.key");
 
         // 首先生成CA根证书
         let ca_result = generate_ca_root(
             ca_cert_path.to_str().unwrap(),
             ca_key_path.to_str().unwrap(),
+            svr_cert_path.to_str().unwrap(),
+            svr_key_path.to_str().unwrap(),
         );
         assert!(ca_result.is_ok());
 
@@ -1207,11 +1346,14 @@ mod tests {
         let ca_cert_path = temp_dir.path().join("ca_test.crt");
         let ca_key_path = temp_dir.path().join("ca_test.key");
         let client_cert_path = temp_dir.path().join("client_test.crt");
-
+        let svr_cert_path = temp_dir.path().join("svr_test.crt");
+        let svr_key_path = temp_dir.path().join("svr_test.key");
         // 首先生成CA根证书
         let ca_result = generate_ca_root(
             ca_cert_path.to_str().unwrap(),
             ca_key_path.to_str().unwrap(),
+            svr_cert_path.to_str().unwrap(),
+            svr_key_path.to_str().unwrap(),
         );
         assert!(ca_result.is_ok());
 
@@ -1245,11 +1387,14 @@ mod tests {
         let ca_cert_path = temp_dir.path().join("ca_test.crt");
         let ca_key_path = temp_dir.path().join("ca_test.key");
         let client_cert_path = temp_dir.path().join("client_test.crt");
-
+        let svr_cert_path = temp_dir.path().join("svr_test.crt");
+        let svr_key_path = temp_dir.path().join("svr_test.key");
         // 首先生成CA根证书
         let ca_result = generate_ca_root(
             ca_cert_path.to_str().unwrap(),
             ca_key_path.to_str().unwrap(),
+            svr_cert_path.to_str().unwrap(),
+            svr_key_path.to_str().unwrap(),
         );
         assert!(ca_result.is_ok());
 
@@ -1293,11 +1438,14 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("无法创建临时目录");
         let ca_cert_path = temp_dir.path().join("ca_test.crt");
         let nonexistent_cert_path = temp_dir.path().join("nonexistent.crt");
-
+        let svr_cert_path = temp_dir.path().join("svr_test.crt");
+        let svr_key_path = temp_dir.path().join("svr_test.key");
         // 生成CA根证书
         let ca_result = generate_ca_root(
             ca_cert_path.to_str().unwrap(),
             temp_dir.path().join("ca_test.key").to_str().unwrap(),
+            svr_cert_path.to_str().unwrap(),
+            svr_key_path.to_str().unwrap(),
         );
         assert!(ca_result.is_ok());
 
