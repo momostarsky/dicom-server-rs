@@ -2543,6 +2543,7 @@ dependencies = [
  "slog-async",
  "slog-term",
  "tokio",
+ "tokio-util",
  "url",
  "urlencoding",
  "uuid",

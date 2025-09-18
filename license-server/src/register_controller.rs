@@ -6,7 +6,8 @@ use common::cert_helper;
 use lazy_static::lazy_static;
 use regex::Regex;
 use slog::info;
-
+use tokio::fs::File as TokioFile;
+use tokio_util::io::ReaderStream;
 #[derive(serde::Deserialize)]
 struct ClientRegisterParams {
     client_id: String,
@@ -126,24 +127,35 @@ async fn get_ca_certificate(app_state: web::Data<AppState>) -> impl Responder {
     let log = &app_state.log;
 
     // 读取CA证书内容
-    let ca_cert_content = match fs::read_to_string(CA_FILE) {
-        Ok(content) => content,
+    // let ca_cert_content = match fs::read_to_string(CA_FILE) {
+    //     Ok(content) => content,
+    //     Err(e) => {
+    //         slog::error!(log, "Failed to read CA certificate file: {}", e);
+    //         return HttpResponse::InternalServerError()
+    //             .body(format!("Failed to read CA certificate: {}", e));
+    //     }
+    // };
+
+    // 尝试以 Tokio 文件方式打开
+    let file = match TokioFile::open(&CA_FILE).await {
+        Ok(f) => f,
         Err(e) => {
-            slog::error!(log, "Failed to read CA certificate file: {}", e);
+            slog::error!(log, "Failed to open CA certificate file: {}", e);
             return HttpResponse::InternalServerError()
-                .body(format!("Failed to read CA certificate: {}", e));
+                .body(format!("Failed to open CA certificate file: {}", e));
         }
     };
 
-    // 创建JSON响应
-    let response_data = serde_json::json!({
-        "ca_cert": ca_cert_content,
-        "status": "success"
-    });
+    // 将文件转换为 Stream
+    let stream = ReaderStream::new(file);
+
+    // 设置 Content-Disposition，指定下载的默认文件名为 dicom-org-cn.crt
+    let content_disposition = "attachment; filename=\"dicom-org-cn.crt\"";
 
     HttpResponse::Ok()
-        .append_header(("Content-Type", "application/json"))
-        .json(response_data)
+        .append_header(("Content-Type", "application/octet-stream"))
+        .append_header(("Content-Disposition", content_disposition))
+        .streaming(stream)
 }
 /// 处理客户端注册
 ///

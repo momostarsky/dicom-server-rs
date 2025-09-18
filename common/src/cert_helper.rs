@@ -356,8 +356,7 @@ pub fn generate_client_and_sign(
     client_id: &str,
     machine_id: &str,  //客户端的机器ID
     mac_address: &str, //客户端的IP地址
-    end_date: &str,    // 结束时间YYYYMMDD 的格式
-
+    end_date: &str,    // 结束时间YYYYMMDD 的格式 
     ca_root_file: &str,
     ca_root_key_file: &str,
 ) -> Result<(Vec<u8>, Vec<u8>), Box<dyn std::error::Error>> {
