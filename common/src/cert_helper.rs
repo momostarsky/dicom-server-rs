@@ -341,8 +341,7 @@ fn is_well_known_oid(oid: &Oid) -> bool {
 ///
 /// * `client_org` - 客户端组织名称
 /// * `client_id` - 客户端唯一标识符
-/// * `machine_id` - 客户端机器ID
-/// * `mac_address` - 客户端MAC地址
+/// * `hash_code` - 客户端机器ID的哈希值
 /// * `end_date` - 证书有效期结束日期（YYYYMMDD格式）
 /// * `ca_root_file` - CA根证书文件路径
 /// * `ca_root_key_file` - CA根私钥文件路径
@@ -354,9 +353,8 @@ fn is_well_known_oid(oid: &Oid) -> bool {
 pub fn generate_client_and_sign(
     client_org: &str,
     client_id: &str,
-    machine_id: &str,  //客户端的机器ID
-    mac_address: &str, //客户端的IP地址
-    end_date: &str,    // 结束时间YYYYMMDD 的格式 
+    hash_code: &str, //客户端的哈希码
+    end_date: &str,  // 结束时间YYYYMMDD 的格式
     ca_root_file: &str,
     ca_root_key_file: &str,
 ) -> Result<(Vec<u8>, Vec<u8>), Box<dyn std::error::Error>> {
@@ -367,25 +365,64 @@ pub fn generate_client_and_sign(
     if client_id.is_empty() {
         return Err("client_id cannot be empty".into());
     }
-    if machine_id.is_empty() {
-        return Err("machine_id cannot be empty".into());
+    if hash_code.is_empty() {
+        return Err("hash_code cannot be empty".into());
     }
-    if mac_address.is_empty() {
-        return Err("mac_address cannot be empty".into());
-    }
+
     if end_date.is_empty() {
         return Err("end_date cannot be empty".into());
     }
 
+    // 检查CA证书文件是否存在
+    if !std::path::Path::new(ca_root_file).exists() {
+        return Err(format!("CA certificate file does not exist: {}", ca_root_file).into());
+    }
+
+    // 检查CA私钥文件是否存在
+    if !std::path::Path::new(ca_root_key_file).exists() {
+        return Err(format!("CA key file does not exist: {}", ca_root_key_file).into());
+    }
+
     // 读取CA证书
-    let ca_cert_pem =
-        fs::read(ca_root_file).expect(format!("读取CA根证书失败!:{}", ca_root_file).as_str());
-    let ca_cert = X509::from_pem(&ca_cert_pem)?;
+    let ca_cert_pem = match fs::read(ca_root_file) {
+        Ok(content) => content,
+        Err(e) => {
+            return Err(format!("Failed to read CA certificate file {}: {}", ca_root_file, e).into());
+        }
+    };
+
+    // 验证CA证书内容格式
+    if !ca_cert_pem.starts_with(b"-----BEGIN CERTIFICATE-----") {
+        return Err(format!("CA certificate file {} is not in valid PEM format", ca_root_file).into());
+    }
+
+    let ca_cert = match X509::from_pem(&ca_cert_pem) {
+        Ok(cert) => cert,
+        Err(e) => {
+            return Err(format!("Failed to parse CA certificate from {}: {}", ca_root_file, e).into());
+        }
+    };
 
     // 读取CA私钥
-    let ca_key_pem = fs::read(ca_root_key_file)
-        .expect(format!("读取CA根私钥失败!:{}", ca_root_key_file).as_str());
-    let ca_pkey = PKey::private_key_from_pem(&ca_key_pem)?;
+    let ca_key_pem = match fs::read(ca_root_key_file) {
+        Ok(content) => content,
+        Err(e) => {
+            return Err(format!("Failed to read CA key file {}: {}", ca_root_key_file, e).into());
+        }
+    };
+
+    // 验证CA私钥内容格式
+    if !ca_key_pem.starts_with(b"-----BEGIN PRIVATE KEY-----") &&
+       !ca_key_pem.starts_with(b"-----BEGIN RSA PRIVATE KEY-----") {
+        return Err(format!("CA key file {} is not in valid PEM format", ca_root_key_file).into());
+    }
+
+    let ca_pkey = match PKey::private_key_from_pem(&ca_key_pem) {
+        Ok(key) => key,
+        Err(e) => {
+            return Err(format!("Failed to parse CA private key from {}: {}", ca_root_key_file, e).into());
+        }
+    };
 
     // =============================
     // 2. 生成客户端密钥 & CSR
@@ -442,7 +479,7 @@ pub fn generate_client_and_sign(
 
     // 添加自定义扩展：machine_id
     let machine_id_oid = Asn1Object::from_str("1.3.6.1.4.15967132172.1")?;
-    let machine_id_data = Asn1OctetString::new_from_bytes(machine_id.as_bytes())?;
+    let machine_id_data = Asn1OctetString::new_from_bytes(hash_code.as_bytes())?;
     let machine_id_ext = X509Extension::new_from_der(
         &machine_id_oid,
         false, // critical: 是否关键扩展
@@ -451,33 +488,19 @@ pub fn generate_client_and_sign(
     )?;
     cert_builder.append_extension(machine_id_ext)?;
 
-    // 添加自定义扩展：mac_address
-    let mac_address_oid = Asn1Object::from_str("1.3.6.1.4.15967132172.2")?;
-    let mac_address_data = Asn1OctetString::new_from_bytes(mac_address.as_bytes())?;
-    let mac_address_ext = X509Extension::new_from_der(
-        &mac_address_oid,
-        false,                     // critical: 是否关键扩展
-        mac_address_data.as_ref(), // 转换为引用
-    )?;
-    cert_builder.append_extension(mac_address_ext)?;
-
     // 用 CA 私钥签名客户端证书
     cert_builder.sign(&ca_pkey, MessageDigest::sha256())?;
     let client_cert = cert_builder.build();
 
     // 保存客户端证书
     let client_cert_pem = client_cert.to_pem()?;
-    // let filename = format!("client_{}.crt", client_id);
-    // std::fs::write(&filename, client_cert_pem)?;
-
     // 保存客户端私钥
     let client_key_pem = client_pkey.private_key_to_pem_pkcs8()?;
-    // let key_filename = format!("client_{}.key", client_id);
-    // std::fs::write(&key_filename, client_key_pem)?;
     //
     // println!("✅ [Client] 授权证书已由 CA 签发并保存为 {}", filename);
     Ok((client_cert_pem, client_key_pem))
 }
+
 
 /// 生成 CA 根证书和私钥，同时生成用于 Caddy HTTPS 代理的服务器证书和私钥
 ///
@@ -613,7 +636,6 @@ pub fn generate_ca_root(
         // 在这个代码块中创建上下文并构建所有扩展，确保在使用完上下文后才添加到证书中
         let context = server_builder.x509v3_context(Some(&ca_cert), None);
 
-
         // 构建扩展：Subject Alternative Names
         let mut san_extension = openssl::x509::extension::SubjectAlternativeName::new();
         san_extension.dns("localhost");
@@ -733,27 +755,18 @@ pub fn validate_my_certificate(
         return Err("证书尚未生效".into());
     }
 
-    // 3. 验证自定义扩展（machine_id和mac_address）
-    // 获取系统中的machine_id和mac地址用于验证
-    let expected_machine_id = match read_machine_id() {
-        Ok(machine_id) => machine_id,
-        Err(e) => return Err(format!("无法获取machine_id: {}", e).into()),
-    };
 
     // 使用x509-parser查找machine_id扩展（OID: 1.3.6.1.4.15967132172.1）
-    let mut actual_machine_id = None;
-    let mut actual_mac_address = None;
+    let mut actual_hashcode = None;
+
     let mut has_client_auth = false;
 
     for ext in x509_cert.tbs_certificate.extensions() {
         let oid_str = ext.oid.to_string();
         if oid_str == "1.3.6.1.4.15967132172.1" {
             // 找到machine_id扩展
-            actual_machine_id = Some(String::from_utf8_lossy(ext.value).to_string());
-        } else if oid_str == "1.3.6.1.4.15967132172.2" {
-            // 找到mac_address扩展
-            actual_mac_address = Some(String::from_utf8_lossy(ext.value).to_string());
-        } else if oid_str == "2.5.29.37" {
+            actual_hashcode = Some(String::from_utf8_lossy(ext.value).to_string());
+        }   else if oid_str == "2.5.29.37" {
             // 找到扩展密钥用法(Extended Key Usage)扩展
             // OID 1.3.6.1.5.5.7.3.2 表示客户端认证
             let client_auth_oid_bytes: &[u8] = &[0x2B, 0x06, 0x01, 0x05, 0x05, 0x07, 0x03, 0x02];
@@ -770,22 +783,22 @@ pub fn validate_my_certificate(
     if !has_client_auth {
         return Err("证书未授权用于客户端认证".into());
     }
-    let actual_machine_id = actual_machine_id.ok_or("未找到machine_id扩展")?;
-    if actual_machine_id != expected_machine_id {
-        return Err(format!(
-            "machine_id不匹配：期望{}，实际{}",
-            expected_machine_id, actual_machine_id
-        )
-        .into());
-    }
-
-    let actual_mac_address = actual_mac_address.ok_or("未找到mac_address扩展")?;
-    match mac_address_exists(&actual_mac_address) {
-        Ok(_) => {}
-        Err(e) => {
-            return Err(format!("检查mac_address存在性失败: {}", e).into());
-        }
-    }
+    let actual_machine_id = actual_hashcode.ok_or("未找到machine_id扩展")?;
+    // if actual_machine_id != expected_machine_id {
+    //     return Err(format!(
+    //         "machine_id不匹配：期望{}，实际{}",
+    //         expected_machine_id, actual_machine_id
+    //     )
+    //     .into());
+    // }
+    //
+    // let actual_mac_address = actual_mac_address.ok_or("未找到mac_address扩展")?;
+    // match mac_address_exists(&actual_mac_address) {
+    //     Ok(_) => {}
+    //     Err(e) => {
+    //         return Err(format!("检查mac_address存在性失败: {}", e).into());
+    //     }
+    // }
 
     Ok(())
 }
@@ -1129,73 +1142,73 @@ mod tests {
     }
 
     #[test]
-fn test_generate_ca_root() {
-    // 创建临时目录用于测试
-    let temp_dir = tempfile::tempdir().expect("无法创建临时目录");
-    let ca_cert_path = temp_dir.path().join("ca_test.crt");
-    let ca_key_path = temp_dir.path().join("ca_test.key");
-    let server_cert_path = temp_dir.path().join("Server.pem");
-    let server_key_path = temp_dir.path().join("ServerKey.pem");
+    fn test_generate_ca_root() {
+        // 创建临时目录用于测试
+        let temp_dir = tempfile::tempdir().expect("无法创建临时目录");
+        let ca_cert_path = temp_dir.path().join("ca_test.crt");
+        let ca_key_path = temp_dir.path().join("ca_test.key");
+        let server_cert_path = temp_dir.path().join("Server.pem");
+        let server_key_path = temp_dir.path().join("ServerKey.pem");
 
-    // 调用函数生成CA根证书
-    let result = generate_ca_root(
-        ca_cert_path.to_str().unwrap(),
-        ca_key_path.to_str().unwrap(),
-        server_cert_path.to_str().unwrap(),
-        server_key_path.to_str().unwrap(),
-    );
+        // 调用函数生成CA根证书
+        let result = generate_ca_root(
+            ca_cert_path.to_str().unwrap(),
+            ca_key_path.to_str().unwrap(),
+            server_cert_path.to_str().unwrap(),
+            server_key_path.to_str().unwrap(),
+        );
 
-    // 验证函数执行成功
-    assert!(result.is_ok());
+        // 验证函数执行成功
+        assert!(result.is_ok());
 
-    // 验证CA证书文件已创建
-    assert!(ca_cert_path.exists());
+        // 验证CA证书文件已创建
+        assert!(ca_cert_path.exists());
 
-    // 验证CA私钥文件已创建
-    assert!(ca_key_path.exists());
+        // 验证CA私钥文件已创建
+        assert!(ca_key_path.exists());
 
-    // 验证服务器证书文件已创建
-    assert!(server_cert_path.exists());
+        // 验证服务器证书文件已创建
+        assert!(server_cert_path.exists());
 
-    // 验证服务器私钥文件已创建
-    assert!(server_key_path.exists());
+        // 验证服务器私钥文件已创建
+        assert!(server_key_path.exists());
 
-    // 验证CA证书文件不为空
-    let cert_content = fs::read(&ca_cert_path).expect("无法读取CA证书文件");
-    assert!(!cert_content.is_empty());
-    assert!(
-        String::from_utf8(cert_content)
-            .unwrap()
-            .contains("-----BEGIN CERTIFICATE-----")
-    );
+        // 验证CA证书文件不为空
+        let cert_content = fs::read(&ca_cert_path).expect("无法读取CA证书文件");
+        assert!(!cert_content.is_empty());
+        assert!(
+            String::from_utf8(cert_content)
+                .unwrap()
+                .contains("-----BEGIN CERTIFICATE-----")
+        );
 
-    // 验证CA私钥文件不为空
-    let key_content = fs::read(&ca_key_path).expect("无法读取CA私钥文件");
-    assert!(!key_content.is_empty());
-    assert!(
-        String::from_utf8(key_content)
-            .unwrap()
-            .contains("-----BEGIN PRIVATE KEY-----")
-    );
+        // 验证CA私钥文件不为空
+        let key_content = fs::read(&ca_key_path).expect("无法读取CA私钥文件");
+        assert!(!key_content.is_empty());
+        assert!(
+            String::from_utf8(key_content)
+                .unwrap()
+                .contains("-----BEGIN PRIVATE KEY-----")
+        );
 
-    // 验证服务器证书文件不为空
-    let server_cert_content = fs::read(&server_cert_path).expect("无法读取服务器证书文件");
-    assert!(!server_cert_content.is_empty());
-    assert!(
-        String::from_utf8(server_cert_content)
-            .unwrap()
-            .contains("-----BEGIN CERTIFICATE-----")
-    );
+        // 验证服务器证书文件不为空
+        let server_cert_content = fs::read(&server_cert_path).expect("无法读取服务器证书文件");
+        assert!(!server_cert_content.is_empty());
+        assert!(
+            String::from_utf8(server_cert_content)
+                .unwrap()
+                .contains("-----BEGIN CERTIFICATE-----")
+        );
 
-    // 验证服务器私钥文件不为空
-    let server_key_content = fs::read(&server_key_path).expect("无法读取服务器私钥文件");
-    assert!(!server_key_content.is_empty());
-    assert!(
-        String::from_utf8(server_key_content)
-            .unwrap()
-            .contains("-----BEGIN PRIVATE KEY-----")
-    );
-}
+        // 验证服务器私钥文件不为空
+        let server_key_content = fs::read(&server_key_path).expect("无法读取服务器私钥文件");
+        assert!(!server_key_content.is_empty());
+        assert!(
+            String::from_utf8(server_key_content)
+                .unwrap()
+                .contains("-----BEGIN PRIVATE KEY-----")
+        );
+    }
 
     #[test]
     fn test_generate_client_and_sign() {
@@ -1220,7 +1233,6 @@ fn test_generate_ca_root() {
             "Test Organization",
             "test-client-001",
             "machine-uuid-123",
-            "00:11:22:33:44:55",
             "20301231",
             ca_cert_path.to_str().unwrap(),
             ca_key_path.to_str().unwrap(),
@@ -1271,7 +1283,6 @@ fn test_generate_ca_root() {
             "Test Organization",
             "test-client-001",
             "machine-uuid-123",
-            "00:11:22:33:44:55",
             "20301231",
             ca_cert_path.to_str().unwrap(),
             ca_key_path.to_str().unwrap(),
@@ -1317,7 +1328,6 @@ fn test_generate_ca_root() {
             "Test Organization",
             "test-client-001",
             "machine-uuid-123",
-            "00:11:22:33:44:55",
             "20301231",
             ca_cert_path.to_str().unwrap(),
             ca_key_path.to_str().unwrap(),
@@ -1361,7 +1371,6 @@ fn test_generate_ca_root() {
             "Test Organization",
             "test-client-001",
             "machine-uuid-123",
-            "00:11:22:33:44:55",
             "20301231",
             ca_cert_path.to_str().unwrap(),
             ca_key_path.to_str().unwrap(),
@@ -1401,8 +1410,7 @@ fn test_generate_ca_root() {
         let (client_cert_pem, _client_key_pem) = generate_client_and_sign(
             "Test Organization",
             "test-client-001",
-            "test-machine-id",
-            "00:11:22:33:44:55",
+            "c417aa4802b3441d931c135cbdaab367",
             "20301231",
             ca_cert_path.to_str().unwrap(),
             ca_key_path.to_str().unwrap(),

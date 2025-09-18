@@ -16,12 +16,8 @@ struct AppState {
 }
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    generate_ca_root("./ca_root.pem","./ca_key_root.pem","./server.pem", "./server.key").expect("生成CA成功");
     let clog: Logger = configure_log();
-
-    // generate_ca_root("./ca_root.pem", "./ca_key_root.pem", "server.crt", "server.key"
-    // ).expect("生成证书失败");
-
-
     let app_state = AppState { log: clog.clone() };
     info!(clog, "Starting server... 8888");
     HttpServer::new(move || {

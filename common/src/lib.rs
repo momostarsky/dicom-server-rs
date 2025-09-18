@@ -14,7 +14,6 @@ pub mod message_sender;
 pub mod message_sender_kafka;
 pub mod change_file_transfer;
 pub mod cert_helper;
-pub mod ca_helper;
 mod license_manager;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

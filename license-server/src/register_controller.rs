@@ -12,8 +12,7 @@ use tokio_util::io::ReaderStream;
 struct ClientRegisterParams {
     client_id: String,
     client_name: String,
-    client_machine_id: String,
-    client_mac_address: String,
+    client_hash_code: String,
     end_date: String,
 }
 
@@ -43,20 +42,11 @@ impl ClientRegisterParams {
 
         // Validate client_machine_id: 字母数字组合，16~128位
         lazy_static! {
-            static ref CLIENT_MACHINE_ID_REGEX: Regex =
+            static ref CLIENT_HASH_CODE_REGEX: Regex =
                 Regex::new(r"^[a-zA-Z0-9]{16,128}$").unwrap();
         }
-        if !CLIENT_MACHINE_ID_REGEX.is_match(&self.client_machine_id) {
-            return Err("client_machine_id must be between 16 and 128 characters long and contain only letters and numbers".to_string());
-        }
-
-        // Validate client_mac_address: 网卡地址格式 (MAC地址格式)
-        lazy_static! {
-            static ref MAC_ADDRESS_REGEX: Regex =
-                Regex::new(r"^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$").unwrap();
-        }
-        if !MAC_ADDRESS_REGEX.is_match(&self.client_mac_address) {
-            return Err("client_mac_address must be in MAC address format (e.g., 00:1A:2B:3C:4D:5E or 00-1A-2B-3C-4D-5E)".to_string());
+        if !CLIENT_HASH_CODE_REGEX.is_match(&self.client_hash_code) {
+            return Err("client_hash_code must be between 16 and 128 characters long and contain only letters and numbers".to_string());
         }
 
         // Validate end_date: YYYYMMDD 格式
@@ -66,12 +56,10 @@ impl ClientRegisterParams {
         if !END_DATE_REGEX.is_match(&self.end_date) {
             return Err("end_date must be in YYYYMMDD format".to_string());
         }
-
         // Additional validation for end_date to ensure it's a valid date
         if let Err(_) = chrono::NaiveDate::parse_from_str(&self.end_date, "%Y%m%d") {
             return Err("end_date must be a valid date in YYYYMMDD format".to_string());
         }
-
         Ok(())
     }
 }
@@ -251,8 +239,7 @@ async fn process_client_registration(
     let (client_cert, client_seckey) = match cert_helper::generate_client_and_sign(
         &params.client_name,
         &params.client_id,
-        &params.client_machine_id,
-        &params.client_mac_address,
+        &params.client_hash_code,
         &params.end_date,
         &CA_FILE,
         &CA_KEY_FILE,
@@ -266,7 +253,7 @@ async fn process_client_registration(
 
     let client_cert_file_path = format!("/opt/client-cert/client_{}.crt", &params.client_id);
     let client_key_file_path = format!("/opt/client-cert/client_{}.key", &params.client_id);
-    match std::fs::write(&client_cert_file_path, &client_cert) {
+    match fs::write(&client_cert_file_path, &client_cert) {
         Ok(_) => {
             info!(
                 log,
@@ -292,25 +279,25 @@ async fn process_client_registration(
         }
     };
 
-
-
-    // 将客户端证书转换为字符串
-    let client_cert_str = match String::from_utf8(client_cert) {
-        Ok(cert) => cert,
+    // 尝试以 Tokio 文件方式打开
+    let file = match TokioFile::open(&client_cert_file_path).await {
+        Ok(f) => f,
         Err(e) => {
+            slog::error!(log, "Failed to open CA certificate file: {}", e);
             return HttpResponse::InternalServerError()
-                .body(format!("convert client cert to string error:{}", e));
+                .body(format!("Failed to open CA certificate file: {}", e));
         }
     };
-    // 创建JSON响应
-    let response_data = serde_json::json!({
-        "client_cert": client_cert_str
 
-    });
+    // 将文件转换为 Stream
+    let stream = ReaderStream::new(file);
 
+    // 设置 Content-Disposition，指定下载的默认文件名为 dicom-org-cn.crt
+    let content_disposition = format!("attachment; filename=\"client_{}.crt\"", &params.client_id);
     HttpResponse::Ok()
-        .append_header(("Content-Type", "application/json"))
-        .json(response_data)
+        .append_header(("Content-Type", "application/octet-stream"))
+        .append_header(("Content-Disposition", content_disposition))
+        .streaming(stream) 
 }
 
 pub(crate) async fn manual_hello() -> impl Responder {
