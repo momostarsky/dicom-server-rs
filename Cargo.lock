@@ -4966,6 +4966,7 @@ dependencies = [
  "http 0.2.12",
  "http-body-util",
  "mime",
+ "openssl",
  "redis",
  "reqwest",
  "serde",

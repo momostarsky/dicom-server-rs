@@ -57,12 +57,22 @@ async fn main() -> std::io::Result<()> {
         }
     };
     let (client_id, hash_code) = client_info;
-    if client_id.is_some() && hash_code.is_some() {
-        info!(log, "Client ID: {:?}, HashCode:{:?}", client_id.unwrap(),hash_code.unwrap());
-    } else {
-        info!(log, "Client ID: {:?}, HashCode: {:?}", client_id, hash_code);
-        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Client ID or HashCode is None"));
-    }
+    // 确保证书中的client_id和hash_code都存在
+    let cert_client_id = match client_id {
+        Some(id) => id,
+        None => {
+            info!(log, "Certificate does not contain a valid Client ID");
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, "Invalid Client ID in certificate"));
+        }
+    };
+
+    let cert_hash_code = match hash_code {
+        Some(code) => code,
+        None => {
+            info!(log, "Certificate does not contain a valid Hash Code");
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, "Invalid Hash Code in certificate"));
+        }
+    };
 
     let config = server_config::load_config();
     let config = match config {
@@ -75,16 +85,39 @@ async fn main() -> std::io::Result<()> {
             return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
         }
     };
-    // let license = match &config.dicom_license_server {
-    //     None => {
-    //         info!(log, "Dicom License Server Config is None");
-    //         return Err(std::io::Error::new(
-    //             std::io::ErrorKind::Other,
-    //             "Dicom License Server Config is None",
-    //         ));
-    //     }
-    //     Some(license_server) => license_server,
-    // };
+    
+    let license = match &config.dicom_license_server {
+        None => {
+            info!(log, "Dicom License Server Config is None");
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Dicom License Server Config is None",
+            ));
+        }
+        Some(license_server) => license_server,
+    };
+    // 使用更安全的比较方法，避免时序攻击
+    let client_id_matches = {
+        let expected = &license.client_id;
+        openssl::memcmp::eq(expected.as_bytes(), cert_client_id.as_bytes())
+    };
+
+    let hash_code_matches = {
+        let expected = &license.license_key;  // license_key 实际上存储的是 hash_code
+        openssl::memcmp::eq(expected.as_bytes(), cert_hash_code.as_bytes())
+    };
+
+    if client_id_matches && hash_code_matches {
+        info!(log, "License Server Validation Success");
+    } else {
+        info!(log, "License Server Validation Failed");
+        info!(log, "Expected Client ID: {}, Certificate Client ID: {}", license.client_id, cert_client_id);
+        info!(log, "Expected Hash Code: {}, Certificate Hash Code: {}", license.license_key, cert_hash_code);
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "License Server Validation Failed",
+        ));
+    }
     // info!(
     //     log,
     //     "Config License Server License Server URL: {:?}", license.url

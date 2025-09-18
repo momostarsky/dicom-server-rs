@@ -68,7 +68,7 @@ pub struct LicenseServerConfig {
     /// DICOM 许可服务器的 API 密钥  16位字母或是数字字符串
     pub client_id: String,
     /// DICOM 许可密钥的HASHCODE
-    pub license_key: String,
+    pub license_key: String, 
 }
 
 #[derive(Debug, Deserialize, Clone)]
