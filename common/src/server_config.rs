@@ -65,19 +65,9 @@ pub struct MessageQueueConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct LicenseServerConfig {
-    /// DICOM 许可服务器地址
-    pub url: String,
     /// DICOM 许可服务器的 API 密钥  16位字母或是数字字符串
     pub client_id: String,
-    /// DICOM 许可服务器的 API 密钥  小于64为长度的字符串
-    pub client_name: String,
-    /// DICOM 许可服务器的机器 ID  /etc/machine-id 或 /sys/class/dmi/id/product_uuid
-    pub machine_id: String,
-    /// DICOM 许可服务器的 MAC 地址, 物理 地址格式 (MAC地址)
-    pub mac_address: String,
-    /// DICOM 许可到期时间, 格式为 "20231231"
-    pub end_date: String,
-    /// DICOM 许可密钥文件地址, PEM文件格式
+    /// DICOM 许可密钥的HASHCODE
     pub license_key: String,
 }
 
@@ -104,7 +94,7 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
         Ok(path) => {
             println!("Current working directory: {:?}", path);
             path
-        },
+        }
         Err(e) => {
             println!("Failed to get current directory: {}", e);
             std::path::PathBuf::from("./")
@@ -197,26 +187,13 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
         app_config.message_queue.topic_multi_frames
     );
     if let Some(license_server) = app_config.dicom_license_server.as_ref() {
-        println!("dicom_license_server:url {:?}", license_server.url);
         println!(
             "dicom_license_server:client_id {:?}",
             license_server.client_id
         );
         println!(
-            "dicom_license_server:client_name {:?}",
-            license_server.client_name
-        );
-        println!(
-            "dicom_license_server:machine_id {:?}",
-            license_server.machine_id
-        );
-        println!(
-            "dicom_license_server:mac_address {:?}",
-            license_server.mac_address
-        );
-        println!(
-            "dicom_license_server:end_date {:?}",
-            license_server.end_date
+            "dicom_license_server:license_key {:?}",
+            license_server.license_key
         );
     }
 

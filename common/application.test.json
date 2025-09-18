@@ -42,12 +42,7 @@
     "compression_codec": "snappy"
   },
   "dicom_license_server": {
-    "url": "https://dicom.org.cn:8443",
-    "client_id": "HZXS100100000001",
-    "client_name": "Hangzhou,Xiasha,StarskyTechlogy.LTD",
-    "machine_id": "c417aa4802b3441d931c135cbdaab367",
-    "mac_address": "98:97:CC:82:C4:5A",
-    "end_date": "20251231",
-    "license_key": "./dicom-client.pem"
+    "client_id": "HZXS100020261231",
+    "license_key": "c417aa4802b3441d931c135cbdaab367"
   }
 }
