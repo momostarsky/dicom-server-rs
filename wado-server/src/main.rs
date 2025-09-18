@@ -9,6 +9,7 @@ use crate::wado_rs_controller::{
 use actix_cors::Cors;
 use actix_web::{App, HttpServer, middleware, web};
 use common::database_provider::DbProvider;
+use common::license_manager::validate_client_certificate;
 use common::server_config::AppConfig;
 use common::{database_factory, server_config};
 use slog;
@@ -16,7 +17,6 @@ use slog::{Drain, Logger, error, info, o};
 use slog_async;
 use slog_term;
 use std::sync::Arc;
-use common::license_manager::validate_client_certificate;
 
 fn configure_log() -> Logger {
     let decorator = slog_term::TermDecorator::new().build();
@@ -42,15 +42,26 @@ struct AppState {
 async fn main() -> std::io::Result<()> {
     let log = configure_log();
 
-    match  validate_client_certificate().await {
-        Ok(_) => {
-            info!(log, "Client Certificate Validated");
+    let client_info = match validate_client_certificate().await {
+        Ok(client_info) => {
+            info!(log, "Client Certificate Validated, Client ID: {:?}, HashCode:{:?}", client_info.0,client_info.1);
+            client_info
         }
         Err(e) => {
             let error_string = format!("{}", e);
-            info!(log, "Client Certificate Validation Failed: {}", error_string);
+            info!(
+                log,
+                "Client Certificate Validation Failed: {}", error_string
+            );
             return Err(std::io::Error::new(std::io::ErrorKind::Other, error_string));
         }
+    };
+    let (client_id, hash_code) = client_info;
+    if client_id.is_some() && hash_code.is_some() {
+        info!(log, "Client ID: {:?}, HashCode:{:?}", client_id.unwrap(),hash_code.unwrap());
+    } else {
+        info!(log, "Client ID: {:?}, HashCode: {:?}", client_id, hash_code);
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Client ID or HashCode is None"));
     }
 
     let config = server_config::load_config();

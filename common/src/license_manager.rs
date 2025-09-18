@@ -1,7 +1,7 @@
-use std::fs;
 use openssl::asn1::Asn1Time;
 use openssl::x509::X509;
-
+use std::fs;
+use x509_parser::parse_x509_certificate;
 
 static CA_CONTENT: &str = "-----BEGIN CERTIFICATE-----
 MIIGFzCCA/+gAwIBAgIBATANBgkqhkiG9w0BAQsFADCBuTELMAkGA1UEBhMCQ04x
@@ -39,7 +39,7 @@ Ei4SKkT59ExNvjzzHRpQ1OIg+vXMb/ECmQm9wi3w/dvPSvHL6gS93WreMuq786KH
 TnqEtEGq35in0fiX1ai/43juYfWjj9trUmT4
 -----END CERTIFICATE-----\n";
 
-pub async fn load_ca_certificate( ) -> Result<X509, Box<dyn std::error::Error>> {
+pub async fn load_ca_certificate() -> Result<X509, Box<dyn std::error::Error>> {
     X509::from_pem(CA_CONTENT.as_bytes()).map_err(|e| e.into())
 }
 
@@ -53,16 +53,14 @@ pub async fn load_ca_certificate( ) -> Result<X509, Box<dyn std::error::Error>> 
 ///
 /// * `Ok(())` - 验证成功
 /// * `Err(e)` - 验证过程中发生的错误
-pub async fn validate_client_certificate(
-) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn validate_client_certificate()
+-> Result<(Option<String>, Option<String>), Box<dyn std::error::Error>> {
     use openssl::stack::Stack;
     let client_cert_file = "dicom-org-cn-client.crt";
     // 检查证书文件是否存在
     if !std::path::Path::new(client_cert_file).exists() {
         return Err(format!("客户端证书文件不存在: {}", client_cert_file).into());
     }
-
-
 
     // 读取并解析客户端证书 (OpenSSL格式)
     let cert_pem = fs::read(client_cert_file)?;
@@ -98,12 +96,40 @@ pub async fn validate_client_certificate(
         return Err("证书尚未生效".into());
     }
 
-    Ok(())
+    // 解析客户端证书中的自定义扩展
+    let cert_bytes = fs::read(client_cert_file)?;
+    let parsed_cert = if cert_bytes.starts_with(b"-----BEGIN CERTIFICATE-----") {
+        // 如果是 PEM 格式，需要先解码
+        let pem_str = std::str::from_utf8(&cert_bytes)?;
+        let certs = pem::parse_many(pem_str)?;
+        if certs.is_empty() {
+            return Err("PEM文件中未找到证书".into());
+        }
+        certs[0].contents.to_vec()
+    } else {
+        // 如果是 DER 格式，直接解析
+        cert_bytes
+    };
+    let (_, x509_cert) = parse_x509_certificate(&parsed_cert)?;
+
+    // 查找hash_code扩展（OID: 1.3.6.1.4.15967132172.1）
+    let mut hash_code = None;
+    let client_id = cert
+        .subject_name()
+        .entries_by_nid(openssl::nid::Nid::COMMONNAME)
+        .next()
+        .map(|name| String::from_utf8_lossy(name.data().as_slice()).to_string());
+
+    for ext in x509_cert.tbs_certificate.extensions() {
+        let oid_str = ext.oid.to_string();
+        if oid_str == "1.3.6.1.4.15967132172.1" {
+            // 找到hash_code扩展
+            hash_code = Some(String::from_utf8_lossy(ext.value).to_string());
+            break;
+        }
+    }
+    Ok((client_id, hash_code))
 }
-
-
-
-
 
 #[cfg(test)]
 mod tests {
@@ -112,12 +138,17 @@ mod tests {
     #[tokio::test]
     async fn test_load_ca_certificate() {
         let result = load_ca_certificate().await;
-        assert!(result.is_ok(), "Failed to load CA certificate: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to load CA certificate: {:?}",
+            result.err()
+        );
 
         let cert = result.unwrap();
         let subject = cert.subject_name();
         // 验证证书主题包含预期的信息
-        let common_name = subject.entries_by_nid(openssl::nid::Nid::COMMONNAME)
+        let common_name = subject
+            .entries_by_nid(openssl::nid::Nid::COMMONNAME)
             .next()
             .expect("Certificate should have a common name");
 
