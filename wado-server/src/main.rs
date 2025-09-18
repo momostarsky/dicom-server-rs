@@ -16,6 +16,7 @@ use slog::{Drain, Logger, error, info, o};
 use slog_async;
 use slog_term;
 use std::sync::Arc;
+use common::license_manager::validate_client_certificate;
 
 fn configure_log() -> Logger {
     let decorator = slog_term::TermDecorator::new().build();
@@ -41,6 +42,16 @@ struct AppState {
 async fn main() -> std::io::Result<()> {
     let log = configure_log();
 
+    match  validate_client_certificate().await {
+        Ok(_) => {
+            info!(log, "Client Certificate Validated");
+        }
+        Err(e) => {
+            let error_string = format!("{}", e);
+            info!(log, "Client Certificate Validation Failed: {}", error_string);
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, error_string));
+        }
+    }
 
     let config = server_config::load_config();
     let config = match config {

@@ -18,6 +18,7 @@ TransferSynatx, SopInstancheUID, StudyInstanceUID,SeriesInstanceUID, PatientID, 
 3. 转换队列: 对于部分传输语法,因为Cornerstone3D无法解析,需要转换成CornerstoneJS能够解析的格式.转换失败的写入Doris转换记录表.
 ### 需要安装 dicom-org-cn.pem 文件到证书目录.
 ```bash
-sudo cp ./ca_root.pem  /usr/local/share/ca-certificates/dicom-org-cn.crt  
+curl https://dicom.org.cn:8443/ca  >>  ~/dicom-org-cn.crt
+sudo cp ~/dicom-org-cn.crt  /usr/local/share/ca-certificates/dicom-org-cn.crt  
 sudo update-ca-certificates
 ```

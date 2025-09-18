@@ -1,3 +1,5 @@
+use std::fs;
+use openssl::asn1::Asn1Time;
 use openssl::x509::X509;
 
 
@@ -37,9 +39,71 @@ Ei4SKkT59ExNvjzzHRpQ1OIg+vXMb/ECmQm9wi3w/dvPSvHL6gS93WreMuq786KH
 TnqEtEGq35in0fiX1ai/43juYfWjj9trUmT4
 -----END CERTIFICATE-----\n";
 
-pub async fn load_ca_certificate() -> Result<X509, Box<dyn std::error::Error>> {
+pub async fn load_ca_certificate( ) -> Result<X509, Box<dyn std::error::Error>> {
     X509::from_pem(CA_CONTENT.as_bytes()).map_err(|e| e.into())
 }
+
+/// 使用指定的CA证书验证客户端证书
+///
+/// # 参数
+///
+/// * `client_cert_file` - 客户端证书文件路径
+///
+/// # 返回值
+///
+/// * `Ok(())` - 验证成功
+/// * `Err(e)` - 验证过程中发生的错误
+pub async fn validate_client_certificate(
+) -> Result<(), Box<dyn std::error::Error>> {
+    use openssl::stack::Stack;
+    let client_cert_file = "dicom-org-cn-client.crt";
+    // 检查证书文件是否存在
+    if !std::path::Path::new(client_cert_file).exists() {
+        return Err(format!("客户端证书文件不存在: {}", client_cert_file).into());
+    }
+
+
+
+    // 读取并解析客户端证书 (OpenSSL格式)
+    let cert_pem = fs::read(client_cert_file)?;
+    let cert = X509::from_pem(&cert_pem)?;
+
+    // 读取并解析CA证书
+
+    // 读取并解析CA证书
+    let ca_cert = load_ca_certificate().await?;
+
+    // 验证证书是否由指定的CA签发
+    let mut cert_store_builder = openssl::x509::store::X509StoreBuilder::new()?;
+    cert_store_builder.add_cert(ca_cert)?;
+    let cert_store = cert_store_builder.build();
+
+    // 创建空的证书链栈
+    let cert_chain = Stack::new()?;
+
+    let mut cert_context = openssl::x509::X509StoreContext::new()?;
+    let verify_result =
+        cert_context.init(&cert_store, &cert, &cert_chain, |ctx| ctx.verify_cert())?;
+
+    if !verify_result {
+        return Err("证书验证失败：证书不是由指定CA签发".into());
+    }
+
+    // 验证证书是否在有效期内
+    let now = Asn1Time::days_from_now(0)?;
+    if cert.not_after() < now.as_ref() {
+        return Err("证书已过期".into());
+    }
+    if cert.not_before() > now.as_ref() {
+        return Err("证书尚未生效".into());
+    }
+
+    Ok(())
+}
+
+
+
+
 
 #[cfg(test)]
 mod tests {

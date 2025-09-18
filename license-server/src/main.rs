@@ -1,13 +1,19 @@
 mod register_controller;
 
-use crate::register_controller::{client_registe_get, client_registe_post, get_ca_certificate, manual_hello};
+use std::fs;
+use crate::register_controller::{
+    client_registe_get, client_registe_post, get_ca_certificate, manual_hello,
+};
 use actix_cors::Cors;
 use actix_web::{App, HttpServer, middleware, web};
 
+use common::cert_helper::{
+    generate_ca_root, generate_client_and_sign, validate_client_certificate_with_ca,
+};
+use common::license_manager::validate_client_certificate;
 use common::utils::setup_logging;
 use slog::Logger;
 use slog::info;
-use common::cert_helper::generate_ca_root;
 // 定义应用状态
 
 #[derive(Clone)]
@@ -16,7 +22,6 @@ struct AppState {
 }
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    generate_ca_root("./ca_root.pem","./ca_key_root.pem","./server.pem", "./server.key").expect("生成CA成功");
     let clog: Logger = configure_log();
     let app_state = AppState { log: clog.clone() };
     info!(clog, "Starting server... 8888");
@@ -26,7 +31,6 @@ async fn main() -> std::io::Result<()> {
             .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
             .allowed_header(http::header::CONTENT_TYPE)
             .max_age(3600);
-
         cors = cors.allow_any_origin();
 
         App::new()

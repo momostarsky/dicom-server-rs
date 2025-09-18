@@ -335,7 +335,7 @@ fn is_well_known_oid(oid: &Oid) -> bool {
     known_oids.contains(&oid_str.as_str())
 }
 
-/// 生成客户端证书和签名
+ /// 生成客户端证书和签名
 ///
 /// # 参数
 ///
@@ -442,13 +442,6 @@ pub fn generate_client_and_sign(
     // =============================
     let mut cert_builder = X509::builder()?;
 
-    // ========== 添加自定义扩展：machine_id 和 mac_address ==========
-    // 注意：这里使用自定义 OID，比如：
-    // - 1.2.3.4.1 表示 client_machine_id
-    // - 1.2.3.4.2 表示 client_mac_address
-
-    // OID 格式是字符串，比如 "1.2.3.4.1"
-
     cert_builder.set_version(2)?;
 
     // 设置序列号
@@ -477,16 +470,15 @@ pub fn generate_client_and_sign(
             .build()?,
     )?;
 
-    // 添加自定义扩展：machine_id
-    let machine_id_oid = Asn1Object::from_str("1.3.6.1.4.15967132172.1")?;
-    let machine_id_data = Asn1OctetString::new_from_bytes(hash_code.as_bytes())?;
-    let machine_id_ext = X509Extension::new_from_der(
-        &machine_id_oid,
-        false, // critical: 是否关键扩展
-        machine_id_data.as_ref(),
-        // 转换为引用
+    // 添加自定义扩展：hash_code (之前标记为关键扩展，现在改为非关键扩展)
+    let hash_code_oid = Asn1Object::from_str("1.3.6.1.4.15967132172.1")?;
+    let hash_code_data = Asn1OctetString::new_from_bytes(hash_code.as_bytes())?;
+    let hash_code_ext = X509Extension::new_from_der(
+        &hash_code_oid,
+        false, // critical: false 表示非关键扩展
+        hash_code_data.as_ref(),
     )?;
-    cert_builder.append_extension(machine_id_ext)?;
+    cert_builder.append_extension(hash_code_ext)?;
 
     // 用 CA 私钥签名客户端证书
     cert_builder.sign(&ca_pkey, MessageDigest::sha256())?;
@@ -496,10 +488,10 @@ pub fn generate_client_and_sign(
     let client_cert_pem = client_cert.to_pem()?;
     // 保存客户端私钥
     let client_key_pem = client_pkey.private_key_to_pem_pkcs8()?;
-    //
-    // println!("✅ [Client] 授权证书已由 CA 签发并保存为 {}", filename);
+
     Ok((client_cert_pem, client_key_pem))
 }
+
 
 
 /// 生成 CA 根证书和私钥，同时生成用于 Caddy HTTPS 代理的服务器证书和私钥
@@ -783,7 +775,7 @@ pub fn validate_my_certificate(
     if !has_client_auth {
         return Err("证书未授权用于客户端认证".into());
     }
-    let actual_machine_id = actual_hashcode.ok_or("未找到machine_id扩展")?;
+
     // if actual_machine_id != expected_machine_id {
     //     return Err(format!(
     //         "machine_id不匹配：期望{}，实际{}",
