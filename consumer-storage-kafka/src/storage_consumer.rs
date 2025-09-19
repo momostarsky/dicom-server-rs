@@ -5,21 +5,40 @@ use futures::StreamExt;
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message};
 use slog;
-use slog::{Logger, error, info, o};
-use std::sync::{Arc, Mutex};
+use slog::{Logger, error, info};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 use tokio::runtime::Handle;
 
+// 全局logger静态变量，使用线程安全的方式
+static GLOBAL_LOGGER: OnceLock<Logger> = OnceLock::new();
+
+// 设置全局logger
+pub fn set_global_logger(logger: Logger) {
+    let _ = GLOBAL_LOGGER.set(logger);
+}
+
+// 获取全局logger
+fn get_logger() -> &'static Logger {
+    GLOBAL_LOGGER.get().expect("Logger not initialized")
+}
+
 pub async fn start_process(logger: &Logger) {
+    // 设置全局logger
+    set_global_logger(logger.clone());
+
+    // 使用全局logger
+    let global_logger = get_logger();
+
     // 设置日志系统
-    info!(logger, "start process");
+    info!(global_logger, "start process");
 
     let config = server_config::load_config();
     let config = match config {
         Ok(config) => config,
         Err(e) => {
-            error!(logger, "load config failed: {:?}", e);
+            error!(global_logger, "load config failed: {:?}", e);
             std::process::exit(-2);
         }
     };
@@ -28,7 +47,7 @@ pub async fn start_process(logger: &Logger) {
         Some(provider) => provider,
         None => {
             error!(
-                logger,
+                global_logger,
                 "Failed to create database provider: provider is None"
             );
             std::process::exit(-2);
@@ -36,9 +55,9 @@ pub async fn start_process(logger: &Logger) {
     };
 
     match db_provider.echo().await {
-        Ok(msg) => info!(logger, "Database provider echo: {}", msg),
+        Ok(msg) => info!(global_logger, "Database provider echo: {}", msg),
         Err(e) => {
-            error!(logger, "Failed to echo from database provider: {}", e);
+            error!(global_logger, "Failed to echo from database provider: {}", e);
             std::process::exit(-2);
         }
     }
@@ -59,12 +78,12 @@ pub async fn start_process(logger: &Logger) {
         .expect("create consumer-storage-kafka failed");
 
     let topic = queue_config.topic_main.as_str();
-    info!(logger, "Subscribing to topic: {}", topic);
+    info!(global_logger, "Subscribing to topic: {}", topic);
 
     match consumer.subscribe(&[topic]) {
-        Ok(_) => info!(logger, "Successfully subscribed to topic: {}", topic),
+        Ok(_) => info!(global_logger, "Successfully subscribed to topic: {}", topic),
         Err(e) => {
-            error!(logger, "Failed to subscribe to topic {}: {}", topic, e);
+            error!(global_logger, "Failed to subscribe to topic {}: {}", topic, e);
             std::process::exit(-1);
         }
     }
@@ -83,19 +102,17 @@ pub async fn start_process(logger: &Logger) {
     let handle_for_reader = handle.clone();
     let handle_for_writer = handle.clone();
 
-    let reader_logger = logger.new(o!("thread" => "consumer"));
     // 启动消息读取任务（在新线程中运行异步代码）
     let reader_thread = thread::spawn(move || {
         handle_for_reader.block_on(async {
-            read_message(consumer, vec_for_reader, last_process_time, &reader_logger).await;
+            read_message(consumer, vec_for_reader, last_process_time).await;
         });
     });
-    let writer_logger = logger.new(o!("thread" => "persist"));
 
     // 启动消息处理任务（在新线程中运行异步代码）
     let writer_thread = thread::spawn(move || {
         handle_for_writer.block_on(async {
-            persist_message_loop(vec_for_writer, time_for_writer, &writer_logger).await;
+            persist_message_loop(vec_for_writer, time_for_writer).await;
         });
     });
 
@@ -104,26 +121,26 @@ pub async fn start_process(logger: &Logger) {
     let writer_result = writer_thread.join();
 
     match reader_result {
-        Ok(_) => info!(logger, "Reader thread completed successfully"),
-        Err(e) => error!(logger, "Reader thread panicked: {:?}", e),
+        Ok(_) => info!(global_logger, "Reader thread completed successfully"),
+        Err(e) => error!(global_logger, "Reader thread panicked: {:?}", e),
     }
 
     match writer_result {
-        Ok(_) => info!(logger, "Writer thread completed successfully"),
-        Err(e) => error!(logger, "Writer thread panicked: {:?}", e),
+        Ok(_) => info!(global_logger, "Writer thread completed successfully"),
+        Err(e) => error!(global_logger, "Writer thread panicked: {:?}", e),
     }
 
     // 主线程查看最终结果
     let final_vec = shared_vec.lock().unwrap();
-    info!(logger, "Final Vec: {:?}", *final_vec);
+    info!(global_logger, "Final Vec: {:?}", *final_vec);
 }
 
 async fn read_message(
     consumer: StreamConsumer,
     vec: Arc<Mutex<Vec<DicomObjectMeta>>>,
     last_process_time: Arc<Mutex<Instant>>,
-    logger: &Logger,
 ) {
+    let logger = get_logger();
     let mut message_stream = consumer.stream();
     info!(logger, "Starting to read messages...");
 
@@ -181,8 +198,8 @@ static MAX_TIME_BETWEEN_BATCHES: Duration = Duration::from_secs(5);
 async fn persist_message_loop(
     vec: Arc<Mutex<Vec<DicomObjectMeta>>>,
     last_process_time: Arc<Mutex<Instant>>,
-    logger: &Logger,
 ) {
+    let logger = get_logger();
     info!(logger, "Starting message persistence loop...");
 
     loop {
@@ -240,7 +257,7 @@ async fn persist_message_loop(
                 continue;
             }
         };
-        match process_storage_messages(&messages_to_process, &db_provider, &logger).await {
+        match process_storage_messages(&messages_to_process, &db_provider).await {
             Ok(_) => {
                 info!(logger, "Successfully processed batch of {} messages", messages_to_process.len());
 

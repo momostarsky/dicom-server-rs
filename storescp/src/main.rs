@@ -15,6 +15,7 @@ use dicom_object::{InMemDicomObject, StandardDataDictionary};
 use slog::{error, info, o, Drain, Logger};
 use snafu::Report;
 use tracing::Level;
+use common::utils::{get_logger, setup_logging};
 
 mod dicom_file_handler;
 mod store_async;
@@ -112,19 +113,10 @@ fn create_cecho_response(message_id: u16) -> InMemDicomObject<StandardDataDictio
         DataElement::new(tags::STATUS, VR::US, dicom_value!(U16, [0x0000])),
     ])
 }
-fn configure_log() -> Logger {
-    let decorator = slog_term::TermDecorator::new().build();
-    let console_drain = slog_term::FullFormat::new(decorator).build().fuse();
 
-    // It is used for Synchronization
-    let console_drain = slog_async::Async::new(console_drain).build().fuse();
-
-    // Root logger
-    Logger::root(console_drain, o!("v"=>env!("CARGO_PKG_VERSION")))
-}
 #[tokio::main]
 async fn main() {
-    let log = configure_log();
+    let log = setup_logging("dicom-store-scp");
 
     let config = server_config::load_config();
     let config = match config {
@@ -264,7 +256,7 @@ async fn main() {
             info!(log, "工作在非阻塞模式");
             // 使用已有的tokio运行时
             //可以设置最大并发连接数等参数
-            run_async(app, log.clone()).await.unwrap_or_else(|e| {
+            run_async(app ).await.unwrap_or_else(|e| {
                 error!(log, "{:?}", e);
                 std::process::exit(-2);
             });
@@ -283,7 +275,7 @@ async fn main() {
 
             std::thread::spawn(move || {
                 rt.block_on(async {
-                    run_sync(app, log.clone()).await.unwrap_or_else(|e| {
+                    run_sync(app).await.unwrap_or_else(|e| {
                         error!(log, "{:?}", e);
                         std::process::exit(-2);
                     });
@@ -339,25 +331,11 @@ async fn main() {
     // }
 }
 
-async fn run_async(args: App, logger: Logger) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_async(args: App ) -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
     let args = Arc::new(args);
-    tracing::subscriber::set_global_default(
-        tracing_subscriber::FmtSubscriber::builder()
-            .with_max_level(if args.verbose {
-                Level::DEBUG
-            } else {
-                Level::INFO
-            })
-            .finish(),
-    )
-    .unwrap_or_else(|e| {
-        eprintln!(
-            "Could not set up global logger: {}",
-            snafu::Report::from_error(e)
-        );
-    });
-
+    let rlogger=get_logger();
+    let logger = rlogger.new(o!("storescp"=>"run_async"));
     let listen_addr = SocketAddrV4::new(Ipv4Addr::from(0), args.port);
     let listener = tokio::net::TcpListener::bind(listen_addr).await?;
     info!(
@@ -370,30 +348,17 @@ async fn run_async(args: App, logger: Logger) -> Result<(), Box<dyn std::error::
         let args = args.clone();
         let logs = logger.clone();
         tokio::task::spawn(async move {
-            if let Err(e) = run_store_async(socket, &args, &logs).await {
+            if let Err(e) = run_store_async(socket, &args ).await {
                 error!(logs, "{}", Report::from_error(e));
             }
         });
     }
 }
 
-async fn run_sync(args: App, logger: Logger) -> Result<(), Box<dyn std::error::Error>> {
-    tracing::subscriber::set_global_default(
-        tracing_subscriber::FmtSubscriber::builder()
-            .with_max_level(if args.verbose {
-                Level::DEBUG
-            } else {
-                Level::INFO
-            })
-            .finish(),
-    )
-    .unwrap_or_else(|e| {
-        eprintln!(
-            "Could not set up global logger: {}",
-            snafu::Report::from_error(e)
-        );
-    });
+async fn run_sync(args: App ) -> Result<(), Box<dyn std::error::Error>> {
 
+    let rlogger=get_logger();
+    let logger = rlogger.new(o!("storescp"=>"run_sync"));
     let listen_addr = SocketAddrV4::new(Ipv4Addr::from(0), args.port);
     let listener = std::net::TcpListener::bind(listen_addr)?;
     info!(
@@ -405,7 +370,7 @@ async fn run_sync(args: App, logger: Logger) -> Result<(), Box<dyn std::error::E
         match stream {
             Ok(scu_stream) => {
                 let tcp_logger = logger.clone();
-                if let Err(e) = run_store_sync(scu_stream, &args, &tcp_logger).await {
+                if let Err(e) = run_store_sync(scu_stream, &args).await {
                     error!(&tcp_logger, "{}", snafu::Report::from_error(e));
                 }
             }

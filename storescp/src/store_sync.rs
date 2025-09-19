@@ -12,11 +12,11 @@ use std::net::TcpStream;
 
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
-use common::utils::publish_messages;
+use common::utils::{get_logger, publish_messages};
 
-use slog::{debug, error, info, warn};
+use slog::{debug, error, info, o, warn};
 
-pub async fn run_store_sync(scu_stream: TcpStream, args: &App, logger: &slog::Logger) -> Result<(), Whatever> {
+pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Whatever> {
     let App {
         verbose,
         calling_ae_title,
@@ -59,10 +59,13 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App, logger: &slog::Lo
         options = options.with_abstract_syntax(*uid);
     }
 
+
     let mut association = options
         .establish(scu_stream)
         .whatever_context("could not establish association")?;
 
+    let rlogger = get_logger();
+    let logger = rlogger.new(o!("storescp"=>"run_store_sync"));
     info!(logger, "New association from {}", &association.client_ae_title());
     debug!(logger,
         "> Presentation contexts: {:?}",
@@ -215,7 +218,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App, logger: &slog::Lo
 
                                 if dicom_message_lists.len() >= 10 {
 
-                                    match publish_messages(&storage_producer, &dicom_message_lists, &logger)
+                                    match publish_messages(&storage_producer, &dicom_message_lists )
                                         .await
                                     {
                                         Ok(_) => {
@@ -307,7 +310,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App, logger: &slog::Lo
         info!(&logger, "Dropping connection with {}", association.client_ae_title());
     }
 
-    match publish_messages(&storage_producer, &dicom_message_lists, &logger).await {
+    match publish_messages(&storage_producer, &dicom_message_lists ).await {
         Ok(_) => {
             info!(&logger, "Successfully published messages to Kafka");
         }

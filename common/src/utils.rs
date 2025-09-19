@@ -7,14 +7,14 @@ use crate::database_provider::DbProvider;
 use crate::database_provider_base::DbProviderBase;
 use crate::message_sender::MessagePublisher;
 use dicom_dictionary_std::tags;
-use dicom_encoding::snafu::{Whatever};
+use dicom_encoding::snafu::Whatever;
 use dicom_object::ReadError;
 use slog::LevelFilter;
 use slog::{Drain, Logger, error, info, o};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::fs::OpenOptions;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let path = std::path::Path::new(p0);
 
@@ -62,8 +62,20 @@ pub fn collect_dicom_files(
 
     Ok(())
 }
+// 全局logger静态变量
+static GLOBAL_LOGGER: OnceLock<Logger> = OnceLock::new();
 
+// 设置全局logger
+pub fn set_global_logger(logger: Logger) {
+    let _ = GLOBAL_LOGGER.set(logger);
+}
+
+// 获取全局logger
+pub fn get_logger() -> &'static Logger {
+    GLOBAL_LOGGER.get().expect("Logger not initialized")
+}
 // 设置日志记录，日志文件按大小滚动，保留最近7个文件
+// 同时设置全局logger
 pub fn setup_logging(policy_name: &str) -> slog::Logger {
     // 创建控制台logger
     let stdout_decorator = slog_term::TermDecorator::new().build();
@@ -87,7 +99,12 @@ pub fn setup_logging(policy_name: &str) -> slog::Logger {
     let drain = slog::Duplicate::new(stdout_drain, file_drain).map(slog::Fuse);
     let drain = LevelFilter::new(drain, slog::Level::Info).map(slog::Fuse);
 
-    slog::Logger::root(drain, slog::o!("version" => env!("CARGO_PKG_VERSION"))).into()
+    let clogger: slog::Logger =
+        slog::Logger::root(drain, slog::o!("version" => env!("CARGO_PKG_VERSION"))).into();
+
+    set_global_logger(clogger.clone());
+
+    clogger
 }
 // ... existing code ...
 
@@ -294,13 +311,13 @@ pub async fn group_dicom_messages(
 // 处理 主要队列  topic_main 的消息
 pub async fn process_storage_messages(
     messages_to_process: &[DicomObjectMeta],
-    db_provider: &Arc<dyn DbProvider>,
-    logger: &Logger,
+    db_provider: &Arc<dyn DbProvider>
 ) -> Result<(), Box<dyn std::error::Error>> {
     if messages_to_process.is_empty() {
         return Ok(());
     }
-    let logger = logger.new(o!("thread" => "process"));
+    let logger = get_logger();
+    let logger = logger.new(o!("thread" => "process_storage_messages"));
     info!(
         logger,
         "XXX Processing batch of {} messages",
@@ -375,11 +392,12 @@ pub async fn process_storage_messages(
 pub async fn publish_messages(
     message_producer: &dyn MessagePublisher,
     dicom_message_lists: &[DicomObjectMeta],
-    logger: &Logger,
 ) -> Result<(), Whatever> {
     if dicom_message_lists.is_empty() {
         return Ok(());
     }
+    let logger = get_logger();
+    let logger = logger.new(o!("thread" => "publish_messages"));
     match message_producer
         .send_batch_messages(&dicom_message_lists)
         .await

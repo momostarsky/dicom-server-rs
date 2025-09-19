@@ -8,17 +8,16 @@ use dicom_encoding::snafu::{OptionExt, Report, ResultExt, Whatever};
 use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dicom_ul::{pdu::PDataValueType, Pdu};
-use slog::{error, Logger};
+use slog::{error, o, Logger};
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
-use common::utils::publish_messages;
+use common::utils::{get_logger, publish_messages};
 
 use slog::{debug, info, warn};
 
 pub async fn run_store_async(
     scu_stream: tokio::net::TcpStream,
-    args: &App,
-    logger: &Logger,
+    args: &App
 ) -> Result<(), Whatever> {
     let App {
         verbose,
@@ -35,6 +34,9 @@ pub async fn run_store_async(
     let verbose = *verbose;
 
     let peer = scu_stream.peer_addr().unwrap();
+
+    let rlogger = get_logger();
+    let logger = rlogger.new(o!("storescp"=>"run_store_async"));
     info!(
        logger,
         "New association from remote ip: {} and remote port: {}",
@@ -227,7 +229,7 @@ pub async fn run_store_async(
                                     }
                                 }
                                 if dicom_message_lists.len() >= 10 {
-                                    match publish_messages(&storage_producer, &dicom_message_lists,&logger)
+                                    match publish_messages(&storage_producer, &dicom_message_lists )
                                         .await
                                     {
                                         Ok(_) => {
@@ -317,7 +319,7 @@ pub async fn run_store_async(
         info!(logger, "Dropping connection with {}", association.client_ae_title());
     }
 
-    match publish_messages(&storage_producer, &dicom_message_lists,&logger).await {
+    match publish_messages(&storage_producer, &dicom_message_lists ).await {
         Ok(_) => {
             info!(logger, "Successfully published messages to Kafka");
         }
