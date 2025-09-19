@@ -2,6 +2,7 @@ use config::{Config, ConfigError, Environment, File};
 use dotenv::dotenv;
 use serde::Deserialize;
 use std::env;
+use slog_scope::info;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct RedisConfig {

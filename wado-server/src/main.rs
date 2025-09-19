@@ -17,16 +17,20 @@ use slog::{Drain, Logger, error, info, o};
 use slog_async;
 use slog_term;
 use std::sync::Arc;
+use common::utils::setup_logging;
 
 fn configure_log() -> Logger {
-    let decorator = slog_term::TermDecorator::new().build();
-    let console_drain = slog_term::FullFormat::new(decorator).build().fuse();
-
-    // It is used for Synchronization
-    let console_drain = slog_async::Async::new(console_drain).build().fuse();
-
-    // Root logger
-    Logger::root(console_drain, o!("v"=>env!("CARGO_PKG_VERSION")))
+    // let decorator = slog_term::TermDecorator::new().build();
+    // let console_drain = slog_term::FullFormat::new(decorator).build().fuse();
+    // 
+    // // It is used for Synchronization
+    // let console_drain = slog_async::Async::new(console_drain).build().fuse();
+    // 
+    // // Root logger
+    // Logger::root(console_drain, o!("v"=>env!("CARGO_PKG_VERSION")))
+    let log = setup_logging("license-server");
+    info!(log, "License server started");
+    log.clone()
 }
 // 定义应用状态
 
@@ -41,6 +45,17 @@ struct AppState {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let log = configure_log();
+    let config = server_config::load_config();
+    let config = match config {
+        Ok(config) => {
+            info!(log, "Config: {:?}", config);
+            config
+        }
+        Err(e) => {
+            info!(log, "Error loading config: {:?}", e);
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
+        }
+    };
 
     let client_info = match validate_client_certificate().await {
         Ok(client_info) => {
@@ -74,18 +89,7 @@ async fn main() -> std::io::Result<()> {
         }
     };
 
-    let config = server_config::load_config();
-    let config = match config {
-        Ok(config) => {
-            info!(log, "Config: {:?}", config);
-            config
-        }
-        Err(e) => {
-            info!(log, "Error loading config: {:?}", e);
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
-        }
-    };
-    
+
     let license = match &config.dicom_license_server {
         None => {
             info!(log, "Dicom License Server Config is None");
