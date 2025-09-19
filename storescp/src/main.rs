@@ -58,7 +58,7 @@ struct App {
     #[arg(short, default_value = "11111")]
     port: u16,
     /// Run in non-blocking mode (spins up an async task to handle each incoming stream)
-    #[arg(short, long, default_value = "false")]
+    #[arg(short, long, default_value = "true")]
     non_blocking: bool,
 
     #[arg(short = 'j', long = "json-store-path", default_value = ".")]
@@ -370,7 +370,7 @@ async fn run_async(args: App, logger: Logger) -> Result<(), Box<dyn std::error::
         let args = args.clone();
         let logs = logger.clone();
         tokio::task::spawn(async move {
-            if let Err(e) = run_store_async(socket, &args).await {
+            if let Err(e) = run_store_async(socket, &args, &logs).await {
                 error!(logs, "{}", Report::from_error(e));
             }
         });
@@ -404,8 +404,9 @@ async fn run_sync(args: App, logger: Logger) -> Result<(), Box<dyn std::error::E
     for stream in listener.incoming() {
         match stream {
             Ok(scu_stream) => {
-                if let Err(e) = run_store_sync(scu_stream, &args).await {
-                    error!(&logger, "{}", snafu::Report::from_error(e));
+                let tcp_logger = logger.clone();
+                if let Err(e) = run_store_sync(scu_stream, &args, &tcp_logger).await {
+                    error!(&tcp_logger, "{}", snafu::Report::from_error(e));
                 }
             }
             Err(e) => {

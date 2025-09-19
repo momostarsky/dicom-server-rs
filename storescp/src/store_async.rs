@@ -8,16 +8,17 @@ use dicom_encoding::snafu::{OptionExt, Report, ResultExt, Whatever};
 use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dicom_ul::{pdu::PDataValueType, Pdu};
-
+use slog::{error, Logger};
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
 use common::utils::publish_messages;
-use tracing::log::error;
-use tracing::{debug, info, warn};
+
+use slog::{debug, info, warn};
 
 pub async fn run_store_async(
     scu_stream: tokio::net::TcpStream,
     args: &App,
+    logger: &Logger,
 ) -> Result<(), Whatever> {
     let App {
         verbose,
@@ -35,6 +36,7 @@ pub async fn run_store_async(
 
     let peer = scu_stream.peer_addr().unwrap();
     info!(
+       logger,
         "New association from remote ip: {} and remote port: {}",
         peer.ip(),
         peer.port()
@@ -73,9 +75,9 @@ pub async fn run_store_async(
         .await
         .whatever_context("could not establish association")?;
 
-    info!("New association from {}", association.client_ae_title());
+    info!(logger, "New association from {}", association.client_ae_title());
 
-    debug!(
+    debug!(logger,
         "> Presentation contexts: {:?}",
         association.presentation_contexts()
     );
@@ -97,7 +99,7 @@ pub async fn run_store_async(
                 match pdu {
                     Pdu::PData { ref mut data } => {
                         if data.is_empty() {
-                            debug!("Ignoring empty PData PDU");
+                            debug!(logger, "Ignoring empty PData PDU");
                             continue;
                         }
 
@@ -209,14 +211,14 @@ pub async fn run_store_async(
                                 .await
                                 {
                                     Ok(_) => {
-                                        info!(
+                                        info!(logger,
                                             "Successfully processed DICOM file for SOP instance {}",
                                             sop_instance_uid
                                         );
                                         // 继续执行后续操作（发送C-STORE响应等）
                                     }
                                     Err(e) => {
-                                        warn!(
+                                        warn!(logger,
                                             "Failed to process DICOM file for SOP instance {}: {}",
                                             sop_instance_uid, e
                                         );
@@ -225,14 +227,14 @@ pub async fn run_store_async(
                                     }
                                 }
                                 if dicom_message_lists.len() >= 10 {
-                                    match publish_messages(&storage_producer, &dicom_message_lists)
+                                    match publish_messages(&storage_producer, &dicom_message_lists,&logger)
                                         .await
                                     {
                                         Ok(_) => {
-                                            info!("Successfully published messages to MessageQueue");
+                                            info!(logger, "Successfully published messages to MessageQueue");
                                         }
                                         Err(e) => {
-                                            error!("Failed to publish messages to MessageQueue: {}", e);
+                                            error!(logger, "Failed to publish messages to MessageQueue: {}", e);
                                         }
                                     }
                                     dicom_message_lists.clear();
@@ -272,19 +274,19 @@ pub async fn run_store_async(
                     }
                     Pdu::ReleaseRQ => {
                         association.send(&Pdu::ReleaseRP).await.unwrap_or_else(|e| {
-                            warn!(
+                            warn!(logger,
                                 "Failed to send association release message to SCU: {}",
                                 Report::from_error(e)
                             );
                         });
-                        info!(
+                        info!(logger,
                             "Released association with {}",
                             association.client_ae_title()
                         );
                         break;
                     }
                     Pdu::AbortRQ { source } => {
-                        warn!("Aborted connection from: {:?}", source);
+                        warn!(logger, "Aborted connection from: {:?}", source);
                         break;
                     }
                     _ => {}
@@ -292,35 +294,35 @@ pub async fn run_store_async(
             }
             Err(err @ dicom_ul::association::server::Error::Receive { .. }) => {
                 if verbose {
-                    info!("{}", Report::from_error(err));
+                    info!(logger, "{}", Report::from_error(err));
                 } else {
-                    info!("{}", err);
+                    info!(logger, "{}", err);
                 }
                 break;
             }
             Err(err) => {
-                warn!("Unexpected error: {}", Report::from_error(err));
+                warn!(logger, "Unexpected error: {}", Report::from_error(err));
                 break;
             }
         }
     }
 
     if let Ok(peer_addr) = association.inner_stream().peer_addr() {
-        info!(
+        info!(logger,
             "Dropping connection with {} ({})",
             association.client_ae_title(),
             peer_addr
         );
     } else {
-        info!("Dropping connection with {}", association.client_ae_title());
+        info!(logger, "Dropping connection with {}", association.client_ae_title());
     }
 
-    match publish_messages(&storage_producer, &dicom_message_lists).await {
+    match publish_messages(&storage_producer, &dicom_message_lists,&logger).await {
         Ok(_) => {
-            info!("Successfully published messages to Kafka");
+            info!(logger, "Successfully published messages to Kafka");
         }
         Err(e) => {
-            error!("Failed to publish messages to Kafka: {}", e);
+            error!(logger, "Failed to publish messages to Kafka: {}", e);
         }
     }
 

@@ -1,4 +1,3 @@
-
 use crate::change_file_transfer::convert_ts_with_pixel_data;
 use crate::cornerstonejs::SUPPORTED_TRANSFER_SYNTAXES;
 use crate::database_entities::{
@@ -8,16 +7,14 @@ use crate::database_provider::DbProvider;
 use crate::database_provider_base::DbProviderBase;
 use crate::message_sender::MessagePublisher;
 use dicom_dictionary_std::tags;
-use dicom_encoding::snafu::Whatever;
+use dicom_encoding::snafu::{Whatever};
 use dicom_object::ReadError;
-
+use slog::LevelFilter;
+use slog::{Drain, Logger, error, info, o};
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::sync::{Arc};
-use tracing::info;
-use slog::Drain;
 use std::fs::OpenOptions;
-use slog::LevelFilter;
+use std::sync::Arc;
 pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let path = std::path::Path::new(p0);
 
@@ -66,41 +63,31 @@ pub fn collect_dicom_files(
     Ok(())
 }
 
-
-
 // 设置日志记录，日志文件按大小滚动，保留最近7个文件
-pub fn setup_logging(policy_name: &str)-> slog::Logger {
+pub fn setup_logging(policy_name: &str) -> slog::Logger {
+    // 创建控制台logger
+    let stdout_decorator = slog_term::TermDecorator::new().build();
+    let stdout_drain = slog_term::FullFormat::new(stdout_decorator).build().fuse();
+    let stdout_drain = slog_async::Async::new(stdout_drain).build().fuse();
 
+    // 创建文件logger
+    fs::create_dir_all("./logs").unwrap_or(());
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(format!("./logs/{}.log", policy_name))
+        .unwrap();
 
+    let file_decorator = slog_term::PlainDecorator::new(file);
+    let file_drain = slog_term::FullFormat::new(file_decorator).build().fuse();
+    let file_drain = slog_async::Async::new(file_drain).build().fuse();
 
-        // 创建控制台logger
-        let stdout_decorator = slog_term::TermDecorator::new().build();
-        let stdout_drain = slog_term::FullFormat::new(stdout_decorator).build().fuse();
-        let stdout_drain = slog_async::Async::new(stdout_drain).build().fuse();
+    // 组合drains
+    let drain = slog::Duplicate::new(stdout_drain, file_drain).map(slog::Fuse);
+    let drain = LevelFilter::new(drain, slog::Level::Info).map(slog::Fuse);
 
-        // 创建文件logger
-        fs::create_dir_all("./logs").unwrap_or(());
-        let file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(format!("./logs/{}.log", policy_name))
-            .unwrap();
-
-        let file_decorator = slog_term::PlainDecorator::new(file);
-        let file_drain = slog_term::FullFormat::new(file_decorator).build().fuse();
-        let file_drain = slog_async::Async::new(file_drain).build().fuse();
-
-        // 组合drains
-        let drain = slog::Duplicate::new(stdout_drain, file_drain).map(slog::Fuse);
-        let drain = LevelFilter::new(drain, slog::Level::Info).map(slog::Fuse);
-
-         slog::Logger::root(
-            drain,
-            slog::o!("version" => env!("CARGO_PKG_VERSION"))
-        )
-        .into()
-
+    slog::Logger::root(drain, slog::o!("version" => env!("CARGO_PKG_VERSION"))).into()
 }
 // ... existing code ...
 
@@ -308,13 +295,22 @@ pub async fn group_dicom_messages(
 pub async fn process_storage_messages(
     messages_to_process: &[DicomObjectMeta],
     db_provider: &Arc<dyn DbProvider>,
-) {
+    logger: &Logger,
+) -> Result<(), Box<dyn std::error::Error>> {
     if messages_to_process.is_empty() {
-        return;
+        return Ok(());
     }
-    info!("Processing batch of {} messages", messages_to_process.len());
+    let logger = logger.new(o!("thread" => "process"));
+    info!(
+        logger,
+        "XXX Processing batch of {} messages",
+        messages_to_process.len()
+    );
     let unique_tenant_ids = get_unique_tenant_ids(&messages_to_process);
-    info!("Processing data for tenant IDs: {:?}", unique_tenant_ids);
+    info!(
+        logger,
+        "Processing data for tenant IDs: {:?}", unique_tenant_ids
+    );
 
     for tenant_id in unique_tenant_ids {
         let tenant_msg = messages_to_process
@@ -327,7 +323,7 @@ pub async fn process_storage_messages(
                 // 保存失败的消息到数据库
                 if !failed_messages.is_empty() {
                     if let Err(e) = db_provider.save_dicommeta_info(&failed_messages).await {
-                        tracing::error!("Failed to save failed messages to database: {}", e);
+                        error!(logger, "Failed to save failed messages to database: {}", e);
                     }
                 }
 
@@ -336,10 +332,9 @@ pub async fn process_storage_messages(
                     .persist_to_database(tenant_id.as_str(), &patients, &studies, &series, &images)
                     .await
                 {
-                    tracing::error!(
-                        "Failed to persist DICOM data to database for tenant {}: {}",
-                        tenant_id,
-                        e
+                    error!(
+                        logger,
+                        "Failed to persist DICOM data to database for tenant {}: {}", tenant_id, e
                     );
                     // 将所有消息标记为失败并保存到数据库
                     if let Err(save_err) = db_provider.save_dicommeta_info(&tenant_msg).await {
@@ -351,17 +346,20 @@ pub async fn process_storage_messages(
                     continue;
                 }
 
-                tracing::info!("Successfully processed data for tenant {}", tenant_id);
+                info!(
+                    logger,
+                    "Successfully processed data for tenant {}", tenant_id
+                );
             }
             Err(e) => {
-                tracing::error!(
-                    "Failed to group DICOM messages for tenant {}: {}",
-                    tenant_id,
-                    e
+                error!(
+                    logger,
+                    "Failed to group DICOM messages for tenant {}: {}", tenant_id, e
                 );
                 // 当分组处理失败时，将所有消息保存到失败表中
                 if let Err(save_err) = db_provider.save_dicommeta_info(&tenant_msg).await {
-                    tracing::error!(
+                    error!(
+                        logger,
                         "Failed to save tenant messages to failed table after group failure: {}",
                         save_err
                     );
@@ -370,12 +368,14 @@ pub async fn process_storage_messages(
             }
         }
     }
+    Ok(())
 }
 
 // 发送消息到指定队列
 pub async fn publish_messages(
     message_producer: &dyn MessagePublisher,
     dicom_message_lists: &[DicomObjectMeta],
+    logger: &Logger,
 ) -> Result<(), Whatever> {
     if dicom_message_lists.is_empty() {
         return Ok(());
@@ -385,10 +385,11 @@ pub async fn publish_messages(
         .await
     {
         Ok(_) => {
-            info!("Successfully publish_messages");
+            info!(logger, "Successfully publish_messages");
         }
         Err(e) => {
-            tracing::error!("Failed to publish_messages: {}", e);
+            error!(logger, "Failed to publish_messages: {}", e);
+            // return Err(whatever!("Failed to publish_messages: {}", e));
         }
     }
     Ok(())

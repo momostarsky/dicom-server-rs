@@ -712,7 +712,7 @@ pub fn validate_my_certificate(
         // 如果是 DER 格式，直接解析
         cert_bytes
     };
-    let (_, x509_cert) = parse_x509_certificate(&parsed_cert)?;
+    let (_, _x509_cert) = parse_x509_certificate(&parsed_cert)?;
 
     // 1. 验证证书是否由受信任的CA签发（使用系统信任库）
     let cert_store = if std::path::Path::new(ca_file).exists() {
@@ -749,32 +749,32 @@ pub fn validate_my_certificate(
 
 
     // 使用x509-parser查找machine_id扩展（OID: 1.3.6.1.4.15967132172.1）
-    let mut actual_hashcode = None;
-
-    let mut has_client_auth = false;
-
-    for ext in x509_cert.tbs_certificate.extensions() {
-        let oid_str = ext.oid.to_string();
-        if oid_str == "1.3.6.1.4.15967132172.1" {
-            // 找到machine_id扩展
-            actual_hashcode = Some(String::from_utf8_lossy(ext.value).to_string());
-        }   else if oid_str == "2.5.29.37" {
-            // 找到扩展密钥用法(Extended Key Usage)扩展
-            // OID 1.3.6.1.5.5.7.3.2 表示客户端认证
-            let client_auth_oid_bytes: &[u8] = &[0x2B, 0x06, 0x01, 0x05, 0x05, 0x07, 0x03, 0x02];
-            if ext
-                .value
-                .windows(client_auth_oid_bytes.len())
-                .any(|window| window == client_auth_oid_bytes)
-            {
-                has_client_auth = true;
-            }
-        }
-    }
-    // 4. 验证扩展密钥用法是否包含客户端认证
-    if !has_client_auth {
-        return Err("证书未授权用于客户端认证".into());
-    }
+    // let mut actual_hashcode = None;
+    //
+    // let mut has_client_auth = false;
+    //
+    // for ext in _x509_cert.tbs_certificate.extensions() {
+    //     let oid_str = ext.oid.to_string();
+    //     if oid_str == "1.3.6.1.4.15967132172.1" {
+    //         // 找到machine_id扩展
+    //         actual_hashcode = Some(String::from_utf8_lossy(ext.value).to_string());
+    //     }   else if oid_str == "2.5.29.37" {
+    //         // 找到扩展密钥用法(Extended Key Usage)扩展
+    //         // OID 1.3.6.1.5.5.7.3.2 表示客户端认证
+    //         let client_auth_oid_bytes: &[u8] = &[0x2B, 0x06, 0x01, 0x05, 0x05, 0x07, 0x03, 0x02];
+    //         if ext
+    //             .value
+    //             .windows(client_auth_oid_bytes.len())
+    //             .any(|window| window == client_auth_oid_bytes)
+    //         {
+    //             has_client_auth = true;
+    //         }
+    //     }
+    // }
+    // // 4. 验证扩展密钥用法是否包含客户端认证
+    // if !has_client_auth {
+    //     return Err("证书未授权用于客户端认证".into());
+    // }
 
     // if actual_machine_id != expected_machine_id {
     //     return Err(format!(
@@ -822,7 +822,7 @@ pub fn validate_client_certificate_without_hardware(
         // 如果是 DER 格式，直接解析
         cert_bytes
     };
-    let (_, x509_cert) = parse_x509_certificate(&parsed_cert)?;
+    let (_, _x509_cert) = parse_x509_certificate(&parsed_cert)?;
 
     // 1. 验证证书是否由受信任的CA签发（使用系统信任库）
     // 对于自签名证书，我们尝试使用默认的系统信任库
@@ -1031,7 +1031,7 @@ pub fn validate_client_certificate_with_ca(
         // 如果是 DER 格式，直接解析
         cert_bytes
     };
-    let (_, x509_cert) = parse_x509_certificate(&parsed_cert)?;
+    let (_, _x509_cert) = parse_x509_certificate(&parsed_cert)?;
 
     // 1. 验证证书是否由指定的CA签发
     let mut cert_store_builder = openssl::x509::store::X509StoreBuilder::new()?;
@@ -1070,7 +1070,7 @@ pub fn validate_client_certificate_with_ca(
     // let mut actual_mac_address = None;
     // let mut has_client_auth = false;
     //
-    // for ext in x509_cert.tbs_certificate.extensions() {
+    // for ext in _x509_cert.tbs_certificate.extensions() {
     //     let oid_str = ext.oid.to_string();
     //     if oid_str == "1.3.6.1.4.15967132172.1" {
     //         // 找到machine_id扩展

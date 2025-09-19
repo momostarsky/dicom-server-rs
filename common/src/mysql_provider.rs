@@ -1217,7 +1217,7 @@ mod tests {
             &[&user_id],
             |row| {
                 Ok(
-                    Ok::<(std::string::String, i32), DbError>((row.get("SeriesInstanceUID"), row.get("Images")))
+                    Ok::<(String, i32), DbError>((row.get("SeriesInstanceUID"), row.get("Images")))
                 )
             }
         ).await;

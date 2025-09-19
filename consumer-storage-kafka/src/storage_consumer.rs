@@ -1,24 +1,25 @@
 use common::database_entities::DicomObjectMeta;
-use common::utils::{process_storage_messages};
+use common::utils::process_storage_messages;
 use common::{database_factory, server_config};
 use futures::StreamExt;
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message};
+use slog;
+use slog::{Logger, error, info, o};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use tokio::runtime::Handle;
-use tracing::log::error;
 
-pub async fn start_process() {
+pub async fn start_process(logger: &Logger) {
     // 设置日志系统
-    tracing::info!("start process");
+    info!(logger, "start process");
 
     let config = server_config::load_config();
     let config = match config {
         Ok(config) => config,
         Err(e) => {
-            error!("{:?}", e);
+            error!(logger, "load config failed: {:?}", e);
             std::process::exit(-2);
         }
     };
@@ -26,24 +27,25 @@ pub async fn start_process() {
     let db_provider = match database_factory::create_db_instance().await {
         Some(provider) => provider,
         None => {
-            tracing::error!("Failed to create database provider: provider is None");
+            error!(
+                logger,
+                "Failed to create database provider: provider is None"
+            );
             std::process::exit(-2);
         }
     };
 
     match db_provider.echo().await {
-        Ok(msg) => tracing::info!("Database provider echo: {}", msg),
+        Ok(msg) => info!(logger, "Database provider echo: {}", msg),
         Err(e) => {
-            tracing::error!("Failed to echo from database provider: {}", e);
+            error!(logger, "Failed to echo from database provider: {}", e);
             std::process::exit(-2);
         }
     }
 
     let kafka_config = config.kafka;
 
-
     let queue_config = config.message_queue;
-
 
     // 配置消费者
     let consumer: StreamConsumer = ClientConfig::new()
@@ -57,12 +59,12 @@ pub async fn start_process() {
         .expect("create consumer-storage-kafka failed");
 
     let topic = queue_config.topic_main.as_str();
-    tracing::info!("Subscribing to topic: {}", topic);
+    info!(logger, "Subscribing to topic: {}", topic);
 
     match consumer.subscribe(&[topic]) {
-        Ok(_) => tracing::info!("Successfully subscribed to topic: {}", topic),
+        Ok(_) => info!(logger, "Successfully subscribed to topic: {}", topic),
         Err(e) => {
-            tracing::error!("Failed to subscribe to topic {}: {}", topic, e);
+            error!(logger, "Failed to subscribe to topic {}: {}", topic, e);
             std::process::exit(-1);
         }
     }
@@ -81,17 +83,19 @@ pub async fn start_process() {
     let handle_for_reader = handle.clone();
     let handle_for_writer = handle.clone();
 
+    let reader_logger = logger.new(o!("thread" => "consumer"));
     // 启动消息读取任务（在新线程中运行异步代码）
     let reader_thread = thread::spawn(move || {
         handle_for_reader.block_on(async {
-            read_message(consumer, vec_for_reader, last_process_time).await;
+            read_message(consumer, vec_for_reader, last_process_time, &reader_logger).await;
         });
     });
+    let writer_logger = logger.new(o!("thread" => "persist"));
 
     // 启动消息处理任务（在新线程中运行异步代码）
     let writer_thread = thread::spawn(move || {
         handle_for_writer.block_on(async {
-            persist_message_loop(vec_for_writer, time_for_writer).await;
+            persist_message_loop(vec_for_writer, time_for_writer, &writer_logger).await;
         });
     });
 
@@ -100,27 +104,28 @@ pub async fn start_process() {
     let writer_result = writer_thread.join();
 
     match reader_result {
-        Ok(_) => tracing::info!("Reader thread completed successfully"),
-        Err(e) => tracing::error!("Reader thread panicked: {:?}", e),
+        Ok(_) => info!(logger, "Reader thread completed successfully"),
+        Err(e) => error!(logger, "Reader thread panicked: {:?}", e),
     }
 
     match writer_result {
-        Ok(_) => tracing::info!("Writer thread completed successfully"),
-        Err(e) => tracing::error!("Writer thread panicked: {:?}", e),
+        Ok(_) => info!(logger, "Writer thread completed successfully"),
+        Err(e) => error!(logger, "Writer thread panicked: {:?}", e),
     }
 
     // 主线程查看最终结果
     let final_vec = shared_vec.lock().unwrap();
-    tracing::info!("Final Vec: {:?}", *final_vec);
+    info!(logger, "Final Vec: {:?}", *final_vec);
 }
 
 async fn read_message(
     consumer: StreamConsumer,
     vec: Arc<Mutex<Vec<DicomObjectMeta>>>,
     last_process_time: Arc<Mutex<Instant>>,
+    logger: &Logger,
 ) {
     let mut message_stream = consumer.stream();
-    tracing::info!("Starting to read messages...");
+    info!(logger, "Starting to read messages...");
 
     while let Some(result) = message_stream.next().await {
         match result {
@@ -141,31 +146,31 @@ async fn read_message(
                                 // 处理成功后提交偏移量
                                 if let Err(e) = consumer.commit_message(&message, CommitMode::Sync)
                                 {
-                                    tracing::error!("Failed to commit message: {}", e);
+                                    error!(logger, "Failed to commit message: {}", e);
                                 } else {
-                                    tracing::debug!("Successfully processed and committed message");
+                                    info!(logger, "Successfully processed and committed message:{}", message.offset());
                                 }
                             }
                             Err(e) => {
-                                tracing::error!("Failed to deserialize message: {}", e);
+                                error!(logger, "Failed to deserialize message: {}", e);
                                 // 反序列化失败也提交偏移量
                                 if let Err(e) = consumer.commit_message(&message, CommitMode::Sync)
                                 {
-                                    tracing::error!("Failed to commit message: {}", e);
+                                    error!(logger, "Failed to commit message: {}", e);
                                 }
                             }
                         }
                     }
                     None => {
-                        tracing::warn!("Received message with no payload");
+                        error!(logger, "Received message with no payload");
                         if let Err(e) = consumer.commit_message(&message, CommitMode::Sync) {
-                            tracing::error!("Failed to commit message: {}", e);
+                            error!(logger, "Failed to commit message: {}", e);
                         }
                     }
                 }
             }
             Err(e) => {
-                tracing::error!("Error receiving message: {}", e);
+                error!(logger, "Error receiving message: {}", e);
             }
         }
     }
@@ -176,8 +181,9 @@ static MAX_TIME_BETWEEN_BATCHES: Duration = Duration::from_secs(5);
 async fn persist_message_loop(
     vec: Arc<Mutex<Vec<DicomObjectMeta>>>,
     last_process_time: Arc<Mutex<Instant>>,
+    logger: &Logger,
 ) {
-    tracing::info!("Starting message persistence loop...");
+    info!(logger, "Starting message persistence loop...");
 
     loop {
         let should_process = {
@@ -225,20 +231,35 @@ async fn persist_message_loop(
         let db_provider = match database_factory::create_db_instance().await {
             Some(provider) => provider,
             None => {
-                tracing::error!("Failed to create database provider: provider is None");
+                error!(
+                    logger,
+                    "Failed to create database provider: provider is None"
+                );
                 // 休眠一段时间，等待下一次处理
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
             }
         };
-        process_storage_messages(&messages_to_process, &db_provider).await;
+        match process_storage_messages(&messages_to_process, &db_provider, &logger).await {
+            Ok(_) => {
+                info!(logger, "Successfully processed batch of {} messages", messages_to_process.len());
+
+            }
+            Err(e) => {
+                error!(logger, "Failed to process storage messages: {}", e);
+                // 休眠一段时间，等待下一次处理
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                continue;
+            }
+        }
         // 更新最后处理时间
         {
             let mut time = last_process_time.lock().unwrap();
             *time = Instant::now();
         }
 
-        tracing::info!(
+        info!(
+            logger,
             "Successfully processed batch of {} messages",
             messages_to_process.len()
         );

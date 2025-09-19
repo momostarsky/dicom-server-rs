@@ -41,6 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match dicom_object::OpenFileOptions::new()
         .read_until(tags::PIXEL_DATA)
         .open_file(file)
+
     {
         Ok(dcm_obj) => {
             let character_set = dcm_obj.element(tags::SPECIFIC_CHARACTER_SET)?;
