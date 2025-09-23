@@ -9,6 +9,7 @@ use rdkafka::{ClientConfig, Message};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use std::{fs, thread};
+// use dicom_object::collector::CharacterSetOverride;
 use tokio::runtime::Handle;
 use tracing::log::error;
 
@@ -265,13 +266,14 @@ async fn change_transfer_syntax(
 
             // 读取并保存DICOM信息
             let obj_result = OpenFileOptions::new()
+                // .charset_override(CharacterSetOverride::AnyVr)
                 .read_until(tags::PIXEL_DATA)
                 .open_file(src_file);
 
             match obj_result {
                 Ok(obj) => {
                     if let Err(save_err) = db_provider
-                        .save_dicom_info(dcm_msg.tenant_id.as_str(), &obj)
+                        .save_dicom_info(dcm_msg.tenant_id.as_str(),&obj)
                         .await
                     {
                         tracing::error!("Failed to save dicom info: {:?}", save_err);

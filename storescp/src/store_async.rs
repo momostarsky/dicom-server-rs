@@ -8,7 +8,7 @@ use dicom_encoding::snafu::{OptionExt, Report, ResultExt, Whatever};
 use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dicom_ul::{pdu::PDataValueType, Pdu};
-use slog::{error, o, Logger};
+use slog::{error, o};
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
 use common::utils::{get_logger, publish_messages};

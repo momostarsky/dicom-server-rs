@@ -27,7 +27,7 @@
     "ae_title": "STORE-SCP"
   },
   "message_queue": {
-    "topic_main": "storage_queue",
+    "topic_main": "stirage_queue",
     "topic_change_transfer_syntax": "change_transfer_syntax",
     "topic_multi_frames": "multi_frames"
   },

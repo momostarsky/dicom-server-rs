@@ -699,12 +699,12 @@ dependencies = [
  "clap",
  "common",
  "config 0.15.16",
- "dicom-core",
- "dicom-dictionary-std",
- "dicom-encoding",
- "dicom-object",
- "dicom-transfer-syntax-registry",
- "dicom-ul",
+ "dicom-core 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-dictionary-std 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-encoding 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-object 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-transfer-syntax-registry 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-ul 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "dotenv",
  "futures",
  "gdcm_conv",
@@ -727,12 +727,12 @@ dependencies = [
  "clap",
  "common",
  "config 0.15.16",
- "dicom-core",
- "dicom-dictionary-std",
- "dicom-encoding",
- "dicom-object",
- "dicom-transfer-syntax-registry",
- "dicom-ul",
+ "dicom-core 0.8.2 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
+ "dicom-dictionary-std 0.8.1 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
+ "dicom-encoding 0.8.2 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
+ "dicom-object 0.8.2 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
+ "dicom-transfer-syntax-registry 0.8.2 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
+ "dicom-ul 0.8.2 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
  "dotenv",
  "encoding_rs",
  "futures",
@@ -839,13 +839,13 @@ dependencies = [
  "clap",
  "config 0.15.16",
  "der",
- "dicom-core",
- "dicom-dictionary-std",
- "dicom-encoding",
- "dicom-object",
+ "dicom-core 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-dictionary-std 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-encoding 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-object 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "dicom-pixeldata",
- "dicom-transfer-syntax-registry",
- "dicom-ul",
+ "dicom-transfer-syntax-registry 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-ul 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "dotenv",
  "encoding_rs",
  "futures",
@@ -958,12 +958,12 @@ dependencies = [
  "clap",
  "common",
  "config 0.15.16",
- "dicom-core",
- "dicom-dictionary-std",
- "dicom-encoding",
- "dicom-object",
- "dicom-transfer-syntax-registry",
- "dicom-ul",
+ "dicom-core 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-dictionary-std 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-encoding 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-object 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-transfer-syntax-registry 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-ul 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "dotenv",
  "futures",
  "rdkafka",
@@ -1190,12 +1190,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "dicom-core"
+version = "0.8.2"
+source = "git+https://github.com/momostarsky/dicom-rs?rev=555f77c#555f77c0af1eb7c51540c05f971aecaaec57e835"
+dependencies = [
+ "chrono",
+ "itertools 0.14.0",
+ "num-traits",
+ "safe-transmute",
+ "smallvec",
+ "snafu",
+]
+
+[[package]]
 name = "dicom-dictionary-std"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb8bff24f681377e7b8595e17ed82828decfbcec9c69d09f9dbb8f1c3e8081eb"
 dependencies = [
- "dicom-core",
+ "dicom-core 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "once_cell",
+]
+
+[[package]]
+name = "dicom-dictionary-std"
+version = "0.8.1"
+source = "git+https://github.com/momostarsky/dicom-rs?rev=555f77c#555f77c0af1eb7c51540c05f971aecaaec57e835"
+dependencies = [
+ "dicom-core 0.8.2 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
  "once_cell",
 ]
 
@@ -1206,8 +1228,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a9664d8c8de377e29b1e5b8fe8efa7c3cc3ea848ee6a70247f906fa5e00fdc97"
 dependencies = [
  "byteordered",
- "dicom-core",
- "dicom-dictionary-std",
+ "dicom-core 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-dictionary-std 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "encoding",
+ "snafu",
+]
+
+[[package]]
+name = "dicom-encoding"
+version = "0.8.2"
+source = "git+https://github.com/momostarsky/dicom-rs?rev=555f77c#555f77c0af1eb7c51540c05f971aecaaec57e835"
+dependencies = [
+ "byteordered",
+ "dicom-core 0.8.2 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
+ "dicom-dictionary-std 0.8.1 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
  "encoding",
  "snafu",
 ]
@@ -1219,11 +1253,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f460ce81c9a0c2d958888cce45243846845b5447a0023f144d8164e822989fe6"
 dependencies = [
  "byteordered",
- "dicom-core",
- "dicom-dictionary-std",
- "dicom-encoding",
- "dicom-parser",
- "dicom-transfer-syntax-registry",
+ "dicom-core 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-dictionary-std 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-encoding 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-parser 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-transfer-syntax-registry 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "itertools 0.14.0",
+ "smallvec",
+ "snafu",
+ "tracing",
+]
+
+[[package]]
+name = "dicom-object"
+version = "0.8.2"
+source = "git+https://github.com/momostarsky/dicom-rs?rev=555f77c#555f77c0af1eb7c51540c05f971aecaaec57e835"
+dependencies = [
+ "byteordered",
+ "dicom-core 0.8.2 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
+ "dicom-dictionary-std 0.8.1 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
+ "dicom-encoding 0.8.2 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
+ "dicom-parser 0.8.2 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
+ "dicom-transfer-syntax-registry 0.8.2 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
  "itertools 0.14.0",
  "smallvec",
  "snafu",
@@ -1236,9 +1287,22 @@ version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7986f989ccdf19c71a742690e20c66b02f5751964876076ce69d2fc43f6eaff"
 dependencies = [
- "dicom-core",
- "dicom-dictionary-std",
- "dicom-encoding",
+ "dicom-core 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-dictionary-std 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-encoding 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "smallvec",
+ "snafu",
+ "tracing",
+]
+
+[[package]]
+name = "dicom-parser"
+version = "0.8.2"
+source = "git+https://github.com/momostarsky/dicom-rs?rev=555f77c#555f77c0af1eb7c51540c05f971aecaaec57e835"
+dependencies = [
+ "dicom-core 0.8.2 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
+ "dicom-dictionary-std 0.8.1 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
+ "dicom-encoding 0.8.2 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
  "smallvec",
  "snafu",
  "tracing",
@@ -1251,11 +1315,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3155f33cc72a0621458a92d46e5e11f59f4c46e96c05234bda1fdc1b05c17b18"
 dependencies = [
  "byteorder",
- "dicom-core",
- "dicom-dictionary-std",
- "dicom-encoding",
- "dicom-object",
- "dicom-transfer-syntax-registry",
+ "dicom-core 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-dictionary-std 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-encoding 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-object 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-transfer-syntax-registry 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "gdcm-rs",
  "image",
  "num-traits",
@@ -1271,8 +1335,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62672d33f29f7c049a92a662c4bd7ef34e85b5eaea379627d335d93b5d25edf6"
 dependencies = [
  "byteordered",
- "dicom-core",
- "dicom-encoding",
+ "dicom-core 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-encoding 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "jpeg-decoder",
+ "jpeg-encoder",
+ "jxl-oxide",
+ "lazy_static",
+ "tracing",
+]
+
+[[package]]
+name = "dicom-transfer-syntax-registry"
+version = "0.8.2"
+source = "git+https://github.com/momostarsky/dicom-rs?rev=555f77c#555f77c0af1eb7c51540c05f971aecaaec57e835"
+dependencies = [
+ "byteordered",
+ "dicom-core 0.8.2 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
+ "dicom-encoding 0.8.2 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
  "jpeg-decoder",
  "jpeg-encoder",
  "jxl-oxide",
@@ -1288,8 +1367,22 @@ checksum = "96af12961f5e98687dba1b452f6facd3d5322d2440f5b6f6954859ff940b9ba0"
 dependencies = [
  "byteordered",
  "bytes",
- "dicom-encoding",
- "dicom-transfer-syntax-registry",
+ "dicom-encoding 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-transfer-syntax-registry 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "snafu",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "dicom-ul"
+version = "0.8.2"
+source = "git+https://github.com/momostarsky/dicom-rs?rev=555f77c#555f77c0af1eb7c51540c05f971aecaaec57e835"
+dependencies = [
+ "byteordered",
+ "bytes",
+ "dicom-encoding 0.8.2 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
+ "dicom-transfer-syntax-registry 0.8.2 (git+https://github.com/momostarsky/dicom-rs?rev=555f77c)",
  "snafu",
  "tokio",
  "tracing",
@@ -2812,12 +2905,12 @@ dependencies = [
  "chrono",
  "clap",
  "config 0.13.4",
- "dicom-core",
- "dicom-dictionary-std",
- "dicom-encoding",
- "dicom-object",
- "dicom-transfer-syntax-registry",
- "dicom-ul",
+ "dicom-core 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-dictionary-std 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-encoding 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-object 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-transfer-syntax-registry 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-ul 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "dotenv",
  "futures",
  "futures-util",
@@ -4426,12 +4519,12 @@ dependencies = [
  "clap",
  "common",
  "config 0.13.4",
- "dicom-core",
- "dicom-dictionary-std",
- "dicom-encoding",
- "dicom-object",
- "dicom-transfer-syntax-registry",
- "dicom-ul",
+ "dicom-core 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-dictionary-std 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-encoding 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-object 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-transfer-syntax-registry 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-ul 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "dotenv",
  "futures",
  "futures-util",
@@ -5167,13 +5260,13 @@ dependencies = [
  "axum",
  "chrono",
  "common",
- "dicom-core",
- "dicom-dictionary-std",
- "dicom-encoding",
- "dicom-object",
+ "dicom-core 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-dictionary-std 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-encoding 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-object 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "dicom-pixeldata",
- "dicom-transfer-syntax-registry",
- "dicom-ul",
+ "dicom-transfer-syntax-registry 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dicom-ul 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures",
  "futures-util",
  "gdcm_conv",

@@ -310,9 +310,11 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         info!(&logger, "Dropping connection with {}", association.client_ae_title());
     }
 
+    info!(&logger, "Finished processing association with {}", association.client_ae_title());
+
     match publish_messages(&storage_producer, &dicom_message_lists ).await {
         Ok(_) => {
-            info!(&logger, "Successfully published messages to Kafka");
+            info!(&logger, "Successfully published messages {} to Kafka", dicom_message_lists.len());
         }
         Err(e) => {
             error!(&logger, "Failed to publish messages to Kafka: {}", e);

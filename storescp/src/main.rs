@@ -7,14 +7,13 @@ use std::{
 
 use clap::Parser;
 use common::license_manager::validate_client_certificate;
-use common::{cert_helper, server_config};
+use common::{server_config};
 use dicom_core::{dicom_value, DataElement, VR};
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu;
 use dicom_object::{InMemDicomObject, StandardDataDictionary};
-use slog::{error, info, o, Drain, Logger};
+use slog::{error, info, o};
 use snafu::Report;
-use tracing::Level;
 use common::utils::{get_logger, setup_logging};
 
 mod dicom_file_handler;
@@ -59,7 +58,7 @@ struct App {
     #[arg(short, default_value = "11111")]
     port: u16,
     /// Run in non-blocking mode (spins up an async task to handle each incoming stream)
-    #[arg(short, long, default_value = "true")]
+    #[arg(short, long, default_value = "false")]
     non_blocking: bool,
 
     #[arg(short = 'j', long = "json-store-path", default_value = ".")]

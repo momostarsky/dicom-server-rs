@@ -15,6 +15,8 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::fs::OpenOptions;
 use std::sync::{Arc, OnceLock};
+
+
 pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let path = std::path::Path::new(p0);
 
@@ -180,6 +182,7 @@ pub async fn group_dicom_messages(
             continue;
         }
         match dicom_object::OpenFileOptions::new()
+            // .charset_override(CharacterSetOverride::AnyVr)
             .read_until(tags::PIXEL_DATA)
             .open_file(&message.file_path)
         {
