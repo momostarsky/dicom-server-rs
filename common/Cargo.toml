@@ -9,13 +9,12 @@ serde = { version = "1.0.225", features = ["derive"] }
 config = "0.15.16"  # 配置文件解析
 dotenv = "0.15.0"
 clap = { version = "4.5.47", features = ["derive"] }
-dicom-core = { version = "0.8.2" }
-dicom-ul = { version = "0.8.2", features = ["async"] }
-dicom-object = { version = "0.8.2" }
-dicom-encoding = { version = "0.8.2" }
-dicom-dictionary-std = { version = "0.8.1" }
-dicom-transfer-syntax-registry = { version = "0.8.2" }
-dicom-pixeldata = { version = "0.8.2", features = ["gdcm","rayon","image","rle","jpeg"] }
+dicom-core = {  git="https://github.com/momostarsky/dicom-rs",  rev = "555f77c" }
+dicom-ul = { git="https://github.com/momostarsky/dicom-rs",  rev = "555f77c", features = ["async"] }
+dicom-object = {  git="https://github.com/momostarsky/dicom-rs",  rev = "555f77c" }
+dicom-encoding = {  git="https://github.com/momostarsky/dicom-rs",  rev = "555f77c" }
+dicom-dictionary-std = { git="https://github.com/momostarsky/dicom-rs",  rev = "555f77c" }
+dicom-transfer-syntax-registry = {  git="https://github.com/momostarsky/dicom-rs",  rev = "555f77c" }
 async-trait = "0.1.89"
 sqlx = { version = "0.8.6", features = ["mysql", "chrono",
     "runtime-tokio",
