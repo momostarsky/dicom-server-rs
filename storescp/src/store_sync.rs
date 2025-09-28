@@ -12,9 +12,10 @@ use std::net::TcpStream;
 
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
-use common::utils::{get_logger, publish_messages};
+use common::utils::{get_logger};
 
-use slog::{debug, error, info, o, warn};
+use crate::dicom_file_handler::classify_and_publish_dicom_messages;
+use slog::{debug, info, o, warn};
 
 pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Whatever> {
     let App {
@@ -222,49 +223,34 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                             sop_instance_uid,
                                             e
                                         );
-                                        // 可以选择是否继续执行后续操作，或者返回错误 
+                                        // 可以选择是否继续执行后续操作，或者返回错误
                                     }
                                 }
 
                                 if dicom_message_lists.len() >= 10 {
-                                    match publish_messages(&storage_producer, &dicom_message_lists)
-                                        .await
+                                    // 根据 SUPPORTED_TRANSFER_SYNTAXES 和 DicomObjectMeta.transfer_synatx_uid 对 dicom_message_lists 分为2组,
+                                    // transfer_synatx_uid 属于 SUPPORTED_TRANSFER_SYNTAXES 通过 storage_producer 进行消息分发:publish_messages , 不属于的通过 change_producer 进行分发.
+
+                                    match classify_and_publish_dicom_messages(
+                                        &dicom_message_lists,
+                                        &storage_producer,
+                                        &change_producer,
+                                        &logger,
+                                        queue_topic_main,
+                                        queue_topic_change,
+                                    )
+                                    .await
                                     {
                                         Ok(_) => {
-                                            info!(
-                                                logger,
-                                                "Successfully published messages to Kafka:{}",
-                                                queue_topic_main
-                                            );
+                                            info!(&logger, "Successfully published DICOM messages");
                                         }
                                         Err(e) => {
-                                            error!(
-                                                logger,
-                                                "Failed to publish messages to Kafka: {},{}",
-                                                e,
-                                                queue_topic_main
+                                            warn!(
+                                                &logger,
+                                                "Failed to publish DICOM messages: {}", e
                                             );
                                         }
-                                    }
-                                    match publish_messages(&change_producer, &dicom_message_lists)
-                                        .await
-                                    {
-                                        Ok(_) => {
-                                            info!(
-                                                logger,
-                                                "Successfully published messages to Kafka:{}",
-                                                queue_topic_change
-                                            );
-                                        }
-                                        Err(e) => {
-                                            error!(
-                                                logger,
-                                                "Failed to publish messages to Kafka: {},{}",
-                                                e,
-                                                queue_topic_change
-                                            );
-                                        }
-                                    }
+                                    };
                                     dicom_message_lists.clear();
                                 }
 
@@ -357,17 +343,26 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         association.client_ae_title()
     );
 
-    match publish_messages(&storage_producer, &dicom_message_lists).await {
-        Ok(_) => {
-            info!(
-                &logger,
-                "Successfully published messages {} to Kafka",
-                dicom_message_lists.len()
-            );
-        }
-        Err(e) => {
-            error!(&logger, "Failed to publish messages to Kafka: {}", e);
-        }
+    if !dicom_message_lists.is_empty() {
+        info!(&logger, "Finished processing association with {}", association.client_ae_title());
+
+        match classify_and_publish_dicom_messages(
+            &dicom_message_lists,
+            &storage_producer,
+            &change_producer,
+            &logger,
+            queue_topic_main,
+            queue_topic_change,
+        )
+            .await
+        {
+            Ok(_) => {
+                info!(&logger, "Successfully published DICOM messages");
+            }
+            Err(e) => {
+                warn!(&logger, "Failed to publish DICOM messages: {}", e);
+            }
+        };
     }
 
     Ok(())

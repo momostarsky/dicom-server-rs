@@ -11,8 +11,8 @@ use tracing::info;
 pub(crate) async fn process_dicom_file(
     instance_buffer: &[u8],    //DICOM文件的字节数组或是二进制流
     out_dir: &str,             //存储文件的根目录, 例如 :/opt/dicomStore/
-    issue_patient_id: &String, // 机构ID,或是医院ID, 用于区分多个医院.
-    ts: &String,               // 传输语法
+    tenant_id: &String,        //机构ID,或是医院ID, 用于区分多个医院.
+    ts: &String,               //传输语法
     sop_instance_uid: &String, //当前文件的SOP实例ID
     lst: &mut Vec<DicomObjectMeta>,
 ) -> Result<(), Whatever> {
@@ -53,21 +53,25 @@ pub(crate) async fn process_dicom_file(
         .trim_end_matches("\0")
         .to_string();
 
-    // obj
-    //     .element(tags::STUDY_DATE)
-    //     .whatever_context("Missing STUDY_DATE")?
-    //     .to_str()
-    //     .whatever_context("could not retrieve STUDY_DATE")? ;
-    // obj
-    //     .element(tags::MODALITY)
-    //     .whatever_context("Missing MODALITY")?
-    //     .to_str()
-    //     .whatever_context("could not retrieve MODALITY")? ;
+    let study_date = obj
+        .element(tags::STUDY_DATE)
+        .whatever_context("Missing STUDY_DATE")?
+        .to_str()
+        .whatever_context("could not retrieve STUDY_DATE")?
+        .trim_end_matches("\0")
+        .to_string();
+    let modality = obj
+        .element(tags::MODALITY)
+        .whatever_context("Missing MODALITY")?
+        .to_str()
+        .whatever_context("could not retrieve MODALITY")?
+        .trim_end_matches("\0")
+        .to_string();
 
     let frames = get_tag_value(tags::NUMBER_OF_FRAMES, &obj, 1);
     info!(
-        "Issur:{} ,PatientID: {}, StudyUID: {}, SeriesUID: {}, SopUID: {}",
-        issue_patient_id, pat_id, study_uid, series_uid, sop_uid
+        "Issur:{} ,PatientID: {}, StudyUID: {}, SeriesUID: {}, SopUID: {}, StudyDate: {}, Modality: {}, Frames: {}",
+        tenant_id, pat_id, study_uid, series_uid, sop_uid, study_date, modality, frames
     );
 
     let file_meta = FileMetaTableBuilder::new()
@@ -92,13 +96,13 @@ pub(crate) async fn process_dicom_file(
         true => {
             format!(
                 "{}{}/{}/{}/{}",
-                out_dir, issue_patient_id, pat_id, study_uid, series_uid
+                out_dir, tenant_id, pat_id, study_uid, series_uid
             )
         }
         false => {
             format!(
                 "{}/{}/{}/{}/{}",
-                out_dir, issue_patient_id, pat_id, study_uid, series_uid
+                out_dir, tenant_id, pat_id, study_uid, series_uid
             )
         }
     };
@@ -121,9 +125,11 @@ pub(crate) async fn process_dicom_file(
         sop_instance_uid.trim_end_matches('\0').to_string() + ".dcm"
     );
 
-    file_obj.write_to_file(&file_path).whatever_context("write file failed")?;
-    let fsize  = std::fs::metadata(&file_path).unwrap().len();
-    info!("Stored {}, {} with:{} bytes", ts, sop_instance_uid,fsize);
+    file_obj
+        .write_to_file(&file_path)
+        .whatever_context("write file failed")?;
+    let fsize = std::fs::metadata(&file_path).unwrap().len();
+    info!("Stored {}, {} with:{} bytes", ts, sop_instance_uid, fsize);
 
     // // 从新从磁盘读取DICOM文件, 确保文件已经完全写入磁盘.
     // let dicom_obj = dicom_object::OpenFileOptions::new()
@@ -135,7 +141,7 @@ pub(crate) async fn process_dicom_file(
     let saved_path = PathBuf::from(file_path); // 此时可以安全转移所有权
 
     lst.push(DicomObjectMeta {
-        tenant_id: issue_patient_id.to_string(),
+        tenant_id: tenant_id.to_string(),
         patient_id: pat_id.to_string(),
         study_uid,
         series_uid,
@@ -147,5 +153,81 @@ pub(crate) async fn process_dicom_file(
         created_time: None,
         updated_time: None,
     });
+    Ok(())
+}
+
+/// 根据传输语法支持情况将 DICOM 消息列表分类并分别发布到不同的 Kafka 主题
+/// 
+/// # 参数
+/// * `dicom_message_lists` - 需要处理的 DICOM 对象元数据列表
+/// * `storage_producer` - 用于发布受支持传输语法消息的 Kafka 生产者
+/// * `change_producer` - 用于发布不受支持传输语法消息的 Kafka 生产者
+/// * `logger` - 日志记录器
+/// * `queue_topic_main` - 主题名称（受支持的传输语法）
+/// * `queue_topic_change` - 主题名称（不受支持的传输语法）
+pub(crate) async fn classify_and_publish_dicom_messages(
+    dicom_message_lists: &Vec<DicomObjectMeta>,
+    storage_producer: &common::message_sender_kafka::KafkaMessagePublisher,
+    change_producer: &common::message_sender_kafka::KafkaMessagePublisher,
+    logger: &slog::Logger,
+    queue_topic_main: &str,
+    queue_topic_change: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // 将 dicom_message_lists 按 transfer_syntax_uid 是否被 SUPPORTED_TRANSFER_SYNTAXES 支持分成两类
+    let (supported_messages, unsupported_messages): (Vec<_>, Vec<_>) = dicom_message_lists
+        .iter()
+        .partition(|meta| {
+            common::cornerstonejs::SUPPORTED_TRANSFER_SYNTAXES
+                .contains(meta.transfer_synatx_uid.as_str())
+        });
+    
+    // 将引用转换为拥有所有权的 Vec
+    let supported_messages_owned: Vec<_> = supported_messages.into_iter().cloned().collect();
+    let unsupported_messages_owned: Vec<_> = unsupported_messages.into_iter().cloned().collect();
+
+    // 使用 storage_producer 发布受支持的消息
+    if !supported_messages_owned.is_empty() {
+        match common::utils::publish_messages(storage_producer, &supported_messages_owned).await {
+            Ok(_) => {
+                slog::info!(
+                    logger,
+                    "Successfully published {} supported messages to Kafka: {}",
+                    supported_messages_owned.len(),
+                    queue_topic_main
+                );
+            }
+            Err(e) => {
+                slog::error!(
+                    logger,
+                    "Failed to publish supported messages to Kafka: {}, topic: {}",
+                    e,
+                    queue_topic_main
+                );
+            }
+        }
+    }
+
+    // 使用 change_producer 发布不受支持的消息
+    if !unsupported_messages_owned.is_empty() {
+        match common::utils::publish_messages(change_producer, &unsupported_messages_owned).await {
+            Ok(_) => {
+                slog::info!(
+                    logger,
+                    "Successfully published {} unsupported messages to Kafka: {}",
+                    unsupported_messages_owned.len(),
+                    queue_topic_change
+                );
+            }
+            Err(e) => {
+                slog::error!(
+                    logger,
+                    "Failed to publish unsupported messages to Kafka: {}, topic: {}",
+                    e,
+                    queue_topic_change
+                );
+            }
+        }
+    }
+
     Ok(())
 }
