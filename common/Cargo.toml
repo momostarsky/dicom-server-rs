@@ -20,7 +20,6 @@ sqlx = { version = "0.8.6", features = ["mysql", "chrono",
     "runtime-tokio",
     "mysql",
     "macros",
-
     "runtime-tokio-native-tls"] }
 tracing = "0.1.41"
 tokio = { version = "1.47.1", features = ["full"] }
