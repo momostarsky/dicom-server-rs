@@ -48,7 +48,6 @@ pub async fn start_process() {
 
     // 配置消费者
     let consumer: StreamConsumer = ClientConfig::new()
-        .set("group.id", kafka_config.consumer_group_id.as_str())
         .set("bootstrap.servers", kafka_config.brokers.as_str())
         .set("enable.auto.commit", "false")
         .set("auto.offset.reset", "earliest")

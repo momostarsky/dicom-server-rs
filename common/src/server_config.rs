@@ -48,7 +48,7 @@ pub struct DicomStoreScpConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct KafkaConfig {
     pub brokers: String,
-    pub consumer_group_id: String,
+
     pub queue_buffering_max_messages: u32,
     pub queue_buffering_max_kbytes: u32,
     pub batch_num_messages: u32,
@@ -59,9 +59,10 @@ pub struct KafkaConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct MessageQueueConfig {
+    pub consumer_group_id: String,
     pub topic_main: String,
-    pub topic_change_transfer_syntax: String,
-    pub topic_multi_frames: String,
+    pub topic_change_transfer_syntax: String ,
+
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -69,7 +70,7 @@ pub struct LicenseServerConfig {
     /// DICOM 许可服务器的 API 密钥  16位字母或是数字字符串
     pub client_id: String,
     /// DICOM 许可密钥的HASHCODE
-    pub license_key: String, 
+    pub license_key: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -157,10 +158,7 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
                 app_config.dicom_store_scp.ae_title
             );
             println!("kafka:brokers {:?}", app_config.kafka.brokers);
-            println!(
-                "kafka:consumer_group_id {:?}",
-                app_config.kafka.consumer_group_id
-            );
+
             println!(
                 "kafka:queue_buffering_max_messages {:?}",
                 app_config.kafka.queue_buffering_max_messages
@@ -183,6 +181,10 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
                 app_config.kafka.compression_codec
             );
             println!(
+                "kafka:consumer_group_id {:?}",
+                app_config.message_queue.consumer_group_id
+            );
+            println!(
                 "message_queue:topic_main {:?}",
                 app_config.message_queue.topic_main
             );
@@ -190,10 +192,8 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
                 "message_queue:topic_change_transfer_syntax {:?}",
                 app_config.message_queue.topic_change_transfer_syntax
             );
-            println!(
-                "message_queue:topic_multi_frames {:?}",
-                app_config.message_queue.topic_multi_frames
-            );
+            
+
             if let Some(license_server) = app_config.dicom_license_server.as_ref() {
                 println!(
                     "dicom_license_server:client_id {:?}",
@@ -213,7 +213,9 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
             Ok(config.clone())
         } else {
             // 这种情况理论上不应该发生
-            Err(ConfigError::Message("Failed to load configuration".to_string()))
+            Err(ConfigError::Message(
+                "Failed to load configuration".to_string(),
+            ))
         }
     }
 }

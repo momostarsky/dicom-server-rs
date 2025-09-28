@@ -14,8 +14,8 @@ use slog::{Drain, Logger, error, info, o};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::fs::OpenOptions;
+use std::io::Write;
 use std::sync::{Arc, OnceLock};
-
 
 pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let path = std::path::Path::new(p0);
@@ -140,49 +140,8 @@ pub async fn group_dicom_messages(
     let mut failed_messages: Vec<DicomObjectMeta> = Vec::new();
     let mut failed_message_set: HashSet<&DicomObjectMeta> = HashSet::new(); // 用于跟踪已失败的消息
 
-    {
-        //-------------对所有的DICOM文件进行转码------
-        for dcm_msg in messages {
-            let support_ts =
-                SUPPORTED_TRANSFER_SYNTAXES.contains(&dcm_msg.transfer_synatx_uid.as_str());
-            if support_ts {
-                continue;
-            }
-
-            let target_path = format!("./{}.dcm", dcm_msg.sop_uid);
-            let src_file = dcm_msg.file_path.as_str();
-            let src_sz = dcm_msg.file_size as usize;
-            // 处理文件转换
-            let conversion_result =
-                convert_ts_with_pixel_data(src_file, src_sz, &target_path, true).await;
-            if let Err(e) = conversion_result {
-                tracing::error!("Change Dicom TransferSyntax To RLE Failed: {:?}", e);
-                if !failed_message_set.contains(dcm_msg) {
-                    failed_messages.push(dcm_msg.clone());
-                    failed_message_set.insert(dcm_msg);
-                }
-                // 继续处理下一条消息
-                continue;
-            }
-            // 转换成功，删除临时文件
-            if let Err(remove_err) = fs::remove_file(&target_path) {
-                tracing::error!(
-                    "Failed to delete temporary file {}: {:?}",
-                    target_path,
-                    remove_err
-                );
-                // 即使删除失败也继续处理
-            }
-        }
-    }
-
     for message in messages {
-        // 不处理在 failed_messages 列表中的消息
-        if failed_message_set.contains(message) {
-            continue;
-        }
         match dicom_object::OpenFileOptions::new()
-
             .read_until(tags::PIXEL_DATA)
             .open_file(&message.file_path)
         {
@@ -311,10 +270,27 @@ pub async fn group_dicom_messages(
     ))
 }
 
+async fn write_failed_messages_to_file(
+    failed_messages: &[DicomObjectMeta],
+) -> Result<(), Box<dyn std::error::Error>> {
+    // 以追加模式打开文件
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("./consumer_failed.json")?;
+
+    // 为每条失败消息写入一行JSON
+    for message in failed_messages {
+        let json_line = serde_json::to_string(message)?;
+        writeln!(file, "{}", json_line)?;
+    }
+
+    Ok(())
+}
 // 处理 主要队列  topic_main 的消息
 pub async fn process_storage_messages(
     messages_to_process: &[DicomObjectMeta],
-    db_provider: &Arc<dyn DbProvider>
+    db_provider: &Arc<dyn DbProvider>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if messages_to_process.is_empty() {
         return Ok(());
@@ -342,8 +318,18 @@ pub async fn process_storage_messages(
             Ok((patients, studies, series, images, failed_messages)) => {
                 // 保存失败的消息到数据库
                 if !failed_messages.is_empty() {
-                    if let Err(e) = db_provider.save_dicommeta_info(&failed_messages).await {
-                        error!(logger, "Failed to save failed messages to database: {}", e);
+                    // 将失败的消息追加写入文件 ./failed.json
+                    match write_failed_messages_to_file(&failed_messages).await {
+                        Ok(_) => {
+                            info!(
+                                logger,
+                                "Successfully wrote {} failed messages to failed.json",
+                                failed_messages.len()
+                            );
+                        }
+                        Err(e) => {
+                            error!(logger, "Failed to write failed messages to file: {}", e);
+                        }
                     }
                 }
 

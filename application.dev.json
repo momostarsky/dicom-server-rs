@@ -27,18 +27,17 @@
     "ae_title": "STORE-SCP"
   },
   "message_queue": {
-    "topic_main": "stirage_queue",
-    "topic_change_transfer_syntax": "change_transfer_syntax",
-    "topic_multi_frames": "multi_frames"
+    "consumer_group_id": "dicom-consumer-group",
+    "topic_main": "storage_queue",
+    "topic_change_transfer_syntax": "change_transfer_syntax"
   },
   "kafka": {
     "brokers": "192.168.1.14:9092",
-    "consumer_group_id": "dicom-consumer-group",
     "queue_buffering_max_messages": 1000,
-    "queue_buffering_max_kbytes": 1048576,
+    "queue_buffering_max_kbytes": 102400,
     "batch_num_messages": 100,
     "queue_buffering_max_ms": 100,
-    "linger_ms": "100",
+    "linger_ms": 100,
     "compression_codec": "snappy"
   },
   "dicom_license_server": {
