@@ -182,7 +182,7 @@ pub async fn group_dicom_messages(
             continue;
         }
         match dicom_object::OpenFileOptions::new()
-            // .charset_override(CharacterSetOverride::AnyVr)
+
             .read_until(tags::PIXEL_DATA)
             .open_file(&message.file_path)
         {

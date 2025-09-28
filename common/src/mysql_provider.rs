@@ -1104,7 +1104,7 @@ mod tests {
     use sqlx::MySqlPool;
     use std::collections::HashMap;
     use std::path::Path;
-
+    // use dicom_object::collector::CharacterSetOverride;
     // 测试数据库连接配置 - 使用测试数据库
 
     // 设置测试数据库
@@ -1360,6 +1360,7 @@ mod tests {
             }
             let dicom_obj: Result<_, Box<dyn std::error::Error>> =
                 dicom_object::OpenFileOptions::new()
+                    // .charset_override(CharacterSetOverride::AnyVr)
                     .read_until(tags::PIXEL_DATA)
                     .open_file(path)
                     .map_err(Box::from);

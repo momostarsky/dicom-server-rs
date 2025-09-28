@@ -59,15 +59,19 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         options = options.with_abstract_syntax(*uid);
     }
 
-
     let mut association = options
         .establish(scu_stream)
         .whatever_context("could not establish association")?;
 
     let rlogger = get_logger();
     let logger = rlogger.new(o!("storescp"=>"run_store_sync"));
-    info!(logger, "New association from {}", &association.client_ae_title());
-    debug!(logger,
+    info!(
+        logger,
+        "New association from {}",
+        &association.client_ae_title()
+    );
+    debug!(
+        logger,
         "> Presentation contexts: {:?}",
         association.presentation_contexts()
     );
@@ -77,7 +81,11 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
 
     let queue_config = app_config.message_queue;
 
-    let storage_producer = KafkaMessagePublisher::new(queue_config.topic_main);
+    let queue_topic_main = &queue_config.topic_main.as_str();
+    let queue_topic_change = &queue_config.topic_change_transfer_syntax.as_str();
+
+    let storage_producer = KafkaMessagePublisher::new(queue_topic_main.parse().unwrap());
+    let change_producer = KafkaMessagePublisher::new(queue_topic_change.parse().unwrap());
 
     let mut dicom_message_lists = vec![];
     loop {
@@ -200,32 +208,61 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                 .await
                                 {
                                     Ok(_) => {
-                                        info!(&logger,
+                                        info!(
+                                            &logger,
                                             "Successfully processed DICOM file for SOP instance {}",
                                             sop_instance_uid
                                         );
                                         // 继续执行后续操作（发送C-STORE响应等）
                                     }
                                     Err(e) => {
-                                        warn!(&logger,
+                                        warn!(
+                                            &logger,
                                             "Failed to process DICOM file for SOP instance {}: {}",
-                                            sop_instance_uid, e
+                                            sop_instance_uid,
+                                            e
                                         );
-                                        // 可以选择是否继续执行后续操作，或者返回错误
-                                        // 根据业务需求决定如何处理
+                                        // 可以选择是否继续执行后续操作，或者返回错误 
                                     }
                                 }
 
                                 if dicom_message_lists.len() >= 10 {
-
-                                    match publish_messages(&storage_producer, &dicom_message_lists )
+                                    match publish_messages(&storage_producer, &dicom_message_lists)
                                         .await
                                     {
                                         Ok(_) => {
-                                            info!(logger, "Successfully published messages to Kafka");
+                                            info!(
+                                                logger,
+                                                "Successfully published messages to Kafka:{}",
+                                                queue_topic_main
+                                            );
                                         }
                                         Err(e) => {
-                                            error!(logger,   "Failed to publish messages to Kafka: {}", e);
+                                            error!(
+                                                logger,
+                                                "Failed to publish messages to Kafka: {},{}",
+                                                e,
+                                                queue_topic_main
+                                            );
+                                        }
+                                    }
+                                    match publish_messages(&change_producer, &dicom_message_lists)
+                                        .await
+                                    {
+                                        Ok(_) => {
+                                            info!(
+                                                logger,
+                                                "Successfully published messages to Kafka:{}",
+                                                queue_topic_change
+                                            );
+                                        }
+                                        Err(e) => {
+                                            error!(
+                                                logger,
+                                                "Failed to publish messages to Kafka: {},{}",
+                                                e,
+                                                queue_topic_change
+                                            );
                                         }
                                     }
                                     dicom_message_lists.clear();
@@ -307,14 +344,26 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
             peer_addr
         );
     } else {
-        info!(&logger, "Dropping connection with {}", association.client_ae_title());
+        info!(
+            &logger,
+            "Dropping connection with {}",
+            association.client_ae_title()
+        );
     }
 
-    info!(&logger, "Finished processing association with {}", association.client_ae_title());
+    info!(
+        &logger,
+        "Finished processing association with {}",
+        association.client_ae_title()
+    );
 
-    match publish_messages(&storage_producer, &dicom_message_lists ).await {
+    match publish_messages(&storage_producer, &dicom_message_lists).await {
         Ok(_) => {
-            info!(&logger, "Successfully published messages {} to Kafka", dicom_message_lists.len());
+            info!(
+                &logger,
+                "Successfully published messages {} to Kafka",
+                dicom_message_lists.len()
+            );
         }
         Err(e) => {
             error!(&logger, "Failed to publish messages to Kafka: {}", e);
