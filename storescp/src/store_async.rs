@@ -5,13 +5,13 @@ use crate::{
 
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
-use common::utils::{get_logger};
+use common::utils::get_logger;
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu::{OptionExt, Report, ResultExt, Whatever};
 use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dicom_ul::{pdu::PDataValueType, Pdu};
-use slog::{o};
+use slog::o;
 
 use crate::dicom_file_handler::classify_and_publish_dicom_messages;
 use slog::{debug, info, warn};
@@ -246,7 +246,7 @@ pub async fn run_store_async(
                                         &dicom_message_lists,
                                         &storage_producer,
                                         &change_producer,
-                                        &logger,
+                                       
                                         queue_topic_main,
                                         queue_topic_change,
                                     )
@@ -358,7 +358,6 @@ pub async fn run_store_async(
             &dicom_message_lists,
             &storage_producer,
             &change_producer,
-            &logger,
             queue_topic_main,
             queue_topic_change,
         )

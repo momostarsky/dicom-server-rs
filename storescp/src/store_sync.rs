@@ -235,7 +235,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                         &dicom_message_lists,
                                         &storage_producer,
                                         &change_producer,
-                                        &logger,
+
                                         queue_topic_main,
                                         queue_topic_change,
                                     )
@@ -350,7 +350,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
             &dicom_message_lists,
             &storage_producer,
             &change_producer,
-            &logger,
+
             queue_topic_main,
             queue_topic_change,
         )

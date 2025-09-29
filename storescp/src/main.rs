@@ -7,14 +7,14 @@ use std::{
 
 use clap::Parser;
 use common::license_manager::validate_client_certificate;
-use common::{server_config};
+use common::server_config;
+use common::utils::{get_logger, setup_logging};
 use dicom_core::{dicom_value, DataElement, VR};
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu;
 use dicom_object::{InMemDicomObject, StandardDataDictionary};
 use slog::{error, info, o};
 use snafu::Report;
-use common::utils::{get_logger, setup_logging};
 
 mod dicom_file_handler;
 mod store_async;
@@ -58,7 +58,7 @@ struct App {
     #[arg(short, default_value = "11111")]
     port: u16,
     /// Run in non-blocking mode (spins up an async task to handle each incoming stream)
-    #[arg(short, long, default_value = "false")]
+    #[arg(short, long, default_value = "true")]
     non_blocking: bool,
 
     #[arg(short = 'j', long = "json-store-path", default_value = ".")]
@@ -228,6 +228,11 @@ async fn main() {
             });
         }
     }
+    //TODO:  测试 out_dir  是否具有创建目录及写入权限
+    test_directory_permissions(&log, &app.out_dir).unwrap_or_else(|e| {
+        error!(log, "Directory permission test failed: {}", e);
+        std::process::exit(-2);
+    });
 
     let json_dir = std::fs::exists(&app.json_store_path);
 
@@ -249,13 +254,16 @@ async fn main() {
             });
         }
     }
-
+    test_directory_permissions(&log, &app.json_store_path).unwrap_or_else(|e| {
+        error!(log, "Directory permission test failed: {}", e);
+        std::process::exit(-2);
+    });
     match app.non_blocking {
         true => {
             info!(log, "工作在非阻塞模式");
             // 使用已有的tokio运行时
             //可以设置最大并发连接数等参数
-            run_async(app ).await.unwrap_or_else(|e| {
+            run_async(app).await.unwrap_or_else(|e| {
                 error!(log, "{:?}", e);
                 std::process::exit(-2);
             });
@@ -330,10 +338,10 @@ async fn main() {
     // }
 }
 
-async fn run_async(args: App ) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_async(args: App) -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
     let args = Arc::new(args);
-    let rlogger=get_logger();
+    let rlogger = get_logger();
     let logger = rlogger.new(o!("storescp"=>"run_async"));
     let listen_addr = SocketAddrV4::new(Ipv4Addr::from(0), args.port);
     let listener = tokio::net::TcpListener::bind(listen_addr).await?;
@@ -347,16 +355,15 @@ async fn run_async(args: App ) -> Result<(), Box<dyn std::error::Error>> {
         let args = args.clone();
         let logs = logger.clone();
         tokio::task::spawn(async move {
-            if let Err(e) = run_store_async(socket, &args ).await {
+            if let Err(e) = run_store_async(socket, &args).await {
                 error!(logs, "{}", Report::from_error(e));
             }
         });
     }
 }
 
-async fn run_sync(args: App ) -> Result<(), Box<dyn std::error::Error>> {
-
-    let rlogger=get_logger();
+async fn run_sync(args: App) -> Result<(), Box<dyn std::error::Error>> {
+    let rlogger = get_logger();
     let logger = rlogger.new(o!("storescp"=>"run_sync"));
     let listen_addr = SocketAddrV4::new(Ipv4Addr::from(0), args.port);
     let listener = std::net::TcpListener::bind(listen_addr)?;
@@ -378,6 +385,28 @@ async fn run_sync(args: App ) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+
+    Ok(())
+}
+
+
+fn test_directory_permissions(log: &slog::Logger, out_dir: &PathBuf) -> Result<(), std::io::Error> {
+    info!(log, "Test Directory: {}", out_dir.display());
+    let test_dir = format!("{}/{}", out_dir.display(), "1.222/1.444/1.555");
+    std::fs::create_dir_all(&test_dir)?;
+    info!(log, "Test Directory: {}  Create Success !", test_dir);
+
+    // 测试写入权限
+    let test_file = format!("{}/test.dcm", test_dir);
+    std::fs::write(
+        &test_file,
+        b"903290903234092409383404903409289899889jkkallklkj",
+    )?;
+    info!(log, "Test File: {}  Create Success !", test_file);
+
+    // 清理测试文件和目录
+    std::fs::remove_file(&test_file)?;
+    std::fs::remove_dir_all(&test_dir)?;
 
     Ok(())
 }
