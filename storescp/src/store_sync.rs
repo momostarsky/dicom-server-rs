@@ -228,8 +228,10 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                 }
 
                                 if dicom_message_lists.len() >= 10 {
-                                    // 根据 SUPPORTED_TRANSFER_SYNTAXES 和 DicomObjectMeta.transfer_synatx_uid 对 dicom_message_lists 分为2组,
-                                    // transfer_synatx_uid 属于 SUPPORTED_TRANSFER_SYNTAXES 通过 storage_producer 进行消息分发:publish_messages , 不属于的通过 change_producer 进行分发.
+                                    // 根据 SUPPORTED_TRANSFER_SYNTAXES 和 DicomObjectMeta.transfer_syntax_uid 对 dicom_message_lists 分为2组,
+                                    // transfer_syntax_uid 属于 SUPPORTED_TRANSFER_SYNTAXES
+                                    // 通过 storage_producer 进行消息分发:publish_messages ,
+                                    // 不属于的通过 change_producer 进行分发.
 
                                     match classify_and_publish_dicom_messages(
                                         &dicom_message_lists,
@@ -281,6 +283,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                 };
                                 association
                                     .send(&pdu_response)
+
                                     .whatever_context("failed to send response object to SCU")?;
                             }
                         }
@@ -307,7 +310,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                     _ => {}
                 }
             }
-            Err(err @ dicom_ul::association::server::Error::Receive { .. }) => {
+            Err(err @ dicom_ul::association::Error::ReceivePdu { .. }) => {
                 if verbose {
                     info!(&logger, "{}", Report::from_error(err));
                 } else {
