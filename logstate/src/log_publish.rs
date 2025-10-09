@@ -1,7 +1,7 @@
 use std::error::Error;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
-use crate::LogEntity::{DicomIngestLog, StorageLog, TranscodeLog, WadoAccessLog};
+use crate::log_entity::{DicomIngestLog, StorageLog, TranscodeLog, WadoAccessLog};
 
 /// DICOM 文件接收、转码、存储、WADO 访问日志
 pub const LOG_DICOM_INGEST: &str = "dicom_storescp";

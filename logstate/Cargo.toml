@@ -1,0 +1,19 @@
+[package]
+name = "logstate"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde_json = "1.0.145"
+serde = { version = "1.0.225", features = ["derive"] }
+slog = "2.8.0"
+slog-term = "2.8.0"
+slog-async = "2.8.0"
+slog-stdlog = "4.1.1"
+slog-scope = "4.4.0"
+rdkafka = "0.34.0"
+futures = "0.3.31"
+futures-util = "0.3.31"
+chrono = { version = "0.4.42", features = ["serde"] }
+rayon = "1.11.0"
+uuid = { version = "1.18.1", features = ["v4", "serde"] }
