@@ -9,6 +9,8 @@ use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use slog::{debug, error, info};
 use slog::o;
 use std::path::PathBuf;
+use common::message_sender_kafka::KafkaMessagePublisher;
+
 /// 校验 DICOM StudyDate 格式是否符合 YYYYMMDD 格式
 fn validate_study_date_format(date_str: &str) -> Result<(), &'static str> {
     if date_str.len() != 8 {
@@ -218,6 +220,7 @@ pub(crate) async fn process_dicom_file(
     let fsize = std::fs::metadata(&file_path).unwrap().len();
     // // 从新从磁盘读取DICOM文件, 确保文件已经完全写入磁盘.
     // let dicom_obj = dicom_object::OpenFileOptions::new()
+    //     .charset_override(CharacterSetOverride::AnyVr)
     //     .read_until(tags::PIXEL_DATA)
     //     .open_file(&file_path)
     //     .whatever_context("open dicom file failed")?;
@@ -252,8 +255,8 @@ pub(crate) async fn process_dicom_file(
 /// * `queue_topic_change` - 主题名称（不受支持的传输语法）
 pub(crate) async fn classify_and_publish_dicom_messages(
     dicom_message_lists: &Vec<DicomObjectMeta>,
-    storage_producer: &common::message_sender_kafka::KafkaMessagePublisher,
-    change_producer: &common::message_sender_kafka::KafkaMessagePublisher,
+    storage_producer: &KafkaMessagePublisher,
+    change_producer: &KafkaMessagePublisher,
     queue_topic_main: &str,
     queue_topic_change: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -274,7 +277,7 @@ pub(crate) async fn classify_and_publish_dicom_messages(
     if !supported_messages_owned.is_empty() {
         match common::utils::publish_messages(storage_producer, &supported_messages_owned).await {
             Ok(_) => {
-                slog::info!(
+                info!(
                     logger,
                     "Successfully published {} supported messages to Kafka: {}",
                     supported_messages_owned.len(),
@@ -282,7 +285,7 @@ pub(crate) async fn classify_and_publish_dicom_messages(
                 );
             }
             Err(e) => {
-                slog::error!(
+                error!(
                     logger,
                     "Failed to publish supported messages to Kafka: {}, topic: {}",
                     e,

@@ -1,5 +1,3 @@
-use crate::change_file_transfer::convert_ts_with_pixel_data;
-use crate::cornerstonejs::SUPPORTED_TRANSFER_SYNTAXES;
 use crate::database_entities::{
     DicomObjectMeta, ImageEntity, PatientEntity, SeriesEntity, StudyEntity,
 };
@@ -16,6 +14,7 @@ use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::{Arc, OnceLock};
+use dicom_object::file::CharacterSetOverride;
 
 pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let path = std::path::Path::new(p0);
@@ -78,7 +77,7 @@ pub fn get_logger() -> &'static Logger {
 }
 // 设置日志记录，日志文件按大小滚动，保留最近7个文件
 // 同时设置全局logger
-pub fn setup_logging(policy_name: &str) -> slog::Logger {
+pub fn setup_logging(policy_name: &str) -> Logger {
     // 创建控制台logger
     let stdout_decorator = slog_term::TermDecorator::new().build();
     let stdout_drain = slog_term::FullFormat::new(stdout_decorator).build().fuse();
@@ -101,8 +100,8 @@ pub fn setup_logging(policy_name: &str) -> slog::Logger {
     let drain = slog::Duplicate::new(stdout_drain, file_drain).map(slog::Fuse);
     let drain = LevelFilter::new(drain, slog::Level::Info).map(slog::Fuse);
 
-    let clogger: slog::Logger =
-        slog::Logger::root(drain, slog::o!("version" => env!("CARGO_PKG_VERSION"))).into();
+    let clogger: Logger =
+        Logger::root(drain, o!("version" => env!("CARGO_PKG_VERSION"))).into();
 
     set_global_logger(clogger.clone());
 
@@ -142,6 +141,7 @@ pub async fn group_dicom_messages(
 
     for message in messages {
         match dicom_object::OpenFileOptions::new()
+            .charset_override(CharacterSetOverride::AnyVr)
             .read_until(tags::PIXEL_DATA)
             .open_file(&message.file_path)
         {
