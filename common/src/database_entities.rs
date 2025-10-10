@@ -31,7 +31,7 @@ pub struct StudyEntity {
     pub occupation: Option<String>,
     pub additional_patient_history: Option<String>,
     pub patient_comments: Option<String>,
-    pub study_date: Option<chrono::NaiveDate>,
+    pub study_date: chrono::NaiveDate,
     pub study_time: Option<chrono::NaiveTime>,
     pub accession_number: Option<String>,
     pub study_id: Option<String>,

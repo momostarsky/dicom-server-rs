@@ -8,9 +8,7 @@ use dicom_encoding::snafu::{ResultExt, Whatever};
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
 use dicom_pixeldata::Transcode;
-use dicom_transfer_syntax_registry::entries::DEFLATED_EXPLICIT_VR_LITTLE_ENDIAN;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
-use futures_util::future::Lazy;
 use slog::o;
 use slog::{debug, error, info};
 use std::collections::HashSet;
@@ -134,13 +132,7 @@ pub(crate) async fn process_dicom_file(
         .trim_end_matches("\0")
         .to_string();
 
-    let sop_uid = obj
-        .element(tags::SOP_INSTANCE_UID)
-        .whatever_context("Missing SOP_INSTANCE_UID")?
-        .to_str()
-        .whatever_context("could not retrieve SOP_INSTANCE_UID")?
-        .trim_end_matches("\0")
-        .to_string();
+
 
     let accession_number = obj
         .element(tags::ACCESSION_NUMBER)
@@ -202,62 +194,62 @@ pub(crate) async fn process_dicom_file(
         true => {
             format!(
                 "{}{}/{}/{}/{}",
-                out_dir, tenant_id, pat_id, study_uid, series_uid
+                out_dir, tenant_id, study_date, study_uid, series_uid
             )
         }
         false => {
             format!(
                 "{}/{}/{}/{}/{}",
-                out_dir, tenant_id, pat_id, study_uid, series_uid
+                out_dir, tenant_id, study_date, study_uid, series_uid
             )
         }
     };
 
-    debug!(logger, "file path: {}", dir_path);
+    debug!(logger, "create dir: {}", dir_path);
 
-    let ok = std::fs::exists(&dir_path);
-    match ok {
-        Ok(false) => {
-            std::fs::create_dir_all(&dir_path).unwrap_or_else(|e| {
-                // 创建目录失败, 记录错误日志并 panic. 因为无法创建目录, 后续写文件操作也无法进行.程序立即退出.
-                //
-                // 原则上这是一个不应该出现的错误. 因为在程序启动的时候,已经检查了目录是否具有读写权限.
-                //
-                error!(
-                    logger,
-                    "create directory failed: {}, error: {}", dir_path, e
-                );
-                panic!("create directory failed: {}", dir_path);
-            });
-        }
-        _ => {}
-    }
+
+    std::fs::create_dir_all(&dir_path).unwrap_or_else(|e| {
+        // 创建目录失败, 记录错误日志并 panic. 因为无法创建目录, 后续写文件操作也无法进行.程序立即退出.
+        //
+        // 原则上这是一个不应该出现的错误. 因为在程序启动的时候,已经检查了目录是否具有读写权限.
+        //
+        error!(
+            logger,
+            "create directory failed: {}, error: {}", dir_path, e
+        );
+        panic!("create directory failed: {}", dir_path);
+    });
+
 
     let file_path = format!(
-        "{}/{}",
+        "{}/{}.dcm",
         dir_path,
-        sop_instance_uid.trim_end_matches('\0').to_string() + ".dcm"
+        sop_instance_uid
     );
 
     info!(logger, "file path: {}", file_path);
     let mut final_ts =ts.to_string();
     if !JS_SUPPORTED_TS.contains(ts) {
         let target_ts = TransferSyntaxRegistry.get(JS_CHANGE_TO_TS.as_str()).unwrap();
-        match file_obj.transcode(target_ts) {
+        match file_obj.transcode(target_ts){
             Ok(_) => {
                 file_obj
                     .write_to_file(&file_path)
                     .whatever_context(format!("Save File To Disk Failed: {:?}", file_path))?;
                 final_ts = target_ts.uid().to_string();
-                info!(logger, "transcode success: {} -> {}", ts.to_string(), final_ts.to_string());
+                info!(logger, "transcode success: {} -> {}", ts.to_string(), final_ts );
             }
             Err(e) => {
                 error!(logger, "transcode failed: {}", e);
                 file_obj
                     .write_to_file(&file_path)
-                    .whatever_context(format!("Save File To Disk Failed: {:?}", file_path))?;
+                    .whatever_context(format!("transcode failed, save file to disk failed: {:?}", file_path))?;
             }
         }
+    } else {
+        file_obj
+            .write_to_file(&file_path)
+            .whatever_context(format!("Save File To Disk Failed: {:?}", file_path))?;
     }
 
     let fsize = std::fs::metadata(&file_path).unwrap().len();
@@ -269,7 +261,7 @@ pub(crate) async fn process_dicom_file(
         patient_id: pat_id.to_string(),
         study_uid: study_uid.to_string(),
         series_uid: series_uid.to_string(),
-        sop_uid: sop_uid.to_string(),
+        sop_uid: sop_instance_uid.to_string(),
         file_path: String::from(saved_path.to_str().unwrap()),
         file_size: fsize as i64,
         transfer_synatx_uid: final_ts.to_string(),

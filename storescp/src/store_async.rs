@@ -173,6 +173,7 @@ pub async fn run_store_async(
                                         .whatever_context(
                                             "could not retrieve Affected SOP Class UID",
                                         )?
+                                        .trim_end_matches("\0")
                                         .to_string();
                                     sop_instance_uid = obj
                                         .element(tags::AFFECTED_SOP_INSTANCE_UID)
@@ -181,17 +182,9 @@ pub async fn run_store_async(
                                         .whatever_context(
                                             "could not retrieve Affected SOP Instance UID",
                                         )?
+                                        .trim_end_matches("\0")
                                         .to_string();
-                                    issue_patient_id = "1234567890".to_string();
-                                    // obj
-                                    //     .element(tags::ISSUER_OF_PATIENT_ID)
-                                    //     .whatever_context("missing ISSUER_OF_PATIENT_ID")?
-                                    //     .to_str()
-                                    //     .whatever_context(
-                                    //         "could not retrieve ISSUER_OF_PATIENT_ID",
-                                    //     )?
-                                    //     .trim_end_matches("\0")
-                                    //     .to_string();
+                                    issue_patient_id = "1234567890".to_string(); 
                                 }
                                 instance_buffer.clear();
                             } else if data_value.value_type == PDataValueType::Data

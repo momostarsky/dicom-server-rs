@@ -124,7 +124,7 @@ impl FromRow<'_, MySqlRow> for StudyEntity {
             tenant_id: row.get("tenant_id"),
             study_instance_uid: row.get("StudyInstanceUID"),
             patient_id: row.get("PatientID"),
-            study_date: parse_dicom_date_from_sql(row.get("StudyDate")),
+            study_date: parse_dicom_date_from_sql(row.get("StudyDate")).unwrap(),
             study_time: parse_dicom_time_from_sql(row.get("StudyTime")),
             accession_number: row.get("AccessionNumber"),
             study_id: row.get("StudyID"),

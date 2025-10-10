@@ -160,6 +160,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                         .whatever_context(
                                             "could not retrieve Affected SOP Class UID",
                                         )?
+                                        .trim_end_matches("\0")
                                         .to_string();
                                     sop_instance_uid = obj
                                         .element(tags::AFFECTED_SOP_INSTANCE_UID)
@@ -168,6 +169,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                         .whatever_context(
                                             "could not retrieve Affected SOP Instance UID",
                                         )?
+                                        .trim_end_matches("\0")
                                         .to_string();
                                     issue_patient_id = "1234567890".to_string();
                                     // issue_patient_id = obj
