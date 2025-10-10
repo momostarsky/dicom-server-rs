@@ -1,20 +1,21 @@
 extern crate core;
 
-use std::{
-    net::{Ipv4Addr, SocketAddrV4},
-    path::PathBuf,
-};
-
 use clap::Parser;
 use common::license_manager::validate_client_certificate;
 use common::server_config;
 use common::utils::{get_logger, setup_logging};
 use dicom_core::{dicom_value, DataElement, VR};
 use dicom_dictionary_std::tags;
-use dicom_encoding::snafu;
+use dicom_encoding::{snafu, TransferSyntaxIndex};
 use dicom_object::{InMemDicomObject, StandardDataDictionary};
+use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use slog::{error, info, o};
 use snafu::Report;
+use std::collections::HashSet;
+use std::{
+    net::{Ipv4Addr, SocketAddrV4},
+    path::PathBuf,
+};
 
 mod dicom_file_handler;
 mod store_async;
@@ -64,6 +65,7 @@ struct App {
     #[arg(short = 'j', long = "json-store-path", default_value = ".")]
     json_store_path: PathBuf,
 }
+
 
 fn create_cstore_response(
     message_id: u16,
@@ -258,6 +260,11 @@ async fn main() {
         error!(log, "Directory permission test failed: {}", e);
         std::process::exit(-2);
     });
+
+    info!(log, "License Server Validation Success");
+
+
+
     match app.non_blocking {
         true => {
             info!(log, "工作在非阻塞模式");
@@ -388,7 +395,6 @@ async fn run_sync(args: App) -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-
 
 fn test_directory_permissions(log: &slog::Logger, out_dir: &PathBuf) -> Result<(), std::io::Error> {
     info!(log, "Test Directory: {}", out_dir.display());

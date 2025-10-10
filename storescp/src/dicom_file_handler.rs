@@ -1,15 +1,21 @@
 use common::database_entities::DicomObjectMeta;
 use common::dicom_utils::get_tag_value;
+use common::message_sender_kafka::KafkaMessagePublisher;
+use common::server_config;
 use common::utils::get_logger;
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu::{ResultExt, Whatever};
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
+use dicom_pixeldata::Transcode;
+use dicom_transfer_syntax_registry::entries::DEFLATED_EXPLICIT_VR_LITTLE_ENDIAN;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
-use slog::{debug, error, info};
+use futures_util::future::Lazy;
 use slog::o;
+use slog::{debug, error, info};
+use std::collections::HashSet;
 use std::path::PathBuf;
-use common::message_sender_kafka::KafkaMessagePublisher;
+use std::sync::LazyLock;
 
 /// 校验 DICOM StudyDate 格式是否符合 YYYYMMDD 格式
 fn validate_study_date_format(date_str: &str) -> Result<(), &'static str> {
@@ -63,12 +69,30 @@ fn is_valid_date(year: i32, month: u32, day: u32) -> bool {
             } else {
                 28 // 平年
             }
-        },
+        }
         _ => return false,
     };
 
     day <= days_in_month
 }
+static JS_SUPPORTED_TS: LazyLock<HashSet<String>> = LazyLock::new(|| {
+    // 在这里初始化，可以从配置文件读取
+    // load_config 是INIT_ONCE 封装的, 不会重新加载
+    let config = server_config::load_config().unwrap();
+    config
+        .dicom_store_scp
+        .cornerstonejs_supported_transfer_syntax
+        .iter()
+        .cloned()
+        .collect()
+});
+
+static JS_CHANGE_TO_TS: LazyLock<String> = LazyLock::new(|| {
+    // 在这里初始化，可以从配置文件读取
+    // load_config 是INIT_ONCE 封装的, 不会重新加载
+    let config = server_config::load_config().unwrap();
+    config.dicom_store_scp.unsupported_ts_change_to.clone()
+});
 
 pub(crate) async fn process_dicom_file(
     instance_buffer: &[u8],    //DICOM文件的字节数组或是二进制流
@@ -133,10 +157,8 @@ pub(crate) async fn process_dicom_file(
         .whatever_context("could not retrieve STUDY_DATE")?
         .trim_end_matches("\0")
         .to_string();
-    //TODO: 校验StudyDate格式是否正确. YYYYMMDD 格式
-    // 校验 StudyDate 格式
-    validate_study_date_format(&study_date)
-        .whatever_context("Invalid StudyDate format")?;
+    // 校验StudyDate格式是否正确. YYYYMMDD 格式
+    validate_study_date_format(&study_date).whatever_context("Invalid StudyDate format")?;
     let modality = obj
         .element(tags::MODALITY)
         .whatever_context("Missing MODALITY")?
@@ -174,7 +196,7 @@ pub(crate) async fn process_dicom_file(
         .transfer_syntax(ts)
         .build()
         .whatever_context("failed to build DICOM meta file information")?;
-    let file_obj = obj.with_exact_meta(file_meta);
+    let mut file_obj = obj.with_exact_meta(file_meta);
     let fp = out_dir.ends_with("/");
     let dir_path = match fp {
         true => {
@@ -201,7 +223,10 @@ pub(crate) async fn process_dicom_file(
                 //
                 // 原则上这是一个不应该出现的错误. 因为在程序启动的时候,已经检查了目录是否具有读写权限.
                 //
-                error!(logger, "create directory failed: {}, error: {}", dir_path, e);
+                error!(
+                    logger,
+                    "create directory failed: {}, error: {}", dir_path, e
+                );
                 panic!("create directory failed: {}", dir_path);
             });
         }
@@ -214,17 +239,28 @@ pub(crate) async fn process_dicom_file(
         sop_instance_uid.trim_end_matches('\0').to_string() + ".dcm"
     );
 
-    file_obj
-        .write_to_file(&file_path)
-        .whatever_context("write file failed")?;
-    let fsize = std::fs::metadata(&file_path).unwrap().len();
-    // // 从新从磁盘读取DICOM文件, 确保文件已经完全写入磁盘.
-    // let dicom_obj = dicom_object::OpenFileOptions::new()
-    //     .charset_override(CharacterSetOverride::AnyVr)
-    //     .read_until(tags::PIXEL_DATA)
-    //     .open_file(&file_path)
-    //     .whatever_context("open dicom file failed")?;
+    info!(logger, "file path: {}", file_path);
+    let mut final_ts =ts.to_string();
+    if !JS_SUPPORTED_TS.contains(ts) {
+        let target_ts = TransferSyntaxRegistry.get(JS_CHANGE_TO_TS.as_str()).unwrap();
+        match file_obj.transcode(target_ts) {
+            Ok(_) => {
+                file_obj
+                    .write_to_file(&file_path)
+                    .whatever_context(format!("Save File To Disk Failed: {:?}", file_path))?;
+                final_ts = target_ts.uid().to_string();
+                info!(logger, "transcode success: {} -> {}", ts.to_string(), final_ts.to_string());
+            }
+            Err(e) => {
+                error!(logger, "transcode failed: {}", e);
+                file_obj
+                    .write_to_file(&file_path)
+                    .whatever_context(format!("Save File To Disk Failed: {:?}", file_path))?;
+            }
+        }
+    }
 
+    let fsize = std::fs::metadata(&file_path).unwrap().len();
     // 修复后：
     let saved_path = PathBuf::from(file_path); // 此时可以安全转移所有权
 
@@ -236,7 +272,7 @@ pub(crate) async fn process_dicom_file(
         sop_uid: sop_uid.to_string(),
         file_path: String::from(saved_path.to_str().unwrap()),
         file_size: fsize as i64,
-        transfer_synatx_uid: ts.to_string(),
+        transfer_synatx_uid: final_ts.to_string(),
         number_of_frames: frames,
         created_time: None,
         updated_time: None,
@@ -263,11 +299,9 @@ pub(crate) async fn classify_and_publish_dicom_messages(
     let root_logger = get_logger();
     let logger = root_logger.new(o!("storescp"=>"classify_and_publish_dicom_messages"));
     // 将 dicom_message_lists 按 transfer_syntax_uid 是否被 SUPPORTED_TRANSFER_SYNTAXES 支持分成两类
-    let (supported_messages, unsupported_messages): (Vec<_>, Vec<_>) =
-        dicom_message_lists.iter().partition(|meta| {
-            common::cornerstonejs::SUPPORTED_TRANSFER_SYNTAXES
-                .contains(meta.transfer_synatx_uid.as_str())
-        });
+    let (supported_messages, unsupported_messages): (Vec<_>, Vec<_>) = dicom_message_lists
+        .iter()
+        .partition(|meta| JS_SUPPORTED_TS.contains(meta.transfer_synatx_uid.as_str()));
 
     // 将引用转换为拥有所有权的 Vec
     let supported_messages_owned: Vec<_> = supported_messages.into_iter().cloned().collect();

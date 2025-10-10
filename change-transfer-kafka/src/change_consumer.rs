@@ -1,4 +1,4 @@
-use common::change_file_transfer::convert_ts_with_pixel_data;
+use common::change_file_transfer::convert_ts_with_gdcm_conv;
 use common::database_entities::DicomObjectMeta;
 use common::{database_factory, server_config};
 use dicom_dictionary_std::tags;
@@ -241,7 +241,7 @@ async fn change_transfer_syntax(
             let src_sz = dcm_msg.file_size as usize;
             // 处理文件转换
             let conversion_result =
-                convert_ts_with_pixel_data(src_file, src_sz, &target_path, true);
+                convert_ts_with_gdcm_conv(src_file, src_sz, &target_path, true);
 
             if let Err(e) = conversion_result.await {
                 tracing::error!("Failed to process message: {:?}", e);

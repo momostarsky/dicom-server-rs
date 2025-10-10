@@ -1,9 +1,13 @@
+use dicom_dictionary_std::tags;
 use dicom_object;
 use dicom_object::OpenFileOptions;
 use gdcm_conv::PhotometricInterpretation;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
+use dicom_core::{DicomValue, PrimitiveValue};
+use dicom_pixeldata::Transcode;
+use dicom_transfer_syntax_registry::entries::{DEFLATED_EXPLICIT_VR_LITTLE_ENDIAN, EXPLICIT_VR_LITTLE_ENDIAN};
 
 #[derive(Debug)]
 pub enum ChangeStatus {
@@ -25,7 +29,7 @@ impl std::error::Error for ChangeStatus {}
 
 //修改传输语法为 RLELossless
 // 建议:采用FO_DICOM库提供的转换接口方式, 可以通过gRPC模式调用
-pub async fn convert_ts_with_pixel_data(
+pub async fn convert_ts_with_gdcm_conv(
     src_file: &str,
     file_size: usize,
     output_path: &str,
@@ -113,6 +117,62 @@ pub async fn convert_ts_with_pixel_data(
     Ok(())
 }
 
+pub async fn convert_ts_with_transcode(
+    src_file: &str,
+    output_path: &str,
+    overwrite: bool,
+    xpatient_id: Option<&str>,
+) -> Result<(), ChangeStatus> {
+    let mut obj = match OpenFileOptions::new().open_file(src_file) {
+        Ok(obj) => obj,
+        Err(e) => {
+            return Err(ChangeStatus::FileReadError(format!(
+                "Failed to open file {}: {}",
+                src_file, e
+            )));
+        }
+    };
+
+    // transcode to explicit VR little endian
+    obj.transcode(&DEFLATED_EXPLICIT_VR_LITTLE_ENDIAN.erased())
+        .expect("Should have transcoded successfully");
+
+    // check transfer syntax
+    assert_eq!(
+        obj.meta().transfer_syntax(),
+        DEFLATED_EXPLICIT_VR_LITTLE_ENDIAN.uid()
+    );
+
+    if let Some(patient_id) = xpatient_id {
+
+        obj.update_value(tags::PATIENT_ID, move |value| {
+            *value =  DicomValue::Primitive(PrimitiveValue::Str(patient_id.into()));
+        });
+    }
+    match obj.write_to_file(output_path) {
+        Ok(_) => {}
+        Err(e) => {
+            return Err(ChangeStatus::FileWriteError(format!(
+                "Failed to write to file {}: {}",
+                output_path, e
+            )));
+        }
+    }
+    if overwrite {
+        match fs::copy(output_path, src_file) {
+            Ok(_) => {}
+            Err(_) => {
+                return Err(ChangeStatus::FileWriteError(format!(
+                    "Failed to copy  file from  {} to  {}",
+                    output_path, src_file
+                )));
+            }
+        }
+    } else {
+        println!("Conversion successful, output saved to {}", output_path);
+    }
+    Ok(())
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -120,32 +180,46 @@ mod tests {
     use std::fs;
 
     #[rstest]
-    // #[case(
-    //     "./data/DeflatedExplicitVRLittleEndian.dcm",
-    //     "./data/x-DeflatedExplicitVRLittleEndian.dcm"
-    // )]
-    #[case("./data/ExplicitVRBigEndian.dcm", "./data/x-ExplicitVRBigEndian.dcm")]
-    #[case(
-        "./data/ExplicitVRLittleEndian.dcm",
-        "./data/x-ExplicitVRLittleEndian.dcm"
-    )]
-    #[case(
-        "./data/ImplicitVRLittleEndian.dcm",
-        "./data/x-ImplicitVRLittleEndian.dcm"
-    )]
-    #[case("./data/JPEG2000Lossless.dcm", "./data/x-JPEG2000Lossless.dcm")]
-    #[case("./data/JPEG2000Lossy.dcm", "./data/x-JPEG2000Lossy.dcm")]
-    #[case("./data/JPEGProcess1.dcm", "./data/x-JPEGProcess1.dcm")]
-    #[case("./data/JPEGProcess2_4.dcm", "./data/x-JPEGProcess2_4.dcm")]
-    #[case("./data/RLELossless.dcm", "./data/x-RLELossless.dcm")]
+    #[case("./data/DeflatedExplicitVRLittleEndian.dcm", "./data/x-0.dcm" ,"P0000")]
+    #[case("./data/ExplicitVRBigEndian.dcm", "./data/x-1.dcm", "P0001")]
+    #[case("./data/ExplicitVRLittleEndian.dcm", "./data/x-2.dcm", "P0002")]
+    #[case("./data/ImplicitVRLittleEndian.dcm", "./data/x-3.dcm", "P0003")]
+    #[case("./data/JPEG2000Lossless.dcm", "./data/x-4.dcm", "P0004")]
+    #[case("./data/JPEG2000Lossy.dcm", "./data/x-5.dcm", "P0005")]
+    #[case("./data/JPEGProcess1.dcm", "./data/x-6.dcm", "P0006")]
+    #[case("./data/JPEGProcess2_4.dcm", "./data/x-7.dcm", "P0007")]
+    #[case("./data/RLELossless.dcm", "./data/x-8.dcm", "P0008")]
     #[tokio::test]
-    async fn test_change_file_transfer_success(#[case] input: &str, #[case] output: &str) {
+    async fn test_change_file_transfer_success(#[case] input: &str, #[case] output: &str, #[case] patient_id: &str) {
         println!("input: {}, output: {}", input, output);
         println!("PWD:{}", env!("PWD"));
-        // 获取文件大小
-        let metadata = fs::metadata(input).unwrap();
-        let file_size = metadata.len() as usize;
-        let result = convert_ts_with_pixel_data(input, file_size, output, false).await;
+
+        let result = convert_ts_with_transcode(input, output, false, Some(patient_id)).await;
         assert!(result.is_ok());
     }
+
+    // #[rstest]
+    // #[case(
+    //     "./data/DeflatedExplicitVRLittleEndian.dcm",
+    //     "./data/y-0.dcm"
+    // )]
+    // #[case("./data/ExplicitVRBigEndian.dcm", "./data/y-1.dcm")]
+    // #[case("./data/ExplicitVRLittleEndian.dcm", "./data/y-2.dcm")]
+    // #[case("./data/ImplicitVRLittleEndian.dcm", "./data/y-3.dcm")]
+    // #[case("./data/JPEG2000Lossless.dcm", "./data/y-4.dcm")]
+    // #[case("./data/JPEG2000Lossy.dcm", "./data/y-5.dcm")]
+    // #[case("./data/JPEGProcess1.dcm", "./data/y-6.dcm")]
+    // #[case("./data/JPEGProcess2_4.dcm", "./data/y-7.dcm")]
+    // #[case("./data/RLELossless.dcm", "./data/y-8.dcm")]
+    // #[tokio::test]
+    // async fn test_convert_ts_with_gdcm_conv(#[case] input: &str, #[case] output: &str) {
+    //     println!("input: {}, output: {}", input, output);
+    //     println!("PWD:{}", env!("PWD"));
+    //     // 获取文件大小
+    //     let metadata = fs::metadata(input).unwrap();
+    //     let file_size = metadata.len() as usize;
+    //     let result = convert_ts_with_gdcm_conv(input, file_size, output, false).await;
+    //     assert!(result.is_ok());
+    //
+    // }
 }

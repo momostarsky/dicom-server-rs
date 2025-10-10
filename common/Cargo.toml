@@ -13,6 +13,7 @@ dicom-core = {  version = "0.9.0"  }
 dicom-ul = { version = "0.9.0", features = ["async"] }
 dicom-object = {  version = "0.9.0" }
 dicom-encoding = {  version = "0.9.0" }
+dicom-pixeldata = {  version = "0.9.0" , features = ["native",  "jpeg","rle", "image","jpegxl", "openjp2", "rayon","deflate"] }
 dicom-dictionary-std = { version = "0.9.0" }
 dicom-transfer-syntax-registry = {  version = "0.9.0" }
 async-trait = "0.1.89"
@@ -25,8 +26,8 @@ tracing = "0.1.41"
 tokio = { version = "1.47.1", features = ["full"] }
 urlencoding = "2.1.3"
 url = "2.5.7"
-slog = "2.8.0"
-slog-term = "2.8.0"
+slog = "2.8.1"
+slog-term = "2.9.2"
 slog-async = "2.8.0"
 slog-stdlog = "4.1.1"
 slog-scope = "4.4.0"

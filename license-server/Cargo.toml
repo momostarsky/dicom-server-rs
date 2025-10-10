@@ -8,8 +8,8 @@ opt-level = "s"
 [dependencies]
 actix-web = "4.11.0"
 actix-cors = "0.7.1"
-slog = "2.8.0"
-slog-term = "2.8.0"
+slog = "2.8.1"
+slog-term = "2.9.2"
 slog-async = "2.8.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_qs = "0.15.0"

@@ -1,4 +1,6 @@
 use config::{Config, ConfigError, Environment, File};
+use dicom_encoding::TransferSyntaxIndex;
+use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dotenv::dotenv;
 use serde::Deserialize;
 use std::env;
@@ -43,6 +45,9 @@ pub struct LocalStorageConfig {
 pub struct DicomStoreScpConfig {
     pub port: u16,
     pub ae_title: String,
+    pub unsupported_ts_change_to: String,
+    pub cornerstonejs_supported_transfer_syntax: Vec<String>,
+
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -61,8 +66,7 @@ pub struct KafkaConfig {
 pub struct MessageQueueConfig {
     pub consumer_group_id: String,
     pub topic_main: String,
-    pub topic_change_transfer_syntax: String ,
-
+    pub topic_change_transfer_syntax: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -157,6 +161,47 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
                 "dicom_store_scp:ae_title {:?}",
                 app_config.dicom_store_scp.ae_title
             );
+            println!(
+                "dicom_store_scp:cornerstonejs_supported_transfer_syntax {:?}",
+                app_config
+                    .dicom_store_scp
+                    .cornerstonejs_supported_transfer_syntax
+            );
+            println!(
+                "dicom_store_scp:unsupported_ts_change_to {:?}",
+                app_config.dicom_store_scp.unsupported_ts_change_to
+            );
+            if !TransferSyntaxRegistry
+                .get(&app_config.dicom_store_scp.unsupported_ts_change_to)
+                .is_some()
+            {
+                panic!(
+                    "Invalid unsupported_ts_change_to transfer syntax UID: {}",
+                    app_config.dicom_store_scp.unsupported_ts_change_to
+                );
+            }
+
+            //TODO: 验证 scp_config.cornerstonejs_supported_transfer_syntax 是否为空
+            if app_config
+                .dicom_store_scp
+                .cornerstonejs_supported_transfer_syntax
+                .is_empty()
+            {
+                // 不要在这里直接返回，而是设置错误状态
+                // 使用 panic! 而不是 return，因为 call_once 闭包返回 ()
+                panic!("scp_config.cornerstonejs_supported_transfer_syntax is empty");
+            } else {
+                //TODO: 验证 scp_config.cornerstonejs_supported_transfer_syntax 中的每个元素是否为有效的传输语法UID
+                for transfer_syntax in &app_config
+                    .dicom_store_scp
+                    .cornerstonejs_supported_transfer_syntax
+                {
+                    if !TransferSyntaxRegistry.get(transfer_syntax).is_some() {
+                        panic!("Invalid transfer syntax UID: {}", transfer_syntax);
+                    }
+                }
+            }
+
             println!("kafka:brokers {:?}", app_config.kafka.brokers);
 
             println!(
@@ -192,7 +237,6 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
                 "message_queue:topic_change_transfer_syntax {:?}",
                 app_config.message_queue.topic_change_transfer_syntax
             );
-            
 
             if let Some(license_server) = app_config.dicom_license_server.as_ref() {
                 println!(
