@@ -14,6 +14,7 @@ use slog::{debug, error, info};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::LazyLock;
+use common::uid_hash::uid_to_u64_deterministic_safe;
 
 /// 校验 DICOM StudyDate 格式是否符合 YYYYMMDD 格式
 fn validate_study_date_format(date_str: &str) -> Result<(), &'static str> {
@@ -189,18 +190,22 @@ pub(crate) async fn process_dicom_file(
         .build()
         .whatever_context("failed to build DICOM meta file information")?;
     let mut file_obj = obj.with_exact_meta(file_meta);
+
+    let study_uid_hash_val = uid_to_u64_deterministic_safe(&study_uid);
+    let series_uid_hash_val = uid_to_u64_deterministic_safe(&series_uid);
+
     let fp = out_dir.ends_with("/");
     let dir_path = match fp {
         true => {
             format!(
                 "{}{}/{}/{}/{}",
-                out_dir, tenant_id, study_date, study_uid, series_uid
+                out_dir, tenant_id, study_date, study_uid_hash_val, series_uid_hash_val
             )
         }
         false => {
             format!(
                 "{}/{}/{}/{}/{}",
-                out_dir, tenant_id, study_date, study_uid, series_uid
+                out_dir, tenant_id, study_date, study_uid_hash_val, series_uid_hash_val
             )
         }
     };
@@ -264,10 +269,12 @@ pub(crate) async fn process_dicom_file(
         sop_uid: sop_instance_uid.to_string(),
         file_path: String::from(saved_path.to_str().unwrap()),
         file_size: fsize as i64,
-        transfer_synatx_uid: final_ts.to_string(),
+        transfer_syntax_uid: final_ts.to_string(),
         number_of_frames: frames,
         created_time: None,
         updated_time: None,
+        series_uid_hash: series_uid_hash_val,
+        study_uid_hash: study_uid_hash_val,
     });
     Ok(())
 }
@@ -293,7 +300,7 @@ pub(crate) async fn classify_and_publish_dicom_messages(
     // 将 dicom_message_lists 按 transfer_syntax_uid 是否被 SUPPORTED_TRANSFER_SYNTAXES 支持分成两类
     let (supported_messages, unsupported_messages): (Vec<_>, Vec<_>) = dicom_message_lists
         .iter()
-        .partition(|meta| JS_SUPPORTED_TS.contains(meta.transfer_synatx_uid.as_str()));
+        .partition(|meta| JS_SUPPORTED_TS.contains(meta.transfer_syntax_uid.as_str()));
 
     // 将引用转换为拥有所有权的 Vec
     let supported_messages_owned: Vec<_> = supported_messages.into_iter().cloned().collect();

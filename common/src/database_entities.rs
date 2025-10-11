@@ -40,10 +40,12 @@ pub struct StudyEntity {
     pub admission_id: Option<String>,
     pub performing_physician_name: Option<String>,
     pub procedure_code_sequence: Option<String>,
-    pub received_instances: Option<i32>, // 新增字段
-    pub space_size: Option<i64>,         // 新增字段
+    pub received_instances: Option<i32>,
+    pub space_size: Option<i64>,
     pub created_time: Option<NaiveDateTime>,
     pub updated_time: Option<NaiveDateTime>,
+    pub study_date_origin: String,       // 新增字段
+    pub study_uid_hash: u64,             // 新增字段
 }
 
 // series.rs
@@ -71,6 +73,8 @@ pub struct SeriesEntity {
     pub space_size: Option<i64>,         // 新增字段
     pub created_time: Option<NaiveDateTime>,
     pub updated_time: Option<NaiveDateTime>,
+    pub series_uid_hash: u64,            // 新增字段
+
 }
 
 // image.rs
@@ -145,17 +149,33 @@ pub struct ImageEntity {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DicomObjectMeta {
+    #[serde(rename = "tenant_id")]
     pub tenant_id: String,
+    #[serde(rename = "patient_id")]
     pub patient_id:String,
+    #[serde(rename = "study_uid")]
     pub study_uid: String,
+    #[serde(rename = "series_uid")]
     pub series_uid: String,
+    #[serde(rename = "sop_uid")]
     pub sop_uid: String,
+    #[serde(rename = "file_size")]
     pub file_size: i64,
+    #[serde(rename = "file_path")]
     pub file_path: String,
-    pub transfer_synatx_uid: String,
+    #[serde(rename = "transfer_syntax_uid")]
+    pub transfer_syntax_uid: String,
+    #[serde(rename = "number_of_frames")]
     pub number_of_frames: i32,
+    #[serde(rename = "created_time")]
     pub created_time: Option<NaiveDateTime>,
+    #[serde(rename = "updated_time")]
     pub updated_time: Option<NaiveDateTime>,
+    #[serde(rename = "series_uid_hash")]
+    pub series_uid_hash: u64,            // 新增字段
+    #[serde(rename = "study_uid_hash")]
+    pub study_uid_hash: u64,             // 新增字段
+
 }
 // 为 DicomObjectMeta 实现 Hash trait 以便可以在 HashSet 中使用
 impl Hash for DicomObjectMeta {

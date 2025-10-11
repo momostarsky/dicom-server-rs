@@ -16,6 +16,7 @@ dicom-encoding = {  version = "0.9.0" }
 dicom-pixeldata = {  version = "0.9.0" , features = ["native",  "jpeg","rle", "image","jpegxl", "openjp2", "rayon","deflate"] }
 dicom-dictionary-std = { version = "0.9.0" }
 dicom-transfer-syntax-registry = {  version = "0.9.0" }
+seahash = "4.1.0"
 async-trait = "0.1.89"
 sqlx = { version = "0.8.6", features = ["mysql", "chrono",
     "runtime-tokio-rustls",

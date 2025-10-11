@@ -234,7 +234,7 @@ pub async fn group_dicom_messages(
                 ) {
                     Ok(mut sop_entity) => {
                         sop_entity.space_size = Some(message.file_size);
-                        sop_entity.transfer_syntax_uid = message.transfer_synatx_uid.clone();
+                        sop_entity.transfer_syntax_uid = message.transfer_syntax_uid.clone();
                         image_entities.push(sop_entity);
                     }
                     Err(e) => {
@@ -258,6 +258,28 @@ pub async fn group_dicom_messages(
                     failed_message_set.insert(message);
                 }
             }
+        }
+    }
+
+    //TODO: 对StudyUIDHash和SeriesUIDHash和 DicomObjectMeta的StudyUIDHash和SeriesUIDHash进行比对.
+
+
+
+    for study_entity in &mut study_entities {
+        // 查找对应的 DICOMObjectMeta 消息
+        if let Some(meta_msg) = messages.iter().find(|m| {
+            m.tenant_id == study_entity.tenant_id && m.study_uid == study_entity.study_instance_uid
+        }) {
+            study_entity.study_uid_hash = meta_msg.study_uid_hash;
+        }
+    }
+
+    for series_entity in &mut series_entities {
+        // 查找对应的 DICOMObjectMeta 消息
+        if let Some(meta_msg) = messages.iter().find(|m| {
+            m.tenant_id == series_entity.tenant_id && m.series_uid == series_entity.series_instance_uid
+        }) {
+            series_entity.series_uid_hash = meta_msg.series_uid_hash;
         }
     }
 

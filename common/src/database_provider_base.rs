@@ -1,5 +1,5 @@
 use crate::database_entities::{ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
-use crate::dicom_utils;
+use crate::{dicom_utils, uid_hash};
 use crate::dicom_utils::get_tag_value;
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
@@ -114,6 +114,8 @@ impl DbProviderBase {
             ),
             created_time: None,
             updated_time: None,
+            study_date_origin: dicom_utils::get_text_value(dicom_obj, tags::STUDY_DATE).unwrap(),
+            study_uid_hash: uid_hash::uid_to_u64_deterministic_safe(study_uid.as_str()),
         })
     }
 
@@ -169,6 +171,7 @@ impl DbProviderBase {
             space_size: Some(0),
             created_time: None,
             updated_time: None,
+            series_uid_hash: uid_hash::uid_to_u64_deterministic_safe(series_uid.as_str()),
         })
     }
 
@@ -340,6 +343,8 @@ impl DbProviderBase {
             ),
             created_time: None,
             updated_time: None,
+            study_date_origin: dicom_utils::get_text_value(dicom_obj, tags::STUDY_DATE).unwrap(),
+            study_uid_hash: uid_hash::uid_to_u64_deterministic_safe(study_uid.as_str()),
         };
 
         let series_entity = SeriesEntity {
@@ -374,6 +379,7 @@ impl DbProviderBase {
             space_size: Some(0),
             created_time: None,
             updated_time: None,
+            series_uid_hash: uid_hash::uid_to_u64_deterministic_safe(series_uid.as_str()),
         };
 
         let image_entity = ImageEntity {

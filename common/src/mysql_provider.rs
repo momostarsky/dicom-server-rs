@@ -114,6 +114,7 @@ impl FromRow<'_, MySqlRow> for SeriesEntity {
             space_size: row.get("SpaceSize"),
             created_time: row.get("CreatedTime"),
             updated_time: row.get("UpdatedTime"),
+            series_uid_hash: row.get("SeriesUIDHash"),
         })
     }
 }
@@ -146,6 +147,8 @@ impl FromRow<'_, MySqlRow> for StudyEntity {
             space_size: row.get("SpaceSize"),
             created_time: row.get("CreatedTime"),
             updated_time: row.get("UpdatedTime"),
+            study_date_origin: row.get("StudyDateOrigin"),
+            study_uid_hash: row.get("StudyUIDHash"),
         })
     }
 }
@@ -155,6 +158,7 @@ pub struct MySqlProvider {
 }
 
 impl MySqlProvider {
+    // 更新查询语句以包含新增字段
     const GET_SERIES_INFO_QUERY: &'static str = r#"SELECT tenant_id, SeriesInstanceUID, StudyInstanceUID, PatientID, Modality, SeriesNumber,
                     COALESCE(SeriesDate, '') as series_date,
                     COALESCE(SeriesTime, '') as series_time,
@@ -165,7 +169,7 @@ impl MySqlProvider {
                     AcquisitionDateTime,
                     PerformingPhysicianName,
                     OperatorsName, NumberOfSeriesRelatedInstances, ReceivedInstances, SpaceSize,
-                    CreatedTime, UpdatedTime
+                    CreatedTime, UpdatedTime, SeriesUIDHash
              FROM SeriesEntity
              WHERE tenant_id = ? AND SeriesInstanceUID = ?"#;
 
@@ -177,9 +181,10 @@ impl MySqlProvider {
                   PregnancyStatus, Occupation, AdditionalPatientHistory, PatientComments,
                   AdmissionID, PerformingPhysicianName, ProcedureCodeSequence,
                   ReceivedInstances,
-                  SpaceSize,CreatedTime, UpdatedTime
+                  SpaceSize,CreatedTime, UpdatedTime, StudyDateOrigin, StudyUIDHash
            FROM StudyEntity
            WHERE tenant_id = ? AND StudyInstanceUID = ?"#;
+
     pub fn new(pool: MySqlPool) -> Self {
         info!("MySqlProvider created with pool: {:?}", pool);
 
@@ -233,16 +238,15 @@ impl MySqlProvider {
             return Ok(());
         }
 
-        // 移除了 batch 分组，直接处理所有数据
-        // 构建批量插入语句，确保字段顺序与表结构完全一致
+        // 更新INSERT语句以包含新增字段: StudyDateOrigin, StudyUIDHash
         let mut query_builder = "INSERT INTO StudyEntity (tenant_id, StudyInstanceUID, PatientID, StudyDate, StudyTime, \
         AccessionNumber, StudyID, StudyDescription, \
     ReferringPhysicianName, PatientAge, PatientSize, PatientWeight, MedicalAlerts, \
     Allergies, PregnancyStatus, Occupation, AdditionalPatientHistory, PatientComments, \
-    AdmissionID, PerformingPhysicianName, ProcedureCodeSequence, ReceivedInstances, SpaceSize) VALUES ".to_string();
+    AdmissionID, PerformingPhysicianName, ProcedureCodeSequence, ReceivedInstances, SpaceSize, StudyDateOrigin, StudyUIDHash) VALUES ".to_string();
         let placeholders: Vec<String> = (0..study_lists.len())
             .map(|_| {
-                "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string()
+                "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string()
             })
             .collect();
         query_builder.push_str(&placeholders.join(", "));
@@ -253,7 +257,7 @@ impl MySqlProvider {
      PregnancyStatus = VALUES(PregnancyStatus), Occupation = VALUES(Occupation), AdditionalPatientHistory = VALUES(AdditionalPatientHistory), \
      PatientComments = VALUES(PatientComments), AdmissionID = VALUES(AdmissionID), \
      PerformingPhysicianName = VALUES(PerformingPhysicianName), ProcedureCodeSequence = VALUES(ProcedureCodeSequence), \
-     ReceivedInstances = VALUES(ReceivedInstances), SpaceSize = VALUES(SpaceSize)");
+     ReceivedInstances = VALUES(ReceivedInstances), SpaceSize = VALUES(SpaceSize), StudyDateOrigin = VALUES(StudyDateOrigin), StudyUIDHash = VALUES(StudyUIDHash)");
 
         let mut query = sqlx::query(&query_builder);
         for study in study_lists {
@@ -280,13 +284,16 @@ impl MySqlProvider {
                 .bind(&study.performing_physician_name)
                 .bind(&study.procedure_code_sequence)
                 .bind(&study.received_instances)
-                .bind(&study.space_size);
+                .bind(&study.space_size)
+                .bind(&study.study_date_origin)  // 新增字段
+                .bind(&study.study_uid_hash);    // 新增字段
         }
 
         query.execute(&mut **tx).await?;
 
         Ok(())
     }
+
 
     pub(crate) async fn save_series_info_impl(
         &self,
@@ -298,14 +305,13 @@ impl MySqlProvider {
             return Ok(());
         }
 
-        // 移除了 batch 分组，直接处理所有数据
-        // 构建批量插入语句，确保字段顺序与表结构完全一致
-        let mut query_builder = "INSERT INTO SeriesEntity (tenant_id, SeriesInstanceUID, StudyInstanceUID, PatientID, Modality, SeriesNumber, SeriesDate, SeriesTime, SeriesDescription, BodyPartExamined, ProtocolName, AcquisitionNumber, AcquisitionTime, AcquisitionDate, AcquisitionDateTime, PerformingPhysicianName, OperatorsName, NumberOfSeriesRelatedInstances, ReceivedInstances, SpaceSize) VALUES ".to_string();
+        // 更新INSERT语句以包含新增字段: SeriesUIDHash
+        let mut query_builder = "INSERT INTO SeriesEntity (tenant_id, SeriesInstanceUID, StudyInstanceUID, PatientID, Modality, SeriesNumber, SeriesDate, SeriesTime, SeriesDescription, BodyPartExamined, ProtocolName, AcquisitionNumber, AcquisitionTime, AcquisitionDate, AcquisitionDateTime, PerformingPhysicianName, OperatorsName, NumberOfSeriesRelatedInstances, ReceivedInstances, SpaceSize, SeriesUIDHash) VALUES ".to_string();
         let placeholders: Vec<String> = (0..series_lists.len())
-            .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string())
+            .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string())
             .collect();
         query_builder.push_str(&placeholders.join(", "));
-        query_builder.push_str(" ON DUPLICATE KEY UPDATE Modality = VALUES(Modality), SeriesNumber = VALUES(SeriesNumber), SeriesDate = VALUES(SeriesDate), SeriesTime = VALUES(SeriesTime), SeriesDescription = VALUES(SeriesDescription), BodyPartExamined = VALUES(BodyPartExamined), ProtocolName = VALUES(ProtocolName), AcquisitionNumber = VALUES(AcquisitionNumber), AcquisitionTime = VALUES(AcquisitionTime), AcquisitionDate = VALUES(AcquisitionDate), AcquisitionDateTime = VALUES(AcquisitionDateTime), PerformingPhysicianName = VALUES(PerformingPhysicianName), OperatorsName = VALUES(OperatorsName), NumberOfSeriesRelatedInstances = VALUES(NumberOfSeriesRelatedInstances), ReceivedInstances = VALUES(ReceivedInstances), SpaceSize = VALUES(SpaceSize)");
+        query_builder.push_str(" ON DUPLICATE KEY UPDATE Modality = VALUES(Modality), SeriesNumber = VALUES(SeriesNumber), SeriesDate = VALUES(SeriesDate), SeriesTime = VALUES(SeriesTime), SeriesDescription = VALUES(SeriesDescription), BodyPartExamined = VALUES(BodyPartExamined), ProtocolName = VALUES(ProtocolName), AcquisitionNumber = VALUES(AcquisitionNumber), AcquisitionTime = VALUES(AcquisitionTime), AcquisitionDate = VALUES(AcquisitionDate), AcquisitionDateTime = VALUES(AcquisitionDateTime), PerformingPhysicianName = VALUES(PerformingPhysicianName), OperatorsName = VALUES(OperatorsName), NumberOfSeriesRelatedInstances = VALUES(NumberOfSeriesRelatedInstances), ReceivedInstances = VALUES(ReceivedInstances), SpaceSize = VALUES(SpaceSize), SeriesUIDHash = VALUES(SeriesUIDHash)");
         let mut query = sqlx::query(&query_builder);
         for series in series_lists {
             query = query
@@ -320,7 +326,6 @@ impl MySqlProvider {
                 .bind(&series.series_description)
                 .bind(&series.body_part_examined)
                 .bind(&series.protocol_name)
-                // 移除了 image_type 字段的绑定
                 .bind(&series.acquisition_number)
                 .bind(&series.acquisition_time)
                 .bind(&series.acquisition_date)
@@ -329,7 +334,8 @@ impl MySqlProvider {
                 .bind(&series.operators_name)
                 .bind(&series.number_of_series_related_instances)
                 .bind(&series.received_instances)
-                .bind(&series.space_size);
+                .bind(&series.space_size)
+                .bind(&series.series_uid_hash);  // 新增字段
         }
 
         query.execute(&mut **tx).await?;
@@ -575,7 +581,7 @@ ImageType = VALUES(ImageType), ImageOrientationPatient = VALUES(ImageOrientation
                           PregnancyStatus, Occupation, AdditionalPatientHistory, PatientComments,
                           AdmissionID, PerformingPhysicianName, ProcedureCodeSequence,
                           ReceivedInstances,
-                          SpaceSize,CreatedTime, UpdatedTime
+                          SpaceSize,CreatedTime, UpdatedTime, StudyDateOrigin, StudyUIDHash
                    FROM StudyEntity
                    WHERE StudyInstanceUID = ?";
         // 查询Study基本信息
@@ -635,65 +641,71 @@ impl DbProvider for MySqlProvider {
         }
     }
 
-    async fn save_dicommeta_info(&self, dicom_obj: &[DicomObjectMeta]) -> Result<(), DbError> {
-        if dicom_obj.is_empty() {
-            return Ok(());
-        }
-
-        let mut tx = self.pool.begin().await.map_err(DbError::DatabaseError)?;
-
-        // 构建批量插入语句
-        let mut query_builder = "INSERT INTO dicom_object_meta (
-            tenant_id,
-            patient_id,
-            study_uid,
-            series_uid,
-            sop_uid,
-            file_size,
-            file_path,
-            transfer_syntax_uid,
-            number_of_frames
-        ) VALUES "
-            .to_string();
-
-        let placeholders: Vec<String> = (0..dicom_obj.len())
-            .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string())
-            .collect();
-        query_builder.push_str(&placeholders.join(", "));
-        query_builder.push_str(
-            " ON DUPLICATE KEY UPDATE
-            patient_id = VALUES(patient_id),
-            study_uid = VALUES(study_uid),
-            series_uid = VALUES(series_uid),
-            file_size = VALUES(file_size),
-            file_path = VALUES(file_path),
-            transfer_syntax_uid = VALUES(transfer_syntax_uid),
-            number_of_frames = VALUES(number_of_frames),
-            updated_at = CURRENT_TIMESTAMP",
-        );
-
-        let mut query = sqlx::query(&query_builder);
-        for obj in dicom_obj {
-            query = query
-                .bind(&obj.tenant_id)
-                .bind(&obj.patient_id)
-                .bind(&obj.study_uid)
-                .bind(&obj.series_uid)
-                .bind(&obj.sop_uid)
-                .bind(&obj.file_size)
-                .bind(&obj.file_path)
-                .bind(&obj.transfer_synatx_uid)
-                .bind(obj.number_of_frames);
-        }
-
-        query
-            .execute(&mut *tx)
-            .await
-            .map_err(DbError::DatabaseError)?;
-        tx.commit().await.map_err(DbError::DatabaseError)?;
-
-        Ok(())
+ async fn save_dicommeta_info(&self, dicom_obj: &[DicomObjectMeta]) -> Result<(), DbError> {
+    if dicom_obj.is_empty() {
+        return Ok(());
     }
+
+    let mut tx = self.pool.begin().await.map_err(DbError::DatabaseError)?;
+
+    // 构建批量插入语句
+    let mut query_builder = "INSERT INTO dicom_object_meta (
+        tenant_id,
+        patient_id,
+        study_uid,
+        series_uid,
+        sop_uid,
+        file_size,
+        file_path,
+        transfer_syntax_uid,
+        number_of_frames,
+        series_uid_hash,
+        study_uid_hash
+    ) VALUES "
+        .to_string();
+
+    let placeholders: Vec<String> = (0..dicom_obj.len())
+        .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string()) // 修正：应该是11个占位符
+        .collect();
+    query_builder.push_str(&placeholders.join(", "));
+    query_builder.push_str(
+        " ON DUPLICATE KEY UPDATE
+        patient_id = VALUES(patient_id),
+        study_uid = VALUES(study_uid),
+        series_uid = VALUES(series_uid),
+        file_size = VALUES(file_size),
+        file_path = VALUES(file_path),
+        transfer_syntax_uid = VALUES(transfer_syntax_uid),
+        number_of_frames = VALUES(number_of_frames),
+        series_uid_hash = VALUES(series_uid_hash),
+        study_uid_hash = VALUES(study_uid_hash),
+        updated_at = CURRENT_TIMESTAMP",
+    );
+
+    let mut query = sqlx::query(&query_builder);
+    for obj in dicom_obj {
+        query = query
+            .bind(&obj.tenant_id)
+            .bind(&obj.patient_id)
+            .bind(&obj.study_uid)
+            .bind(&obj.series_uid)
+            .bind(&obj.sop_uid)
+            .bind(&obj.file_size)
+            .bind(&obj.file_path)
+            .bind(&obj.transfer_syntax_uid) // 修正：字段名拼写错误
+            .bind(obj.number_of_frames)
+            .bind(obj.series_uid_hash)
+            .bind(obj.study_uid_hash);
+    }
+
+    query
+        .execute(&mut *tx)
+        .await
+        .map_err(DbError::DatabaseError)?;
+    tx.commit().await.map_err(DbError::DatabaseError)?;
+
+    Ok(())
+}
 
     async fn save_dicom_info(
         &self,
