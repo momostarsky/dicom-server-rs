@@ -241,8 +241,13 @@ async fn retrieve_study_metadata(
         let dicom_path = PathBuf::from(&dicom_dir);
         let json_path = PathBuf::from(&json_path);
         info!(log, "DICOM directory: {:?}", dicom_path);
-        dicom_json_helper::generate_json_file(&dicom_path, &json_path)
-            .expect("generate_json_file failed");
+        if let Err(e) = dicom_json_helper::generate_json_file(&dicom_path, &json_path) {
+            return HttpResponse::InternalServerError().body(format!(
+                "retrieve_study_metadata Failed to generate JSON file: {}: {}",
+                json_path.display(),
+                e
+            ));
+        }
     }
     match std::fs::read_to_string(&json_path) {
         Ok(content) => HttpResponse::Ok()
