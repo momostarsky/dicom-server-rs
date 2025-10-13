@@ -24,6 +24,7 @@ rdkafka = "0.34.0"
 serde = { version = "1.0.225", features = ["derive"] }
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "mysql"] }
 common = { path = "../common" }
+logstate = { path = "../logstate" }
 serde_json = "1.0.145"
 config = "0.15.16"  # 配置文件解析
 dotenv = "0.15.0"  # 加载 .env 文件

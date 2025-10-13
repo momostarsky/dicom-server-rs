@@ -1,17 +1,3 @@
-mod log_entity;
-mod log_publish;
+pub mod log_entity;
+pub mod log_publish;
 
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}

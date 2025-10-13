@@ -4546,6 +4546,7 @@ dependencies = [
  "dotenv",
  "futures",
  "futures-util",
+ "logstate",
  "openssl",
  "rdkafka",
  "serde",

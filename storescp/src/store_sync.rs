@@ -12,7 +12,7 @@ use std::net::TcpStream;
 
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
-use common::utils::{get_logger};
+use common::utils::get_logger;
 
 use crate::dicom_file_handler::classify_and_publish_dicom_messages;
 use slog::{debug, info, o, warn};
@@ -25,7 +25,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         uncompressed_only,
         promiscuous,
         max_pdu_length,
-       
+
         port: _port,
         non_blocking: _non_blocking,
     } = args;
@@ -75,7 +75,6 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         "> Presentation contexts: {:?}",
         association.presentation_contexts()
     );
-
 
     let app_config = server_config::load_config().whatever_context("failed to load config")?;
 
@@ -204,17 +203,17 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                     &issue_patient_id,
                                     ts,
                                     &sop_instance_uid,
-                                    &mut dicom_message_lists,
                                 )
                                 .await
                                 {
-                                    Ok(_) => {
+                                    Ok(obj_meta) => {
                                         info!(
                                             &logger,
                                             "Successfully processed DICOM file for SOP instance {}",
                                             sop_instance_uid
                                         );
                                         // 继续执行后续操作（发送C-STORE响应等）
+                                        dicom_message_lists.push(obj_meta);
                                     }
                                     Err(e) => {
                                         warn!(
@@ -282,7 +281,6 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                 };
                                 association
                                     .send(&pdu_response)
-
                                     .whatever_context("failed to send response object to SCU")?;
                             }
                         }
@@ -346,17 +344,20 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
     );
 
     if !dicom_message_lists.is_empty() {
-        info!(&logger, "Finished processing association with {}", association.client_ae_title());
+        info!(
+            &logger,
+            "Finished processing association with {}",
+            association.client_ae_title()
+        );
 
         match classify_and_publish_dicom_messages(
             &dicom_message_lists,
             &storage_producer,
             &change_producer,
-
             queue_topic_main,
             queue_topic_change,
         )
-            .await
+        .await
         {
             Ok(_) => {
                 info!(&logger, "Successfully published DICOM messages");

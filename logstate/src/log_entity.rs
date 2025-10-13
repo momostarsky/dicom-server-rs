@@ -33,12 +33,14 @@ pub struct DicomIngestLog {
     pub series_instance_uid: String,       // 序列 UID
     pub study_instance_uid: String,        // 检查 UID
     pub patient_id: String,                // 患者 ID
-    pub accession_number: Option<String>,  // 访问号
-    pub original_filename: Option<String>, // 原始文件名（可选）
+    pub accession_number: String,          // 访问号
+    pub original_filename: String, // 原始文件名（可选）
     pub transfer_syntax_uid: String,       // 原始传输语法 UID
     pub file_size_bytes: u64,              // 文件大小（字节）
-    pub source_ae_title: Option<String>,   // 发送端 AE Title（可选）
+    pub source_ae_title: String,   // 发送端 AE Title（可选）
     pub received_from: Option<String>,     // 接收来源描述（可选）
+    pub issue_patient_id: String,
+    pub transfer_syntax: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

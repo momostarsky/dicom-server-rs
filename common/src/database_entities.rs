@@ -176,6 +176,7 @@ pub struct DicomObjectMeta {
     #[serde(rename = "study_uid_hash")]
     pub study_uid_hash: u64,             // 新增字段
 
+    pub accession_number: String,
 }
 // 为 DicomObjectMeta 实现 Hash trait 以便可以在 HashSet 中使用
 impl Hash for DicomObjectMeta {

@@ -96,9 +96,8 @@ pub(crate) async fn process_dicom_file(
     instance_buffer: &[u8],    //DICOM文件的字节数组或是二进制流
     tenant_id: &String,        //机构ID,或是医院ID, 用于区分多个医院.
     ts: &String,               //传输语法
-    sop_instance_uid: &String, //当前文件的SOP实例ID
-    lst: &mut Vec<DicomObjectMeta>,
-) -> Result<(), Whatever> {
+    sop_instance_uid: &String //当前文件的SOP实例ID
+) -> Result<DicomObjectMeta, Whatever> {
     let root_logger = get_logger();
     let logger = root_logger.new(o!("storescp"=>"process_dicom_file"));
     let obj = InMemDicomObject::read_dataset_with_ts(
@@ -229,7 +228,8 @@ pub(crate) async fn process_dicom_file(
     // 修复后：
     let saved_path = PathBuf::from(file_path); // 此时可以安全转移所有权
 
-    lst.push(DicomObjectMeta {
+
+    Ok( DicomObjectMeta {
         tenant_id: tenant_id.to_string(),
         patient_id: pat_id.to_string(),
         study_uid: study_uid.to_string(),
@@ -243,8 +243,8 @@ pub(crate) async fn process_dicom_file(
         updated_time: None,
         series_uid_hash: series_uid_hash_v,
         study_uid_hash: study_uid_hash_v,
-    });
-    Ok(())
+        accession_number: accession_number.to_string(),
+    })
 }
 
 /// 根据传输语法支持情况将 DICOM 消息列表分类并分别发布到不同的 Kafka 主题

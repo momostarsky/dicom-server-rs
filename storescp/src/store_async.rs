@@ -2,6 +2,8 @@ use crate::{
     create_cecho_response, create_cstore_response, dicom_file_handler, transfer::ABSTRACT_SYNTAXES,
     App,
 };
+use dicom_core::chrono;
+use dicom_core::chrono::DateTime;
 
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
@@ -14,6 +16,7 @@ use dicom_ul::{pdu::PDataValueType, Pdu};
 use slog::o;
 
 use crate::dicom_file_handler::classify_and_publish_dicom_messages;
+use logstate::log_entity::{LogStatus, LogType};
 use slog::{debug, info, warn};
 
 pub async fn run_store_async(
@@ -27,7 +30,7 @@ pub async fn run_store_async(
         uncompressed_only,
         promiscuous,
         max_pdu_length,
-      
+
         port: _port,
         non_blocking: _non_blocking,
     } = args;
@@ -89,7 +92,6 @@ pub async fn run_store_async(
         association.presentation_contexts()
     );
 
-
     let app_config = server_config::load_config().whatever_context("failed to load config")?;
 
     let queue_config = app_config.message_queue;
@@ -101,6 +103,9 @@ pub async fn run_store_async(
     let change_producer = KafkaMessagePublisher::new(queue_topic_change.parse().unwrap());
 
     let mut dicom_message_lists: Vec<common::database_entities::DicomObjectMeta> = vec![];
+
+    let mut dicom_ingest_lists: Vec<logstate::log_entity::DicomIngestLog> = vec![];
+
     loop {
         match association.receive().await {
             Ok(mut pdu) => {
@@ -183,7 +188,7 @@ pub async fn run_store_async(
                                         )?
                                         .trim_end_matches("\0")
                                         .to_string();
-                                    issue_patient_id = "1234567890".to_string(); 
+                                    issue_patient_id = "1234567890".to_string();
                                 }
                                 instance_buffer.clear();
                             } else if data_value.value_type == PDataValueType::Data
@@ -209,17 +214,43 @@ pub async fn run_store_async(
                                     &issue_patient_id,
                                     ts,
                                     &sop_instance_uid,
-                                    &mut dicom_message_lists,
                                 )
                                 .await
                                 {
-                                    Ok(_) => {
+                                    Ok(obj_meta) => {
                                         info!(
                                             logger,
                                             "Successfully processed DICOM file for SOP instance {}",
                                             sop_instance_uid
                                         );
+                                        let dicom_ingest_log =
+                                            logstate::log_entity::DicomIngestLog {
+                                                log_time: DateTime::<chrono::Utc>::from(
+                                                    std::time::SystemTime::now(),
+                                                ),
+                                                log_type: LogType::DicomIngest,
+                                                status: LogStatus::Success,
+                                                trace_id: Default::default(),
+                                                source_ip: peer.ip().to_string(),
+                                                processing_step: "Write2Disk".to_string(),
+                                                sop_instance_uid: sop_instance_uid.clone(),
+                                                series_instance_uid: obj_meta.series_uid.clone(),
+                                                study_instance_uid: obj_meta.study_uid.clone(),
+                                                patient_id: obj_meta.patient_id.clone(),
+                                                accession_number: obj_meta.accession_number.clone(),
+                                                original_filename: obj_meta.file_path.to_string(),
+                                                transfer_syntax_uid: ts.to_string(),
+                                                file_size_bytes: obj_meta.file_size as u64,
+                                                source_ae_title: association
+                                                    .client_ae_title()
+                                                    .to_string(),
+                                                issue_patient_id: issue_patient_id.clone(),
+                                                transfer_syntax: ts.to_string(),
+                                                received_from: None,
+                                            };
+                                        dicom_message_lists.push(obj_meta);
                                         // 继续执行后续操作（发送C-STORE响应等）
+                                        dicom_ingest_lists.push(dicom_ingest_log);
                                     }
                                     Err(e) => {
                                         warn!(
@@ -237,7 +268,6 @@ pub async fn run_store_async(
                                         &dicom_message_lists,
                                         &storage_producer,
                                         &change_producer,
-                                       
                                         queue_topic_main,
                                         queue_topic_change,
                                     )
