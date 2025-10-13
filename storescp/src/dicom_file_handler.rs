@@ -2,16 +2,15 @@ use common::database_entities::DicomObjectMeta;
 use common::dicom_utils::get_tag_value;
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
-use common::uid_hash::uid_to_u64_deterministic_safe;
 use common::utils::get_logger;
 use dicom_dictionary_std::tags;
-use dicom_encoding::snafu::{OptionExt, ResultExt, Whatever};
+use dicom_encoding::snafu::{ ResultExt, Whatever};
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
 use dicom_pixeldata::Transcode;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use slog::o;
-use slog::{debug, error, info};
+use slog::{error, info};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::LazyLock;
@@ -94,7 +93,7 @@ static JS_CHANGE_TO_TS: LazyLock<String> = LazyLock::new(|| {
 });
 
 pub(crate) async fn process_dicom_file(
-    instance_buffer: &[u8],    //DICOM文件的字节数组或是二进制流 
+    instance_buffer: &[u8],    //DICOM文件的字节数组或是二进制流
     tenant_id: &String,        //机构ID,或是医院ID, 用于区分多个医院.
     ts: &String,               //传输语法
     sop_instance_uid: &String, //当前文件的SOP实例ID

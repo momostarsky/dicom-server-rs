@@ -27,7 +27,7 @@ pub async fn run_store_async(
         uncompressed_only,
         promiscuous,
         max_pdu_length,
-        out_dir,
+        out_dir: _,
         json_store_path: _json_store_path,
         port: _port,
         non_blocking: _non_blocking,
@@ -89,7 +89,7 @@ pub async fn run_store_async(
         "> Presentation contexts: {:?}",
         association.presentation_contexts()
     );
-    let base_dir = out_dir.to_str().unwrap();
+
 
     let app_config = server_config::load_config().whatever_context("failed to load config")?;
 
@@ -206,7 +206,7 @@ pub async fn run_store_async(
                                 // .whatever_context("failed to read DICOM data object")?;
 
                                 match dicom_file_handler::process_dicom_file(
-                                    &instance_buffer, 
+                                    &instance_buffer,
                                     &issue_patient_id,
                                     ts,
                                     &sop_instance_uid,

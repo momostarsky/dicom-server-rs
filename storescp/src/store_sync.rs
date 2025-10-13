@@ -25,7 +25,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         uncompressed_only,
         promiscuous,
         max_pdu_length,
-        out_dir,
+        out_dir: _,
         json_store_path: _json_store_path,
         port: _port,
         non_blocking: _non_blocking,
@@ -76,7 +76,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         "> Presentation contexts: {:?}",
         association.presentation_contexts()
     );
-    let base_dir = out_dir.to_str().unwrap();
+
 
     let app_config = server_config::load_config().whatever_context("failed to load config")?;
 
