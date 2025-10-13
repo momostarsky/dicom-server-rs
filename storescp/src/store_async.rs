@@ -206,8 +206,7 @@ pub async fn run_store_async(
                                 // .whatever_context("failed to read DICOM data object")?;
 
                                 match dicom_file_handler::process_dicom_file(
-                                    &instance_buffer,
-                                    base_dir,
+                                    &instance_buffer, 
                                     &issue_patient_id,
                                     ts,
                                     &sop_instance_uid,

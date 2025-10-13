@@ -94,8 +94,7 @@ static JS_CHANGE_TO_TS: LazyLock<String> = LazyLock::new(|| {
 });
 
 pub(crate) async fn process_dicom_file(
-    instance_buffer: &[u8],    //DICOM文件的字节数组或是二进制流
-    out_dir: &str,             //存储文件的根目录, 例如 :/opt/dicomStore/
+    instance_buffer: &[u8],    //DICOM文件的字节数组或是二进制流 
     tenant_id: &String,        //机构ID,或是医院ID, 用于区分多个医院.
     ts: &String,               //传输语法
     sop_instance_uid: &String, //当前文件的SOP实例ID
@@ -206,12 +205,6 @@ pub(crate) async fn process_dicom_file(
             .unwrap();
         match file_obj.transcode(target_ts) {
             Ok(_) => {
-                file_obj
-                    .write_to_file(&file_path)
-                    .whatever_context(format!(
-                        "transcode success, save file to disk failed: {:?}",
-                        file_path
-                    ))?;
                 final_ts = target_ts.uid().to_string();
                 info!(
                     logger,
@@ -222,23 +215,17 @@ pub(crate) async fn process_dicom_file(
             }
             Err(e) => {
                 error!(logger, "transcode failed: {}", e);
-                file_obj
-                    .write_to_file(&file_path)
-                    .whatever_context(format!(
-                        "transcode failed, save file to disk failed: {:?}",
-                        file_path
-                    ))?;
             }
         }
     } else {
-        file_obj
-            .write_to_file(&file_path)
-            .whatever_context(format!(
-                "not need transcode, save file to disk failed: {:?}",
-                file_path
-            ))?;
+        info!(logger, "not need transcode: {}", ts.to_string());
     }
-
+    file_obj
+        .write_to_file(&file_path)
+        .whatever_context(format!(
+            "not need transcode, save file to disk failed: {:?}",
+            file_path
+        ))?;
     let fsize = std::fs::metadata(&file_path).unwrap().len();
     // 修复后：
     let saved_path = PathBuf::from(file_path); // 此时可以安全转移所有权

@@ -202,7 +202,6 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
 
                                 match dicom_file_handler::process_dicom_file(
                                     &instance_buffer,
-                                    base_dir,
                                     &issue_patient_id,
                                     ts,
                                     &sop_instance_uid,
@@ -239,7 +238,6 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                         &dicom_message_lists,
                                         &storage_producer,
                                         &change_producer,
-
                                         queue_topic_main,
                                         queue_topic_change,
                                     )
