@@ -97,14 +97,12 @@ pub async fn run_store_async(
     let queue_config = app_config.message_queue;
 
     let queue_topic_main = &queue_config.topic_main.as_str();
-    let queue_topic_change = &queue_config.topic_change_transfer_syntax.as_str();
+    let queue_topic_log = &queue_config.topic_log.as_str();
 
     let storage_producer = KafkaMessagePublisher::new(queue_topic_main.parse().unwrap());
-    let change_producer = KafkaMessagePublisher::new(queue_topic_change.parse().unwrap());
+    let log_producer = KafkaMessagePublisher::new(queue_topic_log.parse().unwrap());
 
-    let mut dicom_message_lists: Vec<common::database_entities::DicomObjectMeta> = vec![];
-
-    let mut dicom_ingest_lists: Vec<logstate::log_entity::DicomIngestLog> = vec![];
+    let mut dicom_message_lists: Vec<common::dicom_object_meta::DicomObjectMeta> = vec![];
 
     loop {
         match association.receive().await {
@@ -214,6 +212,8 @@ pub async fn run_store_async(
                                     &issue_patient_id,
                                     ts,
                                     &sop_instance_uid,
+                                    peer.ip().to_string(),
+                                    association.client_ae_title().to_string(),
                                 )
                                 .await
                                 {
@@ -223,34 +223,8 @@ pub async fn run_store_async(
                                             "Successfully processed DICOM file for SOP instance {}",
                                             sop_instance_uid
                                         );
-                                        let dicom_ingest_log =
-                                            logstate::log_entity::DicomIngestLog {
-                                                log_time: DateTime::<chrono::Utc>::from(
-                                                    std::time::SystemTime::now(),
-                                                ),
-                                                log_type: LogType::DicomIngest,
-                                                status: LogStatus::Success,
-                                                trace_id: Default::default(),
-                                                source_ip: peer.ip().to_string(),
-                                                processing_step: "Write2Disk".to_string(),
-                                                sop_instance_uid: sop_instance_uid.clone(),
-                                                series_instance_uid: obj_meta.series_uid.clone(),
-                                                study_instance_uid: obj_meta.study_uid.clone(),
-                                                patient_id: obj_meta.patient_id.clone(),
-                                                accession_number: obj_meta.accession_number.clone(),
-                                                original_filename: obj_meta.file_path.to_string(),
-                                                transfer_syntax_uid: ts.to_string(),
-                                                file_size_bytes: obj_meta.file_size as u64,
-                                                source_ae_title: association
-                                                    .client_ae_title()
-                                                    .to_string(),
-                                                issue_patient_id: issue_patient_id.clone(),
-                                                transfer_syntax: ts.to_string(),
-                                                received_from: None,
-                                            };
                                         dicom_message_lists.push(obj_meta);
                                         // 继续执行后续操作（发送C-STORE响应等）
-                                        dicom_ingest_lists.push(dicom_ingest_log);
                                     }
                                     Err(e) => {
                                         warn!(
@@ -267,9 +241,9 @@ pub async fn run_store_async(
                                     match classify_and_publish_dicom_messages(
                                         &dicom_message_lists,
                                         &storage_producer,
-                                        &change_producer,
+                                        &log_producer,
                                         queue_topic_main,
-                                        queue_topic_change,
+                                        queue_topic_log,
                                     )
                                     .await
                                     {
@@ -378,9 +352,9 @@ pub async fn run_store_async(
         match classify_and_publish_dicom_messages(
             &dicom_message_lists,
             &storage_producer,
-            &change_producer,
+            &log_producer,
             queue_topic_main,
-            queue_topic_change,
+            queue_topic_log,
         )
         .await
         {

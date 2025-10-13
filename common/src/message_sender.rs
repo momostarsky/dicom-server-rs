@@ -1,5 +1,6 @@
-use crate::database_entities::DicomObjectMeta;
+
 use async_trait::async_trait;
+use crate::dicom_object_meta::DicomObjectMeta;
 
 #[async_trait]
 pub trait MessagePublisher:Sync + Send  {

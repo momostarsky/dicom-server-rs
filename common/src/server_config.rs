@@ -66,7 +66,7 @@ pub struct KafkaConfig {
 pub struct MessageQueueConfig {
     pub consumer_group_id: String,
     pub topic_main: String,
-    pub topic_change_transfer_syntax: String,
+    pub topic_log: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -316,8 +316,8 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
                 app_config.message_queue.topic_main
             );
             println!(
-                "message_queue:topic_change_transfer_syntax {:?}",
-                app_config.message_queue.topic_change_transfer_syntax
+                "message_queue:topic_log {:?}",
+                app_config.message_queue.topic_log
             );
 
             if let Some(license_server) = app_config.dicom_license_server.as_ref() {

@@ -1,5 +1,4 @@
 use common::change_file_transfer::convert_ts_with_gdcm_conv;
-use common::database_entities::DicomObjectMeta;
 use common::{database_factory, server_config};
 use dicom_dictionary_std::tags;
 use dicom_object::OpenFileOptions;
@@ -12,6 +11,7 @@ use std::{fs, thread};
 // use dicom_object::collector::CharacterSetOverride;
 use tokio::runtime::Handle;
 use tracing::log::error;
+use common::dicom_object_meta::DicomObjectMeta;
 
 pub async fn start_process() {
     // 设置日志系统
@@ -56,7 +56,7 @@ pub async fn start_process() {
         .create()
         .expect("create consumer-storage-kafka failed");
 
-    let topic = queue_config.topic_change_transfer_syntax.as_str();
+    let topic = queue_config.topic_log.as_str();
     tracing::info!("Subscribing to topic: {}", topic);
 
     match consumer.subscribe(&[topic]) {
@@ -240,15 +240,10 @@ async fn change_transfer_syntax(
             let src_file = dcm_msg.file_path.as_str();
             let src_sz = dcm_msg.file_size as usize;
             // 处理文件转换
-            let conversion_result =
-                convert_ts_with_gdcm_conv(src_file, src_sz, &target_path, true);
+            let conversion_result = convert_ts_with_gdcm_conv(src_file, src_sz, &target_path, true);
 
             if let Err(e) = conversion_result.await {
                 tracing::error!("Failed to process message: {:?}", e);
-                let datax = vec![dcm_msg];
-                if let Err(save_err) = db_provider.save_dicommeta_info(&datax).await {
-                    tracing::error!("Failed to save dicommeta info: {:?}", save_err);
-                }
                 // 继续处理下一条消息
                 continue;
             }
@@ -271,12 +266,7 @@ async fn change_transfer_syntax(
 
             match obj_result {
                 Ok(obj) => {
-                    if let Err(save_err) = db_provider
-                        .save_dicom_info(dcm_msg.tenant_id.as_str(),&obj)
-                        .await
-                    {
-                        tracing::error!("Failed to save dicom info: {:?}", save_err);
-                    }
+                    tracing::info!("Reopen :{} to check dicom info: {:?}", src_file, obj);
                 }
                 Err(open_err) => {
                     tracing::error!("Failed to open file {}: {:?}", src_file, open_err);

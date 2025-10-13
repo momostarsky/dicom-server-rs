@@ -1,5 +1,5 @@
 use crate::database_entities::{
-    DicomObjectMeta, ImageEntity, PatientEntity, SeriesEntity, StudyEntity,
+    ImageEntity, PatientEntity, SeriesEntity, StudyEntity,
 };
 use crate::database_provider::DbProvider;
 use crate::database_provider_base::DbProviderBase;
@@ -7,6 +7,7 @@ use crate::message_sender::MessagePublisher;
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu::Whatever;
 use dicom_object::ReadError;
+use dicom_object::file::CharacterSetOverride;
 use slog::LevelFilter;
 use slog::{Drain, Logger, error, info, o};
 use std::collections::{HashMap, HashSet};
@@ -14,7 +15,7 @@ use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::{Arc, OnceLock};
-use dicom_object::file::CharacterSetOverride;
+use crate::dicom_object_meta::DicomObjectMeta;
 
 pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let path = std::path::Path::new(p0);
@@ -100,8 +101,7 @@ pub fn setup_logging(policy_name: &str) -> Logger {
     let drain = slog::Duplicate::new(stdout_drain, file_drain).map(slog::Fuse);
     let drain = LevelFilter::new(drain, slog::Level::Info).map(slog::Fuse);
 
-    let clogger: Logger =
-        Logger::root(drain, o!("version" => env!("CARGO_PKG_VERSION"))).into();
+    let clogger: Logger = Logger::root(drain, o!("version" => env!("CARGO_PKG_VERSION"))).into();
 
     set_global_logger(clogger.clone());
 
@@ -263,8 +263,6 @@ pub async fn group_dicom_messages(
 
     //TODO: 对StudyUIDHash和SeriesUIDHash和 DicomObjectMeta的StudyUIDHash和SeriesUIDHash进行比对.
 
-
-
     for study_entity in &mut study_entities {
         // 查找对应的 DICOMObjectMeta 消息
         if let Some(meta_msg) = messages.iter().find(|m| {
@@ -277,7 +275,8 @@ pub async fn group_dicom_messages(
     for series_entity in &mut series_entities {
         // 查找对应的 DICOMObjectMeta 消息
         if let Some(meta_msg) = messages.iter().find(|m| {
-            m.tenant_id == series_entity.tenant_id && m.series_uid == series_entity.series_instance_uid
+            m.tenant_id == series_entity.tenant_id
+                && m.series_uid == series_entity.series_instance_uid
         }) {
             series_entity.series_uid_hash = meta_msg.series_uid_hash;
         }
@@ -364,13 +363,6 @@ pub async fn process_storage_messages(
                         logger,
                         "Failed to persist DICOM data to database for tenant {}: {}", tenant_id, e
                     );
-                    // 将所有消息标记为失败并保存到数据库
-                    if let Err(save_err) = db_provider.save_dicommeta_info(&tenant_msg).await {
-                        tracing::error!(
-                            "Failed to save tenant messages to failed table: {}",
-                            save_err
-                        );
-                    }
                     continue;
                 }
 
@@ -384,14 +376,6 @@ pub async fn process_storage_messages(
                     logger,
                     "Failed to group DICOM messages for tenant {}: {}", tenant_id, e
                 );
-                // 当分组处理失败时，将所有消息保存到失败表中
-                if let Err(save_err) = db_provider.save_dicommeta_info(&tenant_msg).await {
-                    error!(
-                        logger,
-                        "Failed to save tenant messages to failed table after group failure: {}",
-                        save_err
-                    );
-                }
                 continue;
             }
         }

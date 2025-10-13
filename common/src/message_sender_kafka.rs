@@ -1,4 +1,4 @@
-use crate::database_entities::DicomObjectMeta;
+
 use crate::message_sender::MessagePublisher;
 use async_trait::async_trait;
 use futures_util::future::join_all;
@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::time::Duration;
 use tracing::{debug, info, error};
-
+use crate::dicom_object_meta::DicomObjectMeta;
 use crate::server_config;
 
 pub struct KafkaMessagePublisher {

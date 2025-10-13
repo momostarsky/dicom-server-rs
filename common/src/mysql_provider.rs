@@ -1,11 +1,11 @@
 use crate::database_entities::{
-    DicomObjectMeta, ImageEntity, PatientEntity, SeriesEntity, StudyEntity,
+     ImageEntity, PatientEntity, SeriesEntity, StudyEntity,
 };
 use crate::database_provider::{DbError, DbProvider};
 use crate::database_provider_base::DbProviderBase;
 use crate::dicom_utils::{parse_dicom_date_from_sql, parse_dicom_time_from_sql};
 use async_trait::async_trait;
-use dicom_object::DefaultDicomObject;
+ 
 use sqlx::mysql::MySqlRow;
 use sqlx::{FromRow, MySql, MySqlPool, Row, Transaction};
 use tracing::{error, info};
@@ -641,167 +641,7 @@ impl DbProvider for MySqlProvider {
         }
     }
 
- async fn save_dicommeta_info(&self, dicom_obj: &[DicomObjectMeta]) -> Result<(), DbError> {
-    if dicom_obj.is_empty() {
-        return Ok(());
-    }
 
-    let mut tx = self.pool.begin().await.map_err(DbError::DatabaseError)?;
-
-    // 构建批量插入语句
-    let mut query_builder = "INSERT INTO dicom_object_meta (
-        tenant_id,
-        patient_id,
-        study_uid,
-        series_uid,
-        sop_uid,
-        file_size,
-        file_path,
-        transfer_syntax_uid,
-        number_of_frames,
-        series_uid_hash,
-        study_uid_hash
-    ) VALUES "
-        .to_string();
-
-    let placeholders: Vec<String> = (0..dicom_obj.len())
-        .map(|_| "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)".to_string()) // 修正：应该是11个占位符
-        .collect();
-    query_builder.push_str(&placeholders.join(", "));
-    query_builder.push_str(
-        " ON DUPLICATE KEY UPDATE
-        patient_id = VALUES(patient_id),
-        study_uid = VALUES(study_uid),
-        series_uid = VALUES(series_uid),
-        file_size = VALUES(file_size),
-        file_path = VALUES(file_path),
-        transfer_syntax_uid = VALUES(transfer_syntax_uid),
-        number_of_frames = VALUES(number_of_frames),
-        series_uid_hash = VALUES(series_uid_hash),
-        study_uid_hash = VALUES(study_uid_hash),
-        updated_at = CURRENT_TIMESTAMP",
-    );
-
-    let mut query = sqlx::query(&query_builder);
-    for obj in dicom_obj {
-        query = query
-            .bind(&obj.tenant_id)
-            .bind(&obj.patient_id)
-            .bind(&obj.study_uid)
-            .bind(&obj.series_uid)
-            .bind(&obj.sop_uid)
-            .bind(&obj.file_size)
-            .bind(&obj.file_path)
-            .bind(&obj.transfer_syntax_uid) // 修正：字段名拼写错误
-            .bind(obj.number_of_frames)
-            .bind(obj.series_uid_hash)
-            .bind(obj.study_uid_hash);
-    }
-
-    query
-        .execute(&mut *tx)
-        .await
-        .map_err(DbError::DatabaseError)?;
-    tx.commit().await.map_err(DbError::DatabaseError)?;
-
-    Ok(())
-}
-
-    async fn save_dicom_info(
-        &self,
-        tenant_id: &str,
-        dicom_obj: &DefaultDicomObject,
-    ) -> Result<(), DbError> {
-        let tenant_id = tenant_id.to_string();
-        // 使用 DbProviderBase 提取实体信息
-        let (patient, study, series, image) =
-            match DbProviderBase::extract_entity(&tenant_id, dicom_obj) {
-                Ok(entities) => entities,
-                Err(e) => {
-                    error!("Failed to extract DICOM entities: {}", e);
-                    return Err(DbError::ExtractionFailed(e.to_string()));
-                }
-            };
-
-        let pool = self.pool.clone();
-
-        // 开始事务
-        let mut tx = match pool.begin().await {
-            Ok(tx) => tx,
-            Err(e) => {
-                error!("Failed to start transaction: {}", e);
-                return Err(DbError::TransactionFailed(
-                    "Failed to start transaction".to_string(),
-                ));
-            }
-        };
-        let sop_uid = image.sop_instance_uid.clone();
-        // 保存患者信息
-        if let Err(e) = self
-            .save_patient_info_impl(&tenant_id, &[patient], &mut tx)
-            .await
-        {
-            error!("Failed to save patient info: {}", e);
-            if let Err(rollback_err) = tx.rollback().await {
-                error!("Failed to rollback transaction: {}", rollback_err);
-            }
-            return Err(DbError::DatabaseError(e));
-        }
-
-        // 保存检查信息
-        if let Err(e) = self
-            .save_study_info_impl(&tenant_id, &[study], &mut tx)
-            .await
-        {
-            error!("Failed to save study info: {}", e);
-            if let Err(rollback_err) = tx.rollback().await {
-                error!("Failed to rollback transaction: {}", rollback_err);
-            }
-            return Err(DbError::DatabaseError(e));
-        }
-
-        // 保存序列信息
-        if let Err(e) = self
-            .save_series_info_impl(&tenant_id, &[series], &mut tx)
-            .await
-        {
-            error!("Failed to save series info: {}", e);
-            if let Err(rollback_err) = tx.rollback().await {
-                error!("Failed to rollback transaction: {}", rollback_err);
-            }
-            return Err(DbError::DatabaseError(e));
-        }
-
-        // 保存实例信息
-        if let Err(e) = self
-            .save_instance_info_impl(&tenant_id, &[image], &mut tx)
-            .await
-        {
-            error!("Failed to save instance info: {}", e);
-            if let Err(rollback_err) = tx.rollback().await {
-                error!("Failed to rollback transaction: {}", rollback_err);
-            }
-            return Err(DbError::DatabaseError(e));
-        }
-
-        // 提交事务
-        match tx.commit().await {
-            Ok(_) => {
-                info!(
-                    "Successfully saved DICOM info for SOP Instance UID: {}",
-                    sop_uid
-                );
-                Ok(())
-            }
-            Err(e) => {
-                error!("Failed to commit transaction: {}", e);
-                Err(DbError::TransactionFailed(format!(
-                    "Failed to commit transaction: {}",
-                    e
-                )))
-            }
-        }
-    }
 
     async fn save_patient_info(
         &self,

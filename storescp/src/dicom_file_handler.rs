@@ -1,4 +1,4 @@
-use common::database_entities::DicomObjectMeta;
+use common::dicom_object_meta::DicomObjectMeta;
 use common::dicom_utils::get_tag_value;
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
@@ -97,6 +97,8 @@ pub(crate) async fn process_dicom_file(
     tenant_id: &String,        //机构ID,或是医院ID, 用于区分多个医院.
     ts: &String,               //传输语法
     sop_instance_uid: &String, //当前文件的SOP实例ID
+    ip: String,
+    client_ae: String,
 ) -> Result<DicomObjectMeta, Whatever> {
     let root_logger = get_logger();
     let logger = root_logger.new(o!("storescp"=>"process_dicom_file"));
@@ -238,7 +240,7 @@ pub(crate) async fn process_dicom_file(
         series_uid: series_uid.to_string(),
         sop_uid: sop_instance_uid.to_string(),
         file_path: String::from(saved_path.to_str().unwrap()),
-        file_size: fsize as i64,
+        file_size: fsize,
         transfer_syntax_uid: ts.to_string(),
         target_ts: final_ts.to_string(),
         study_date: study_date.to_string(),
@@ -249,77 +251,65 @@ pub(crate) async fn process_dicom_file(
         series_uid_hash: series_uid_hash_v,
         study_uid_hash: study_uid_hash_v,
         accession_number: accession_number.to_string(),
+        source_ip: ip,
+        source_ae: client_ae,
     })
 }
 
-/// 根据传输语法支持情况将 DICOM 消息列表分类并分别发布到不同的 Kafka 主题
+///  无论转码成功与否，均会保存文件到本地磁盘
 ///
 /// # 参数
 /// * `dicom_message_lists` - 需要处理的 DICOM 对象元数据列表
 /// * `storage_producer` - 用于发布受支持传输语法消息的 Kafka 生产者
-/// * `change_producer` - 用于发布不受支持传输语法消息的 Kafka 生产者
+/// * `log_producer` - 用于发布不受支持传输语法消息的 Kafka 生产者
 /// * `logger` - 日志记录器
-/// * `queue_topic_main` - 主题名称（受支持的传输语法）
-/// * `queue_topic_change` - 主题名称（不受支持的传输语法）
+/// * `queue_topic_main` - 主题名称（用于storage_consumer）
+/// * `queue_topic_log` - 主题名称（用于日志提取）
 pub(crate) async fn classify_and_publish_dicom_messages(
     dicom_message_lists: &Vec<DicomObjectMeta>,
     storage_producer: &KafkaMessagePublisher,
-    change_producer: &KafkaMessagePublisher,
+    log_producer: &KafkaMessagePublisher,
     queue_topic_main: &str,
-    queue_topic_change: &str,
+    queue_topic_log: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let root_logger = get_logger();
     let logger = root_logger.new(o!("storescp"=>"classify_and_publish_dicom_messages"));
-    // 将 dicom_message_lists 按 transfer_syntax_uid 是否被 SUPPORTED_TRANSFER_SYNTAXES 支持分成两类
-    let (supported_messages, unsupported_messages): (Vec<_>, Vec<_>) = dicom_message_lists
-        .iter()
-        .partition(|meta| JS_SUPPORTED_TS.contains(meta.transfer_syntax_uid.as_str()));
+    if dicom_message_lists.is_empty() {
+        info!(logger, "Empty dicom message list, skip");
+        return Ok(());
+    }
 
-    // 将引用转换为拥有所有权的 Vec
-    let supported_messages_owned: Vec<_> = supported_messages.into_iter().cloned().collect();
-    let unsupported_messages_owned: Vec<_> = unsupported_messages.into_iter().cloned().collect();
-
-    // 使用 storage_producer 发布受支持的消息
-    if !supported_messages_owned.is_empty() {
-        match common::utils::publish_messages(storage_producer, &supported_messages_owned).await {
-            Ok(_) => {
-                info!(
-                    logger,
-                    "Successfully published {} supported messages to Kafka: {}",
-                    supported_messages_owned.len(),
-                    queue_topic_main
-                );
-            }
-            Err(e) => {
-                error!(
-                    logger,
-                    "Failed to publish supported messages to Kafka: {}, topic: {}",
-                    e,
-                    queue_topic_main
-                );
-            }
+    match common::utils::publish_messages(storage_producer, &dicom_message_lists).await {
+        Ok(_) => {
+            info!(
+                logger,
+                "Successfully published {} supported messages to Kafka: {}",
+                dicom_message_lists.len(),
+                queue_topic_main
+            );
+        }
+        Err(e) => {
+            error!(
+                logger,
+                "Failed to publish messages to Kafka: {}, topic: {}", e, queue_topic_main
+            );
         }
     }
 
-    // 使用 change_producer 发布不受支持的消息
-    if !unsupported_messages_owned.is_empty() {
-        match common::utils::publish_messages(change_producer, &unsupported_messages_owned).await {
-            Ok(_) => {
-                info!(
-                    logger,
-                    "Successfully published {} unsupported messages to Kafka: {}",
-                    unsupported_messages_owned.len(),
-                    queue_topic_change
-                );
-            }
-            Err(e) => {
-                error!(
-                    logger,
-                    "Failed to publish unsupported messages to Kafka: {}, topic: {}",
-                    e,
-                    queue_topic_change
-                );
-            }
+    match common::utils::publish_messages(log_producer, &dicom_message_lists).await {
+        Ok(_) => {
+            info!(
+                logger,
+                "Successfully published {} messages to Kafka: {}",
+                dicom_message_lists.len(),
+                queue_topic_log
+            );
+        }
+        Err(e) => {
+            error!(
+                logger,
+                "Failed to publish log messages to Kafka: {}, topic: {}", e, queue_topic_log
+            );
         }
     }
 

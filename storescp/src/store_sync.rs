@@ -30,7 +30,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         non_blocking: _non_blocking,
     } = args;
     let verbose = *verbose;
-
+    let peer = scu_stream.peer_addr().unwrap();
     let mut instance_buffer: Vec<u8> = Vec::with_capacity(1024 * 1024);
     let mut msgid = 1;
     let mut sop_class_uid = "".to_string();
@@ -81,10 +81,10 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
     let queue_config = app_config.message_queue;
 
     let queue_topic_main = &queue_config.topic_main.as_str();
-    let queue_topic_change = &queue_config.topic_change_transfer_syntax.as_str();
+    let queue_topic_log = &queue_config.topic_log.as_str();
 
     let storage_producer = KafkaMessagePublisher::new(queue_topic_main.parse().unwrap());
-    let change_producer = KafkaMessagePublisher::new(queue_topic_change.parse().unwrap());
+    let log_producer = KafkaMessagePublisher::new(queue_topic_log.parse().unwrap());
 
     let mut dicom_message_lists = vec![];
     loop {
@@ -203,6 +203,8 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                     &issue_patient_id,
                                     ts,
                                     &sop_instance_uid,
+                                    peer.to_string(),
+                                    association.client_ae_title().to_string(),
                                 )
                                 .await
                                 {
@@ -235,9 +237,9 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                     match classify_and_publish_dicom_messages(
                                         &dicom_message_lists,
                                         &storage_producer,
-                                        &change_producer,
+                                        &log_producer,
                                         queue_topic_main,
-                                        queue_topic_change,
+                                        queue_topic_log,
                                     )
                                     .await
                                     {
@@ -353,9 +355,9 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         match classify_and_publish_dicom_messages(
             &dicom_message_lists,
             &storage_producer,
-            &change_producer,
+            &log_producer,
             queue_topic_main,
-            queue_topic_change,
+            queue_topic_log,
         )
         .await
         {
