@@ -1,7 +1,7 @@
-use std::error::Error;
+use crate::log_entity::{DbPersistLog, DicomIngestLog, TranscodeLog, WadoAccessLog};
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
-use crate::log_entity::{DicomIngestLog, StorageLog, TranscodeLog, WadoAccessLog};
+use std::error::Error;
 
 /// DICOM 文件接收、转码、存储、WADO 访问日志
 pub const LOG_DICOM_INGEST: &str = "dicom_storescp";
@@ -14,10 +14,15 @@ pub const LOG_WADO_ACCESS: &str = "wado_access";
 //     pub client_ip: String,                           // 访问客户端 IP
 
 pub trait LogPublisher {
-    fn publish_dicom_storage(&self, topic:&str, log: &[DicomIngestLog]) -> Result<(), Box<dyn Error>>;
-    fn publish_transcode(&self, topic:&str, log: &[TranscodeLog]) -> Result<(), Box<dyn Error>>;
-    fn publish_wado_access(&self, topic:&str, log: &[WadoAccessLog]) -> Result<(), Box<dyn Error>>;
-    fn publish_storage(&self, topic:&str, log: &[StorageLog]) -> Result<(), Box<dyn Error>>;
+    fn publish_dicom_ingest(
+        &self,
+        topic: &str,
+        log: &[DicomIngestLog],
+    ) -> Result<(), Box<dyn Error>>;
+    fn publish_transcode(&self, topic: &str, log: &[TranscodeLog]) -> Result<(), Box<dyn Error>>;
+    fn publish_wado_access(&self, topic: &str, log: &[WadoAccessLog])
+    -> Result<(), Box<dyn Error>>;
+    fn publish_storage(&self, topic: &str, log: &[DbPersistLog]) -> Result<(), Box<dyn Error>>;
 }
 pub struct LogPulish {
     pub broker: String,
@@ -83,13 +88,22 @@ impl LogPulish {
         }
     }
 
-    pub fn create_producer(&self) -> Result<FutureProducer, Box<dyn Error>>  {
-        let producer =  ClientConfig::new()
+    pub fn create_producer(&self) -> Result<FutureProducer, Box<dyn Error>> {
+        let producer = ClientConfig::new()
             .set("bootstrap.servers", &self.broker)
             .set("message.timeout.ms", &self.message_timeout_ms.to_string())
-            .set("queue.buffering.max.messages", &self.queue_buffering_max_messages.to_string())
-            .set("queue.buffering.max.kbytes", &self.queue_buffering_max_kbytes.to_string())
-            .set("queue.buffering.max.ms", &self.queue_buffering_max_ms.to_string())
+            .set(
+                "queue.buffering.max.messages",
+                &self.queue_buffering_max_messages.to_string(),
+            )
+            .set(
+                "queue.buffering.max.kbytes",
+                &self.queue_buffering_max_kbytes.to_string(),
+            )
+            .set(
+                "queue.buffering.max.ms",
+                &self.queue_buffering_max_ms.to_string(),
+            )
             .set("batch.num.messages", &self.batch_num_messages.to_string())
             .set("linger.ms", &self.linger_ms.to_string())
             .set("compression.codec", &self.compression_codec)
