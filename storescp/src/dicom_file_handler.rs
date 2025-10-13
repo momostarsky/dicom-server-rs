@@ -2,9 +2,10 @@ use common::database_entities::DicomObjectMeta;
 use common::dicom_utils::get_tag_value;
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
+use common::uid_hash::uid_to_u64_deterministic_safe;
 use common::utils::get_logger;
 use dicom_dictionary_std::tags;
-use dicom_encoding::snafu::{ResultExt, Whatever};
+use dicom_encoding::snafu::{OptionExt, ResultExt, Whatever};
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
 use dicom_pixeldata::Transcode;
@@ -14,7 +15,6 @@ use slog::{debug, error, info};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::LazyLock;
-use common::uid_hash::uid_to_u64_deterministic_safe;
 
 /// 校验 DICOM StudyDate 格式是否符合 YYYYMMDD 格式
 fn validate_study_date_format(date_str: &str) -> Result<(), &'static str> {
@@ -133,8 +133,6 @@ pub(crate) async fn process_dicom_file(
         .trim_end_matches("\0")
         .to_string();
 
-
-
     let accession_number = obj
         .element(tags::ACCESSION_NUMBER)
         .whatever_context("Missing ACCESSION_NUMBER")?
@@ -191,70 +189,54 @@ pub(crate) async fn process_dicom_file(
         .whatever_context("failed to build DICOM meta file information")?;
     let mut file_obj = obj.with_exact_meta(file_meta);
 
-    let study_uid_hash_val = uid_to_u64_deterministic_safe(&study_uid);
-    let series_uid_hash_val = uid_to_u64_deterministic_safe(&series_uid);
+    let (study_uid_hash_v, series_uid_hash_v, dir_path) =
+        server_config::dicom_series_dir(tenant_id, &study_date, &study_uid, &series_uid, true)
+            .whatever_context(format!(
+        "failed to get dicom series dir: tenant_id={}, study_date={}, study_uid={}, series_uid={}",
+        tenant_id, study_date, study_uid, series_uid
+    ))?;
 
-    let fp = out_dir.ends_with("/");
-    let dir_path = match fp {
-        true => {
-            format!(
-                "{}{}/{}/{}/{}",
-                out_dir, tenant_id, study_date, study_uid_hash_val, series_uid_hash_val
-            )
-        }
-        false => {
-            format!(
-                "{}/{}/{}/{}/{}",
-                out_dir, tenant_id, study_date, study_uid_hash_val, series_uid_hash_val
-            )
-        }
-    };
-
-    debug!(logger, "create dir: {}", dir_path);
-
-
-    std::fs::create_dir_all(&dir_path).unwrap_or_else(|e| {
-        // 创建目录失败, 记录错误日志并 panic. 因为无法创建目录, 后续写文件操作也无法进行.程序立即退出.
-        //
-        // 原则上这是一个不应该出现的错误. 因为在程序启动的时候,已经检查了目录是否具有读写权限.
-        //
-        error!(
-            logger,
-            "create directory failed: {}, error: {}", dir_path, e
-        );
-        panic!("create directory failed: {}", dir_path);
-    });
-
-
-    let file_path = format!(
-        "{}/{}.dcm",
-        dir_path,
-        sop_instance_uid
-    );
+    let file_path = format!("{}/{}.dcm", dir_path, sop_instance_uid);
 
     info!(logger, "file path: {}", file_path);
-    let mut final_ts =ts.to_string();
+    let mut final_ts = ts.to_string();
     if !JS_SUPPORTED_TS.contains(ts) {
-        let target_ts = TransferSyntaxRegistry.get(JS_CHANGE_TO_TS.as_str()).unwrap();
-        match file_obj.transcode(target_ts){
+        let target_ts = TransferSyntaxRegistry
+            .get(JS_CHANGE_TO_TS.as_str())
+            .unwrap();
+        match file_obj.transcode(target_ts) {
             Ok(_) => {
                 file_obj
                     .write_to_file(&file_path)
-                    .whatever_context(format!("Save File To Disk Failed: {:?}", file_path))?;
+                    .whatever_context(format!(
+                        "transcode success, save file to disk failed: {:?}",
+                        file_path
+                    ))?;
                 final_ts = target_ts.uid().to_string();
-                info!(logger, "transcode success: {} -> {}", ts.to_string(), final_ts );
+                info!(
+                    logger,
+                    "transcode success: {} -> {}",
+                    ts.to_string(),
+                    final_ts
+                );
             }
             Err(e) => {
                 error!(logger, "transcode failed: {}", e);
                 file_obj
                     .write_to_file(&file_path)
-                    .whatever_context(format!("transcode failed, save file to disk failed: {:?}", file_path))?;
+                    .whatever_context(format!(
+                        "transcode failed, save file to disk failed: {:?}",
+                        file_path
+                    ))?;
             }
         }
     } else {
         file_obj
             .write_to_file(&file_path)
-            .whatever_context(format!("Save File To Disk Failed: {:?}", file_path))?;
+            .whatever_context(format!(
+                "not need transcode, save file to disk failed: {:?}",
+                file_path
+            ))?;
     }
 
     let fsize = std::fs::metadata(&file_path).unwrap().len();
@@ -273,8 +255,8 @@ pub(crate) async fn process_dicom_file(
         number_of_frames: frames,
         created_time: None,
         updated_time: None,
-        series_uid_hash: series_uid_hash_val,
-        study_uid_hash: study_uid_hash_val,
+        series_uid_hash: series_uid_hash_v,
+        study_uid_hash: study_uid_hash_v,
     });
     Ok(())
 }

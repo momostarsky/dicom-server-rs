@@ -6,6 +6,7 @@ use common::database_entities::{SeriesEntity, StudyEntity};
 use common::dicom_json_helper;
 use common::dicom_json_helper::walk_directory;
 use common::dicom_utils::get_tag_values;
+use common::server_config::{dicom_series_dir, dicom_study_dir, json_metadata_dir};
 use dicom_dictionary_std::tags;
 use dicom_object::OpenFileOptions;
 use serde::Deserialize;
@@ -46,40 +47,10 @@ fn is_accept_type_supported(accept_header: &str, expected_type: &str) -> bool {
         .any(|&t| t.to_lowercase() == expected_type_lower)
 }
 
-fn get_redis_key_for_seirs(tenant_id: &str, series_uid: &str) -> String {
-    format!("wado:{}:{}", tenant_id, series_uid)
+fn get_redis_key_for_series(tenant_id: &str, series_uid: &str) -> String {
+    format!("wado:{}:series:{}", tenant_id, series_uid)
 }
-// 提取构建DICOM目录路径的逻辑
-fn build_dicom_study_directory(
-    dicom_storage_path: &str,
-    tenant_id: &str,
-    study_date: &chrono::NaiveDate,
-    study_uid: &str,
-) -> String {
-    format!(
-        "{}/{}/{}/{}",
-        dicom_storage_path,
-        tenant_id,
-        study_date.format("%Y%m%d"),
-        study_uid
-    )
-}
-fn build_dicom_series_directory(
-    dicom_storage_path: &str,
-    tenant_id: &str,
-    study_date: &chrono::NaiveDate,
-    study_uid: &str,
-    series_uid: &str,
-) -> String {
-    format!(
-        "{}/{}/{}/{}/{}",
-        dicom_storage_path,
-        tenant_id,
-        study_date.format("%Y%m%d"),
-        study_uid,
-        series_uid
-    )
-}
+
 // 提取重复的获取study_info逻辑
 async fn get_study_info_with_cache(
     tenant_id: &str,
@@ -154,7 +125,7 @@ async fn get_series_info_with_cache(
     app_state: &web::Data<AppState>,
 ) -> Result<SeriesEntity, HttpResponse> {
     let log = app_state.log.clone();
-    let redis_key = get_redis_key_for_seirs(tenant_id, series_uid);
+    let redis_key = get_redis_key_for_series(tenant_id, series_uid);
 
     // 首先尝试从Redis获取series_info
     let series_info =
@@ -253,26 +224,31 @@ async fn retrieve_study_metadata(
         }
     };
     info!(log, "Study Info: {:?}", study_info);
-    let dicom_storage_path = &app_state.config.local_storage.dicom_store_path;
-
-    let dicom_dir = build_dicom_study_directory(
-        dicom_storage_path,
+    let (_study_uid_hash, dicom_dir) = match dicom_study_dir(
         tenant_id.as_str(),
-        &study_info.study_date,
-        &study_uid,
-    );
+        &study_info.study_date_origin,
+        study_uid.as_str(),
+        false,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .body(format!("Failed to generate DICOM directory: {}", e));
+        }
+    };
 
-    if !std::path::Path::new(&dicom_dir).exists() {
-        return HttpResponse::NotFound().body(format!("DICOM directory not found: {}", dicom_dir));
-    }
+    let   json_dir= match json_metadata_dir(
+        tenant_id.as_str(),
+        &study_info.study_date_origin,
+        true,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .body(format!("Failed to generate JSON directory: {}", e));
+        }
+    };
 
-    let json_dir = format!(
-        "{}/{}/studies",
-        &app_state.config.local_storage.json_store_path, tenant_id
-    );
-    if !std::path::Path::new(&json_dir).exists() {
-        std::fs::create_dir_all(&json_dir).expect("create_dir_all failed for JSON directory");
-    }
     let json_path = format!("{}/{}.json", json_dir, study_uid);
 
     if !std::path::Path::new(&json_path).exists() {
@@ -339,13 +315,19 @@ async fn retrieve_series_metadata(
         Err(response) => return response,
     };
     info!(log, "Series Info: {:?}", series_info);
-    let json_dir = format!(
-        "{}/{}/series",
-        &app_state.config.local_storage.json_store_path, tenant_id
-    );
-    if !std::path::Path::new(&json_dir).exists() {
-        std::fs::create_dir_all(&json_dir).expect("create_dir_all failed for JSON directory");
-    }
+    info!(log, "Study Info: {:?}", study_info);
+
+    let   json_dir= match json_metadata_dir(
+        tenant_id.as_str(),
+        &study_info.study_date_origin,
+        true,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .body(format!("Failed to generate JSON directory: {}", e));
+        }
+    };
     let json_file_path = format!("{}/{}.json", json_dir, series_uid);
     //如果json_file_path 存在,则输出json
     if std::path::Path::new(&json_file_path).exists() {
@@ -360,17 +342,22 @@ async fn retrieve_series_metadata(
         }
     }
 
-    let storage_path = app_state.config.local_storage.dicom_store_path.clone();
-    let dicom_dir = build_dicom_series_directory(
-        &storage_path,
+    info!(log, "Study Info: {:?}", study_info);
+    let (_study_uid_hash, _series_uid_hash, dicom_dir) = match dicom_series_dir(
         tenant_id.as_str(),
-        &study_info.study_date,
-        &series_info.study_instance_uid,
-        &series_info.series_instance_uid,
-    );
-    if !std::path::Path::new(&dicom_dir).exists() {
-        return HttpResponse::NotFound().body(format!("DICOM directory not found: {}", dicom_dir));
-    }
+        &study_info.study_date_origin,
+        study_uid.as_str(),
+        series_uid.as_str(),
+        false,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .body(format!("Failed to generate DICOM directory: {}", e));
+        }
+    };
+
+
 
     let files = match walk_directory(dicom_dir) {
         Ok(files) => files,
@@ -429,7 +416,7 @@ async fn retrieve_series_metadata(
                     let redis_config = &app_state.config.redis;
                     set_redis_value_with_expiry_and_config::<String>(
                         redis_config,
-                        &get_redis_key_for_seirs(&tenant_id, &series_uid),
+                        &get_redis_key_for_series(&tenant_id, &series_uid),
                         &series_info_json,
                         2 * 60 * 60,
                     );
@@ -507,18 +494,25 @@ async fn retrieve_instance_impl(
         Ok(info) => info,
         Err(response) => return response,
     };
-    let storage_path = &app_state.config.local_storage.dicom_store_path;
-    let series_dicom_dir = build_dicom_series_directory(
-        storage_path,
+    info!(log, "Series Info: {:?}", series_info);
+
+
+
+    let (_study_uid_hash,_series_uid_hash_v, dicom_dir) = match dicom_series_dir(
         tenant_id.as_str(),
-        &study_info.study_date,
-        &study_info.study_instance_uid,
-        &series_info.series_instance_uid,
-    );
-    if !std::path::Path::new(&series_dicom_dir).exists() {
-        return HttpResponse::NotFound().body(format!("Series DICOM dir not found: {}", series_dicom_dir));
-    }
-    let dicom_file = build_dicom_instance_file_path(&series_dicom_dir, &sop_uid);
+        &study_info.study_date_origin,
+        study_uid.as_str(),
+        series_uid.as_str(),
+        false,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .body(format!("Failed to generate DICOM directory: {}", e));
+        }
+    };
+
+    let dicom_file = build_dicom_instance_file_path(&dicom_dir, &sop_uid);
     match OpenFileOptions::new().open_file(&dicom_file) {
         Ok(obj) => match obj.get(tags::PIXEL_DATA) {
             Some(element) => match element.to_bytes() {
@@ -539,8 +533,8 @@ async fn retrieve_instance_impl(
     }
 }
 
-fn build_dicom_instance_file_path(series_dir: &str, sop_uid: &str) -> String {
-    format!("{}/{}.dcm", series_dir, sop_uid)
+fn build_dicom_instance_file_path(dicom_dir: &str, sop_uid: &str) -> String {
+    format!("{}/{}.dcm", dicom_dir, sop_uid)
 }
 
 #[get("/echo")]

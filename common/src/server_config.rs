@@ -1,3 +1,4 @@
+use crate::uid_hash::uid_to_u64_deterministic_safe;
 use config::{Config, ConfigError, Environment, File};
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
@@ -47,7 +48,6 @@ pub struct DicomStoreScpConfig {
     pub ae_title: String,
     pub unsupported_ts_change_to: String,
     pub cornerstonejs_supported_transfer_syntax: Vec<String>,
-
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -132,7 +132,7 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
             };
 
             // 5. 解析配置到结构体
-            let app_config: AppConfig = match settings.try_deserialize() {
+            let mut app_config: AppConfig = match settings.try_deserialize() {
                 Ok(app_config) => app_config,
                 Err(err) => panic!("Error parsing config: {}", err),
             };
@@ -152,10 +152,16 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
                 "local_storage:dicom_store_path {:?}",
                 app_config.local_storage.dicom_store_path
             );
+            if app_config.local_storage.dicom_store_path.ends_with("/") {
+                app_config.local_storage.dicom_store_path.pop();
+            }
             println!(
                 "local_storage:json_store_path {:?}",
                 app_config.local_storage.json_store_path
             );
+            if app_config.local_storage.json_store_path.ends_with("/") {
+                app_config.local_storage.json_store_path.pop();
+            }
             println!("dicom_store_scp:port {:?}", app_config.dicom_store_scp.port);
             println!(
                 "dicom_store_scp:ae_title {:?}",
@@ -291,4 +297,67 @@ pub fn generate_database_connection(app_config: &AppConfig) -> Result<String, St
     println!("database connection string: {}", db_conn);
 
     Ok(db_conn)
+}
+
+/// 获取 dicom study 存储路径: storage_root/{tenant_id}/{study_date}/{study_uid}
+/// 注意: 该路径下可能包含多个 series 目录
+pub fn dicom_study_dir(
+    tenant_id: &str,
+    study_date: &str,
+    study_uid: &str,
+    create_not_exists: bool,
+) -> Result<(u64, String), String> {
+    let app_config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
+    let study_uid_hash = uid_to_u64_deterministic_safe(study_uid);
+    let dicom_store_path = &app_config.local_storage.dicom_store_path;
+    let study_dir = format!(
+        "{}/{}/{}/{}",
+        dicom_store_path, tenant_id, study_date, study_uid
+    );
+    if create_not_exists {
+        std::fs::create_dir_all(&study_dir)
+            .map_err(|e| format!("Failed to create directory '{}': {}", study_dir, e))?;
+    }
+    Ok((study_uid_hash, study_dir))
+}
+
+ pub fn json_metadata_dir(
+    tenant_id: &str,
+    study_date: &str,
+    create_not_exists: bool,
+) -> Result<String, String> {
+    let app_config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
+    let json_store_path = &app_config.local_storage.json_store_path;
+    let study_dir = format!("{}/{}/metadata/{}", json_store_path, tenant_id, study_date);
+    if create_not_exists {
+        std::fs::create_dir_all(&study_dir)
+            .map_err(|e| format!("Failed to create directory '{}': {}", study_dir, e))?;
+    }
+    Ok(study_dir)
+}
+
+
+/// 获取 dicom series 存储路径: storage_root/{tenant_id}/{study_date}/{study_uid}/{series_uid}
+pub fn dicom_series_dir(
+    tenant_id: &str,
+    study_date: &str,
+    study_uid: &str,
+    series_uid: &str,
+    create_not_exists: bool,
+) -> Result<(u64, u64, String), String> {
+    let (study_uid_hash, series_uid_hash) = (
+        uid_to_u64_deterministic_safe(study_uid),
+        uid_to_u64_deterministic_safe(series_uid),
+    );
+    let app_config = load_config().unwrap();
+    let dicom_store_path = &app_config.local_storage.dicom_store_path;
+    let series_dir = format!(
+        "{}/{}/{}/{}/{}",
+        dicom_store_path, tenant_id, study_date, study_uid, series_uid
+    );
+    if create_not_exists {
+        std::fs::create_dir_all(&series_dir)
+            .map_err(|e| format!("Failed to create directory '{}': {}", series_dir, e))?;
+    }
+    Ok((study_uid_hash, series_uid_hash, series_dir))
 }
