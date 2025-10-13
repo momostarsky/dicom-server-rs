@@ -172,11 +172,17 @@ pub struct DicomObjectMeta {
     #[serde(rename = "updated_time")]
     pub updated_time: Option<NaiveDateTime>,
     #[serde(rename = "series_uid_hash")]
-    pub series_uid_hash: u64,            // 新增字段
+    pub series_uid_hash: u64,
     #[serde(rename = "study_uid_hash")]
-    pub study_uid_hash: u64,             // 新增字段
-
+    pub study_uid_hash: u64,
+    #[serde(rename = "accession_number")]
     pub accession_number: String,
+    #[serde(rename = "target_ts")]
+    pub target_ts: String,
+    #[serde(rename = "study_date")]
+    pub study_date: String,
+    #[serde(rename = "transfer_status")]
+    pub transfer_status: String,
 }
 // 为 DicomObjectMeta 实现 Hash trait 以便可以在 HashSet 中使用
 impl Hash for DicomObjectMeta {

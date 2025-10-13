@@ -4,7 +4,7 @@ use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
 use common::utils::get_logger;
 use dicom_dictionary_std::tags;
-use dicom_encoding::snafu::{ ResultExt, Whatever};
+use dicom_encoding::snafu::{ResultExt, Whatever};
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
 use dicom_pixeldata::Transcode;
@@ -96,7 +96,7 @@ pub(crate) async fn process_dicom_file(
     instance_buffer: &[u8],    //DICOM文件的字节数组或是二进制流
     tenant_id: &String,        //机构ID,或是医院ID, 用于区分多个医院.
     ts: &String,               //传输语法
-    sop_instance_uid: &String //当前文件的SOP实例ID
+    sop_instance_uid: &String, //当前文件的SOP实例ID
 ) -> Result<DicomObjectMeta, Whatever> {
     let root_logger = get_logger();
     let logger = root_logger.new(o!("storescp"=>"process_dicom_file"));
@@ -197,6 +197,7 @@ pub(crate) async fn process_dicom_file(
 
     info!(logger, "file path: {}", file_path);
     let mut final_ts = ts.to_string();
+    let mut transcode_status = "no_transcode";
     if !JS_SUPPORTED_TS.contains(ts) {
         let target_ts = TransferSyntaxRegistry
             .get(JS_CHANGE_TO_TS.as_str())
@@ -210,9 +211,11 @@ pub(crate) async fn process_dicom_file(
                     ts.to_string(),
                     final_ts
                 );
+                transcode_status = "transcode_success";
             }
             Err(e) => {
                 error!(logger, "transcode failed: {}", e);
+                transcode_status = "transcode_failed";
             }
         }
     } else {
@@ -228,8 +231,7 @@ pub(crate) async fn process_dicom_file(
     // 修复后：
     let saved_path = PathBuf::from(file_path); // 此时可以安全转移所有权
 
-
-    Ok( DicomObjectMeta {
+    Ok(DicomObjectMeta {
         tenant_id: tenant_id.to_string(),
         patient_id: pat_id.to_string(),
         study_uid: study_uid.to_string(),
@@ -237,7 +239,10 @@ pub(crate) async fn process_dicom_file(
         sop_uid: sop_instance_uid.to_string(),
         file_path: String::from(saved_path.to_str().unwrap()),
         file_size: fsize as i64,
-        transfer_syntax_uid: final_ts.to_string(),
+        transfer_syntax_uid: ts.to_string(),
+        target_ts: final_ts.to_string(),
+        study_date: study_date.to_string(),
+        transfer_status: transcode_status.to_string(),
         number_of_frames: frames,
         created_time: None,
         updated_time: None,
