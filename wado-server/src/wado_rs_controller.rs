@@ -208,20 +208,9 @@ async fn retrieve_study_metadata(
     //     ));
     // }
 
-    let study_info = match app_state.db.get_study_info(&tenant_id, &study_uid).await {
-        Ok(Some(info)) => info,
-        Ok(None) => {
-            return HttpResponse::NotFound().body(format!(
-                "retrieve_instance not found: {},{}",
-                tenant_id, study_uid
-            ));
-        }
-        Err(e) => {
-            return HttpResponse::InternalServerError().body(format!(
-                "retrieve_instance Failed to retrieve study info: {}",
-                e
-            ));
-        }
+    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state).await {
+        Ok(info) => info,
+        Err(response) => return response,
     };
     info!(log, "Study Info: {:?}", study_info);
     let (_study_uid_hash, dicom_dir) = match dicom_study_dir(
@@ -237,11 +226,8 @@ async fn retrieve_study_metadata(
         }
     };
 
-    let   json_dir= match json_metadata_dir(
-        tenant_id.as_str(),
-        &study_info.study_date_origin,
-        true,
-    ) {
+    let json_dir = match json_metadata_dir(tenant_id.as_str(), &study_info.study_date_origin, true)
+    {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -317,11 +303,8 @@ async fn retrieve_series_metadata(
     info!(log, "Series Info: {:?}", series_info);
     info!(log, "Study Info: {:?}", study_info);
 
-    let   json_dir= match json_metadata_dir(
-        tenant_id.as_str(),
-        &study_info.study_date_origin,
-        true,
-    ) {
+    let json_dir = match json_metadata_dir(tenant_id.as_str(), &study_info.study_date_origin, true)
+    {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -356,8 +339,6 @@ async fn retrieve_series_metadata(
                 .body(format!("Failed to generate DICOM directory: {}", e));
         }
     };
-
-
 
     let files = match walk_directory(dicom_dir) {
         Ok(files) => files,
@@ -496,9 +477,7 @@ async fn retrieve_instance_impl(
     };
     info!(log, "Series Info: {:?}", series_info);
 
-
-
-    let (_study_uid_hash,_series_uid_hash_v, dicom_dir) = match dicom_series_dir(
+    let (_study_uid_hash, _series_uid_hash_v, dicom_dir) = match dicom_series_dir(
         tenant_id.as_str(),
         &study_info.study_date_origin,
         study_uid.as_str(),
