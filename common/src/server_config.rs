@@ -155,6 +155,45 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
             if app_config.local_storage.dicom_store_path.ends_with("/") {
                 app_config.local_storage.dicom_store_path.pop();
             }
+            match std::fs::exists(&app_config.local_storage.dicom_store_path) {
+                Ok(exists) => {
+                    if !exists {
+                        std::fs::create_dir_all(&app_config.local_storage.dicom_store_path)
+                            .unwrap_or_else(|e| {
+                                panic!("Could not create dicom_store_path directory: {}", e);
+                            });
+                    }
+                }
+                Err(e) => {
+                    panic!(
+                        "Could not check if dicom_store_path directory exists: {}",
+                        e
+                    );
+                }
+            }
+            // TODO :验证能否在dicom_storage_path 下面创建目录及写入文件
+            let test_dir = format!(
+                "{}/{}",
+                app_config.local_storage.dicom_store_path, "1.222/1.444/1.555"
+            );
+            std::fs::create_dir_all(&test_dir).unwrap_or_else(|e| {
+                panic!("Could not create test_dir directory: {}", e);
+            });
+            let test_file = format!("{}/test.dcm", test_dir);
+            std::fs::write(
+                &test_file,
+                b"903290903234092409383404903409289899889jkkallklkj",
+            )
+            .unwrap_or_else(|e| {
+                panic!("Could not write test_file file: {}", e);
+            });
+            std::fs::remove_file(&test_file).unwrap_or_else(|e| {
+                panic!("Could not remove test_file file: {}", e);
+            });
+            std::fs::remove_dir_all(&test_dir).unwrap_or_else(|e| {
+                panic!("Could not remove test_dir directory: {}", e);
+            });
+
             println!(
                 "local_storage:json_store_path {:?}",
                 app_config.local_storage.json_store_path
@@ -162,6 +201,43 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
             if app_config.local_storage.json_store_path.ends_with("/") {
                 app_config.local_storage.json_store_path.pop();
             }
+
+            match std::fs::exists(&app_config.local_storage.json_store_path) {
+                Ok(exists) => {
+                    if !exists {
+                        std::fs::create_dir_all(&app_config.local_storage.json_store_path)
+                            .unwrap_or_else(|e| {
+                                panic!("Could not create json_store_path directory: {}", e);
+                            });
+                    }
+                }
+                Err(e) => {
+                    panic!("Could not check if json_store_path directory exists: {}", e);
+                }
+            }
+            // TODO :验证能否在json_store_path 下面创建目录及写入文件
+            let json_test_dir = format!(
+                "{}/{}",
+                app_config.local_storage.json_store_path, "1.222/1.444/1.555"
+            );
+            std::fs::create_dir_all(&json_test_dir).unwrap_or_else(|e| {
+                panic!("Could not create json_test_dir directory: {}", e);
+            });
+            let json_test_file = format!("{}/test.json", json_test_dir);
+            std::fs::write(
+                &json_test_file,
+                b"903290903234092409383404903409289899889jkkallklkj",
+            )
+            .unwrap_or_else(|e| {
+                panic!("Could not write json_test_file file: {}", e);
+            });
+            std::fs::remove_file(&json_test_file).unwrap_or_else(|e| {
+                panic!("Could not remove json_test_file file: {}", e);
+            });
+            std::fs::remove_dir_all(&json_test_dir).unwrap_or_else(|e| {
+                panic!("Could not remove json_test_dir directory: {}", e);
+            });
+
             println!("dicom_store_scp:port {:?}", app_config.dicom_store_scp.port);
             println!(
                 "dicom_store_scp:ae_title {:?}",
@@ -321,7 +397,7 @@ pub fn dicom_study_dir(
     Ok((study_uid_hash, study_dir))
 }
 
- pub fn json_metadata_dir(
+pub fn json_metadata_dir(
     tenant_id: &str,
     study_date: &str,
     create_not_exists: bool,
@@ -335,7 +411,6 @@ pub fn dicom_study_dir(
     }
     Ok(study_dir)
 }
-
 
 /// 获取 dicom series 存储路径: storage_root/{tenant_id}/{study_date}/{study_uid}/{series_uid}
 pub fn dicom_series_dir(

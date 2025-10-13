@@ -25,8 +25,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         uncompressed_only,
         promiscuous,
         max_pdu_length,
-        out_dir: _,
-        json_store_path: _json_store_path,
+       
         port: _port,
         non_blocking: _non_blocking,
     } = args;

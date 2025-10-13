@@ -52,9 +52,7 @@ struct App {
         value_parser(clap::value_parser!(u32).range(4096..=131_072))
     )]
     max_pdu_length: u32,
-    /// Output directory for incoming objects
-    #[arg(short = 'o', default_value = ".")]
-    out_dir: PathBuf,
+
     /// Which port to listen on
     #[arg(short, default_value = "11111")]
     port: u16,
@@ -62,8 +60,7 @@ struct App {
     #[arg(short, long, default_value = "true")]
     non_blocking: bool,
 
-    #[arg(short = 'j', long = "json-store-path", default_value = ".")]
-    json_store_path: PathBuf,
+
 }
 
 
@@ -206,60 +203,6 @@ async fn main() {
     app.port = scp_config.port;
 
     app.calling_ae_title = scp_config.ae_title;
-    let store_cfg = config.local_storage;
-
-    app.out_dir = store_cfg.dicom_store_path.parse().unwrap();
-    app.json_store_path = store_cfg.json_store_path.parse().unwrap();
-
-    let out_dir = std::fs::exists(&app.out_dir);
-    match out_dir {
-        Ok(exists) => {
-            if exists {
-                info!(log, "Output Directory Exists");
-            } else {
-                std::fs::create_dir_all(&app.out_dir).unwrap_or_else(|e| {
-                    error!(log, "Could not create output directory: {}", e);
-                    std::process::exit(-2);
-                });
-            }
-        }
-        Err(_) => {
-            std::fs::create_dir_all(&app.out_dir).unwrap_or_else(|e| {
-                error!(log, "Could not create output directory: {}", e);
-                std::process::exit(-2);
-            });
-        }
-    }
-    //TODO:  测试 out_dir  是否具有创建目录及写入权限
-    test_directory_permissions(&log, &app.out_dir).unwrap_or_else(|e| {
-        error!(log, "Directory permission test failed: {}", e);
-        std::process::exit(-2);
-    });
-
-    let json_dir = std::fs::exists(&app.json_store_path);
-
-    match json_dir {
-        Ok(exists) => {
-            if exists {
-                info!(log, "Json Store Directory Exists");
-            } else {
-                std::fs::create_dir_all(&app.json_store_path).unwrap_or_else(|e| {
-                    error!(log, "Could not create json store directory: {}", e);
-                    std::process::exit(-2);
-                });
-            }
-        }
-        Err(_) => {
-            std::fs::create_dir_all(&app.json_store_path).unwrap_or_else(|e| {
-                error!(log, "Could not create json store directory: {}", e);
-                std::process::exit(-2);
-            });
-        }
-    }
-    test_directory_permissions(&log, &app.json_store_path).unwrap_or_else(|e| {
-        error!(log, "Directory permission test failed: {}", e);
-        std::process::exit(-2);
-    });
 
     info!(log, "License Server Validation Success");
 
@@ -396,26 +339,7 @@ async fn run_sync(args: App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn test_directory_permissions(log: &slog::Logger, out_dir: &PathBuf) -> Result<(), std::io::Error> {
-    info!(log, "Test Directory: {}", out_dir.display());
-    let test_dir = format!("{}/{}", out_dir.display(), "1.222/1.444/1.555");
-    std::fs::create_dir_all(&test_dir)?;
-    info!(log, "Test Directory: {}  Create Success !", test_dir);
 
-    // 测试写入权限
-    let test_file = format!("{}/test.dcm", test_dir);
-    std::fs::write(
-        &test_file,
-        b"903290903234092409383404903409289899889jkkallklkj",
-    )?;
-    info!(log, "Test File: {}  Create Success !", test_file);
-
-    // 清理测试文件和目录
-    std::fs::remove_file(&test_file)?;
-    std::fs::remove_dir_all(&test_dir)?;
-
-    Ok(())
-}
 
 #[cfg(test)]
 mod tests {
