@@ -282,7 +282,7 @@ pub(crate) async fn classify_and_publish_dicom_messages(
         return Ok(());
     }
 
-    let topic_name = storage_producer.topic.clone();
+    let topic_name = storage_producer.topic();
 
     match common::utils::publish_messages(storage_producer, &dicom_message_lists).await {
         Ok(_) => {
@@ -301,7 +301,7 @@ pub(crate) async fn classify_and_publish_dicom_messages(
         }
     }
 
-    let log_topic_name = log_producer.topic.clone();
+    let log_topic_name = log_producer.topic();
     match common::utils::publish_messages(log_producer, &dicom_message_lists).await {
         Ok(_) => {
             info!(

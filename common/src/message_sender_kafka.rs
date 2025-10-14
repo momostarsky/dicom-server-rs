@@ -14,9 +14,12 @@ use crate::server_config;
 
 pub struct KafkaMessagePublisher {
     producer: FutureProducer,
-    pub topic: String,
+    topic: String,
 }
 impl KafkaMessagePublisher {
+    pub fn topic(&self) -> &str {
+        &self.topic
+    }
     pub fn new(topic_name: String) -> Self {
         let app_config = server_config::load_config().expect("Failed to load config");
         let config = app_config.kafka;
