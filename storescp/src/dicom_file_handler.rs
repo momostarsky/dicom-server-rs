@@ -274,8 +274,6 @@ pub(crate) async fn classify_and_publish_dicom_messages(
     dicom_message_lists: &Vec<DicomObjectMeta>,
     storage_producer: &KafkaMessagePublisher,
     log_producer: &KafkaMessagePublisher,
-    queue_topic_main: &str,
-    queue_topic_log: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let root_logger = get_logger();
     let logger = root_logger.new(o!("storescp"=>"classify_and_publish_dicom_messages"));
@@ -284,36 +282,39 @@ pub(crate) async fn classify_and_publish_dicom_messages(
         return Ok(());
     }
 
+    let topic_name = storage_producer.topic.clone();
+
     match common::utils::publish_messages(storage_producer, &dicom_message_lists).await {
         Ok(_) => {
             info!(
                 logger,
                 "Successfully published {} supported messages to Kafka: {}",
                 dicom_message_lists.len(),
-                queue_topic_main
+                topic_name
             );
         }
         Err(e) => {
             error!(
                 logger,
-                "Failed to publish messages to Kafka: {}, topic: {}", e, queue_topic_main
+                "Failed to publish messages to Kafka: {}, topic: {}", e, topic_name
             );
         }
     }
 
+    let log_topic_name = log_producer.topic.clone();
     match common::utils::publish_messages(log_producer, &dicom_message_lists).await {
         Ok(_) => {
             info!(
                 logger,
                 "Successfully published {} messages to Kafka: {}",
                 dicom_message_lists.len(),
-                queue_topic_log
+                log_topic_name
             );
         }
         Err(e) => {
             error!(
                 logger,
-                "Failed to publish log messages to Kafka: {}, topic: {}", e, queue_topic_log
+                "Failed to publish log messages to Kafka: {}, topic: {}", e, log_topic_name
             );
         }
     }

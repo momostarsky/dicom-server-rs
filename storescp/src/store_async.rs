@@ -2,8 +2,6 @@ use crate::{
     create_cecho_response, create_cstore_response, dicom_file_handler, transfer::ABSTRACT_SYNTAXES,
     App,
 };
-use dicom_core::chrono;
-use dicom_core::chrono::DateTime;
 
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
@@ -16,7 +14,6 @@ use dicom_ul::{pdu::PDataValueType, Pdu};
 use slog::o;
 
 use crate::dicom_file_handler::classify_and_publish_dicom_messages;
-use logstate::log_entity::{LogStatus, LogType};
 use slog::{debug, info, warn};
 
 pub async fn run_store_async(
@@ -103,7 +100,8 @@ pub async fn run_store_async(
     let log_producer = KafkaMessagePublisher::new(queue_topic_log.parse().unwrap());
 
     let mut dicom_message_lists: Vec<common::dicom_object_meta::DicomObjectMeta> = vec![];
-
+    let ip_address = peer.ip().to_string();
+    let client_ae_title = association.client_ae_title().to_string();
     loop {
         match association.receive().await {
             Ok(mut pdu) => {
@@ -212,8 +210,8 @@ pub async fn run_store_async(
                                     &issue_patient_id,
                                     ts,
                                     &sop_instance_uid,
-                                    peer.ip().to_string(),
-                                    association.client_ae_title().to_string(),
+                                    ip_address.clone(),
+                                    client_ae_title.clone(),
                                 )
                                 .await
                                 {
@@ -242,8 +240,6 @@ pub async fn run_store_async(
                                         &dicom_message_lists,
                                         &storage_producer,
                                         &log_producer,
-                                        queue_topic_main,
-                                        queue_topic_log,
                                     )
                                     .await
                                     {
@@ -353,8 +349,6 @@ pub async fn run_store_async(
             &dicom_message_lists,
             &storage_producer,
             &log_producer,
-            queue_topic_main,
-            queue_topic_log,
         )
         .await
         {

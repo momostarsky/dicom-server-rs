@@ -14,7 +14,7 @@ use crate::server_config;
 
 pub struct KafkaMessagePublisher {
     producer: FutureProducer,
-    topic: String,
+    pub topic: String,
 }
 impl KafkaMessagePublisher {
     pub fn new(topic_name: String) -> Self {

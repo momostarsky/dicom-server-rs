@@ -85,7 +85,8 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
 
     let storage_producer = KafkaMessagePublisher::new(queue_topic_main.parse().unwrap());
     let log_producer = KafkaMessagePublisher::new(queue_topic_log.parse().unwrap());
-
+    let ip_address = peer.ip().to_string();
+    let client_ae_title = association.client_ae_title().to_string();
     let mut dicom_message_lists = vec![];
     loop {
         match association.receive() {
@@ -203,8 +204,8 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                     &issue_patient_id,
                                     ts,
                                     &sop_instance_uid,
-                                    peer.to_string(),
-                                    association.client_ae_title().to_string(),
+                                    ip_address.clone(),
+                                    client_ae_title.clone(),
                                 )
                                 .await
                                 {
@@ -238,8 +239,6 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                         &dicom_message_lists,
                                         &storage_producer,
                                         &log_producer,
-                                        queue_topic_main,
-                                        queue_topic_log,
                                     )
                                     .await
                                     {
@@ -356,8 +355,6 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
             &dicom_message_lists,
             &storage_producer,
             &log_producer,
-            queue_topic_main,
-            queue_topic_log,
         )
         .await
         {
