@@ -1,7 +1,6 @@
-use std::hash::{Hash, Hasher};
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+use std::hash::{Hash, Hasher};
 
 #[derive(Clone, Debug,Serialize,Deserialize)]
 #[non_exhaustive]
