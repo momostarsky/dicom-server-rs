@@ -225,7 +225,7 @@ async fn change_transfer_syntax(
             messages_to_process.len()
         );
         // 创建数据库提供者
-        let db_provider = match database_factory::create_db_instance().await {
+        match database_factory::create_db_instance().await {
             Some(provider) => provider,
             None => {
                 tracing::error!("Failed to create database provider: provider is None");
