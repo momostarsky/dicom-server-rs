@@ -1,9 +1,20 @@
 use std::hash::{Hash, Hasher};
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+#[derive(Clone, Debug,Serialize,Deserialize)]
+#[non_exhaustive]
+pub enum TransferStatus {
+    NoNeedTransfer,
+    Success,
+    Failed,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DicomObjectMeta {
+    #[serde(rename = "trace_id")]
+    pub trace_id: String,
     #[serde(rename = "tenant_id")]
     pub tenant_id: String,
     #[serde(rename = "patient_id")]
@@ -23,9 +34,9 @@ pub struct DicomObjectMeta {
     #[serde(rename = "number_of_frames")]
     pub number_of_frames: i32,
     #[serde(rename = "created_time")]
-    pub created_time: Option<NaiveDateTime>,
+    pub created_time:  NaiveDateTime,
     #[serde(rename = "updated_time")]
-    pub updated_time: Option<NaiveDateTime>,
+    pub updated_time: NaiveDateTime,
     #[serde(rename = "series_uid_hash")]
     pub series_uid_hash: u64,
     #[serde(rename = "study_uid_hash")]
@@ -37,8 +48,10 @@ pub struct DicomObjectMeta {
     #[serde(rename = "study_date")]
     pub study_date: String,
     #[serde(rename = "transfer_status")]
-    pub transfer_status: String,
+    pub transfer_status: TransferStatus,
+    #[serde(rename = "source_ip")]
     pub source_ip: String,
+    #[serde(rename = "source_ae")]
     pub source_ae: String,
 }
 // 为 DicomObjectMeta 实现 Hash trait 以便可以在 HashSet 中使用

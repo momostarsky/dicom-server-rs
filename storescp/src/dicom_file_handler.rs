@@ -1,8 +1,9 @@
-use common::dicom_object_meta::DicomObjectMeta;
+use common::dicom_object_meta::{DicomObjectMeta, TransferStatus};
 use common::dicom_utils::get_tag_value;
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
 use common::utils::get_logger;
+use dicom_core::chrono::Utc;
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu::{ResultExt, Whatever};
 use dicom_encoding::TransferSyntaxIndex;
@@ -14,6 +15,7 @@ use slog::{error, info};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::LazyLock;
+use uuid::Uuid;
 
 /// 校验 DICOM StudyDate 格式是否符合 YYYYMMDD 格式
 fn validate_study_date_format(date_str: &str) -> Result<(), &'static str> {
@@ -199,7 +201,7 @@ pub(crate) async fn process_dicom_file(
 
     info!(logger, "file path: {}", file_path);
     let mut final_ts = ts.to_string();
-    let mut transcode_status = "no_transcode";
+    let mut transcode_status = TransferStatus::NoNeedTransfer;
     if !JS_SUPPORTED_TS.contains(ts) {
         let target_ts = TransferSyntaxRegistry
             .get(JS_CHANGE_TO_TS.as_str())
@@ -213,11 +215,11 @@ pub(crate) async fn process_dicom_file(
                     ts.to_string(),
                     final_ts
                 );
-                transcode_status = "transcode_success";
+                transcode_status = TransferStatus::Success;
             }
             Err(e) => {
                 error!(logger, "transcode failed: {}", e);
-                transcode_status = "transcode_failed";
+                transcode_status = TransferStatus::Failed;
             }
         }
     } else {
@@ -232,8 +234,11 @@ pub(crate) async fn process_dicom_file(
     let fsize = std::fs::metadata(&file_path).unwrap().len();
     // 修复后：
     let saved_path = PathBuf::from(file_path); // 此时可以安全转移所有权
-
+    let uuid_v7 = Uuid::now_v7();
+    let trace_uid = uuid_v7.to_string(); // 或直接用 format!("{}", uuid_v7)
+    let cdate = Utc::now().naive_utc();
     Ok(DicomObjectMeta {
+        trace_id: trace_uid,
         tenant_id: tenant_id.to_string(),
         patient_id: pat_id.to_string(),
         study_uid: study_uid.to_string(),
@@ -244,10 +249,10 @@ pub(crate) async fn process_dicom_file(
         transfer_syntax_uid: ts.to_string(),
         target_ts: final_ts.to_string(),
         study_date: study_date.to_string(),
-        transfer_status: transcode_status.to_string(),
+        transfer_status: transcode_status,
         number_of_frames: frames,
-        created_time: None,
-        updated_time: None,
+        created_time: cdate,
+        updated_time: cdate,
         series_uid_hash: series_uid_hash_v,
         study_uid_hash: study_uid_hash_v,
         accession_number: accession_number.to_string(),

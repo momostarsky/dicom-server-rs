@@ -155,6 +155,11 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
             if app_config.local_storage.dicom_store_path.ends_with("/") {
                 app_config.local_storage.dicom_store_path.pop();
             }
+
+            if app_config.local_storage.dicom_store_path.len() > 64 {
+                panic!("dicom_store_path length must be less than 64 characters");
+            }
+
             match std::fs::exists(&app_config.local_storage.dicom_store_path) {
                 Ok(exists) => {
                     if !exists {
@@ -173,8 +178,8 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
             }
             // TODO :验证能否在dicom_storage_path 下面创建目录及写入文件
             let test_dir = format!(
-                "{}/{}",
-                app_config.local_storage.dicom_store_path, "1.222/1.444/1.555"
+                "{}/{}/{}/{}",
+                app_config.local_storage.dicom_store_path, "1.222", "1.444", "3.5555"
             );
             std::fs::create_dir_all(&test_dir).unwrap_or_else(|e| {
                 panic!("Could not create test_dir directory: {}", e);
@@ -201,6 +206,9 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
             if app_config.local_storage.json_store_path.ends_with("/") {
                 app_config.local_storage.json_store_path.pop();
             }
+            if app_config.local_storage.json_store_path.len() > 64 {
+                panic!("json_store_path length must be less than 64 characters");
+            }
 
             match std::fs::exists(&app_config.local_storage.json_store_path) {
                 Ok(exists) => {
@@ -217,8 +225,8 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
             }
             // TODO :验证能否在json_store_path 下面创建目录及写入文件
             let json_test_dir = format!(
-                "{}/{}",
-                app_config.local_storage.json_store_path, "1.222/1.444/1.555"
+                "{}/{}/{}/{}",
+                app_config.local_storage.json_store_path, "1.222", "2.444", "3.555"
             );
             std::fs::create_dir_all(&json_test_dir).unwrap_or_else(|e| {
                 panic!("Could not create json_test_dir directory: {}", e);
