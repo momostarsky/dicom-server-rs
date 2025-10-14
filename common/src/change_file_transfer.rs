@@ -1,13 +1,13 @@
+use dicom_core::{DicomValue, PrimitiveValue};
 use dicom_dictionary_std::tags;
 use dicom_object;
 use dicom_object::OpenFileOptions;
+use dicom_pixeldata::Transcode;
+use dicom_transfer_syntax_registry::entries::DEFLATED_EXPLICIT_VR_LITTLE_ENDIAN;
 use gdcm_conv::PhotometricInterpretation;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
-use dicom_core::{DicomValue, PrimitiveValue};
-use dicom_pixeldata::Transcode;
-use dicom_transfer_syntax_registry::entries::{DEFLATED_EXPLICIT_VR_LITTLE_ENDIAN, EXPLICIT_VR_LITTLE_ENDIAN};
 
 #[derive(Debug)]
 pub enum ChangeStatus {
@@ -177,7 +177,6 @@ pub async fn convert_ts_with_transcode(
 mod tests {
     use super::*;
     use rstest::rstest;
-    use std::fs;
 
     #[rstest]
     #[case("./data/DeflatedExplicitVRLittleEndian.dcm", "./data/x-0.dcm" ,"P0000")]

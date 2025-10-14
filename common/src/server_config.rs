@@ -33,12 +33,12 @@ pub struct ServerConfig {
 }
 // "local_storage":{
 // "type": "DISK",
-// "dicom_store_path": "/home/dhz/jpdata/CDSS",
+// "dicm_store_path": "/home/dhz/jpdata/CDSS",
 // "json_store_path": "/home/dhz/jpdata/CDSS/store"
 // }
 #[derive(Debug, Deserialize, Clone)]
 pub struct LocalStorageConfig {
-    pub dicom_store_path: String,
+    pub dicm_store_path: String,
     pub json_store_path: String,
 }
 
@@ -149,29 +149,29 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
             println!("server:host {:?}", app_config.server.host);
             println!("server:log_level {:?}", app_config.server.allow_origin);
             println!(
-                "local_storage:dicom_store_path {:?}",
-                app_config.local_storage.dicom_store_path
+                "local_storage:dicm_store_path {:?}",
+                app_config.local_storage.dicm_store_path
             );
-            if app_config.local_storage.dicom_store_path.ends_with("/") {
-                app_config.local_storage.dicom_store_path.pop();
+            if app_config.local_storage.dicm_store_path.ends_with("/") {
+                app_config.local_storage.dicm_store_path.pop();
             }
 
-            if app_config.local_storage.dicom_store_path.len() > 64 {
-                panic!("dicom_store_path length must be less than 64 characters");
+            if app_config.local_storage.dicm_store_path.len() > 64 {
+                panic!("dicm_store_path length must be less than 64 characters");
             }
 
-            match std::fs::exists(&app_config.local_storage.dicom_store_path) {
+            match std::fs::exists(&app_config.local_storage.dicm_store_path) {
                 Ok(exists) => {
                     if !exists {
-                        std::fs::create_dir_all(&app_config.local_storage.dicom_store_path)
+                        std::fs::create_dir_all(&app_config.local_storage.dicm_store_path)
                             .unwrap_or_else(|e| {
-                                panic!("Could not create dicom_store_path directory: {}", e);
+                                panic!("Could not create dicm_store_path directory: {}", e);
                             });
                     }
                 }
                 Err(e) => {
                     panic!(
-                        "Could not check if dicom_store_path directory exists: {}",
+                        "Could not check if dicm_store_path directory exists: {}",
                         e
                     );
                 }
@@ -179,7 +179,7 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
             // TODO :验证能否在dicom_storage_path 下面创建目录及写入文件
             let test_dir = format!(
                 "{}/{}/{}/{}",
-                app_config.local_storage.dicom_store_path, "1.222", "1.444", "3.5555"
+                app_config.local_storage.dicm_store_path, "1.222", "1.444", "3.5555"
             );
             std::fs::create_dir_all(&test_dir).unwrap_or_else(|e| {
                 panic!("Could not create test_dir directory: {}", e);
@@ -393,7 +393,7 @@ pub fn dicom_study_dir(
 ) -> Result<(u64, String), String> {
     let app_config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
     let study_uid_hash = uid_to_u64_deterministic_safe(study_uid);
-    let dicom_store_path = &app_config.local_storage.dicom_store_path;
+    let dicom_store_path = &app_config.local_storage.dicm_store_path;
     let study_dir = format!(
         "{}/{}/{}/{}",
         dicom_store_path, tenant_id, study_date, study_uid
@@ -432,8 +432,8 @@ pub fn dicom_series_dir(
         uid_to_u64_deterministic_safe(study_uid),
         uid_to_u64_deterministic_safe(series_uid),
     );
-    let app_config = load_config().unwrap();
-    let dicom_store_path = &app_config.local_storage.dicom_store_path;
+    let app_config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
+    let dicom_store_path = &app_config.local_storage.dicm_store_path;
     let series_dir = format!(
         "{}/{}/{}/{}/{}",
         dicom_store_path, tenant_id, study_date, study_uid, series_uid
