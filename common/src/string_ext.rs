@@ -13,7 +13,7 @@ pub enum BoundedStringError {
 }
 
 
-
+type BoundedResult<T, E = BoundedStringError> = Result<T, E>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -22,14 +22,14 @@ pub struct BoundedString<const N: usize> {
 }
 
 impl<const N: usize> BoundedString<N> {
-    pub fn new(s: String) -> Result<BoundedString<N>, BoundedStringError> {
+    pub fn new(s: String) -> BoundedResult<BoundedString<N>> {
         if s.len() > N {
             Err(BoundedStringError::TooLong { max: N, len: s.len() })
         } else {
             Ok(Self { value: s })
         }
     }
-    pub fn new_from_str(s: &str) -> Result<BoundedString<N>, BoundedStringError> {
+    pub fn new_from_str(s: &str) -> BoundedResult<BoundedString<N>> {
         if s.len() > N {
             Err(BoundedStringError::TooLong { max: N, len: s.len() })
         } else {
@@ -38,8 +38,7 @@ impl<const N: usize> BoundedString<N> {
             })
         }
     }
-
-    pub fn new_from_string(s: &String) -> Result<BoundedString<N>, BoundedStringError> {
+    pub fn new_from_string(s: &String) -> BoundedResult<BoundedString<N>> {
         if s.len() > N {
             Err(BoundedStringError::TooLong { max: N, len: s.len() })
         } else {
@@ -66,21 +65,21 @@ impl<const N: usize> Eq for BoundedString<N> {}
 
 impl<const N: usize> TryFrom<String> for BoundedString<N> {
     type Error = BoundedStringError;
-    fn try_from(s: String) -> Result<Self, Self::Error> {
+    fn try_from(s: String) -> BoundedResult<Self> {
         BoundedString::new(s)
     }
 }
 
 impl<const N: usize> TryFrom<&str> for BoundedString<N> {
     type Error = BoundedStringError;
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
+    fn try_from(s: &str) -> BoundedResult<Self> {
         BoundedString::new_from_str(s)
     }
 }
 
 impl<const N: usize> TryFrom<&String> for BoundedString<N> {
     type Error = BoundedStringError;
-    fn try_from(s: &String) -> Result<Self, Self::Error> {
+    fn try_from(s: &String) -> BoundedResult<Self> {
         BoundedString::new_from_string(s)
     }
 }
@@ -92,7 +91,7 @@ pub struct FixedLengthString<const N: usize> {
 }
 
 impl<const N: usize> FixedLengthString<N> {
-    pub fn new(s: String) -> Result<FixedLengthString<N>, BoundedStringError> {
+    pub fn new(s: String) -> BoundedResult<FixedLengthString<N>> {
         if s.len() != N {
             Err(BoundedStringError::LengthError { fixlen: N, len: s.len() })
         } else {
@@ -100,7 +99,7 @@ impl<const N: usize> FixedLengthString<N> {
         }
     }
 
-    pub fn new_from_str(s: &str) -> Result<FixedLengthString<N>, BoundedStringError> {
+    pub fn new_from_str(s: &str) -> BoundedResult<FixedLengthString<N>> {
         if s.len() != N {
             Err(BoundedStringError::LengthError { fixlen: N, len: s.len() })
         } else {
@@ -110,7 +109,7 @@ impl<const N: usize> FixedLengthString<N> {
         }
     }
 
-    pub fn new_from_string(s: &String) -> Result<FixedLengthString<N>, BoundedStringError> {
+    pub fn new_from_string(s: &String) -> BoundedResult<FixedLengthString<N>> {
         if s.len() != N {
             Err(BoundedStringError::LengthError { fixlen: N, len: s.len() })
         } else {
@@ -146,14 +145,14 @@ impl<const N: usize> TryFrom<String> for FixedLengthString<N> {
 
 impl<const N: usize> TryFrom<&str> for FixedLengthString<N> {
     type Error = BoundedStringError;
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
+    fn try_from(s: &str) -> BoundedResult<Self> {
         FixedLengthString::new_from_str(s)
     }
 }
 
 impl<const N: usize> TryFrom<&String> for FixedLengthString<N> {
     type Error = BoundedStringError;
-    fn try_from(s: &String) -> Result<Self, Self::Error> {
+    fn try_from(s: &String) -> BoundedResult<Self> {
         FixedLengthString::new_from_string(s)
     }
 }
@@ -172,21 +171,21 @@ impl SopUidString {
 }
 impl TryFrom<String> for SopUidString {
     type Error = BoundedStringError;
-    fn try_from(s: String) -> Result<Self, Self::Error> {
+    fn try_from(s: String) -> BoundedResult<Self> {
         BoundedString::new_from_string(&s).map(|bounded| Self(bounded))
     }
 }
 
 impl TryFrom<&str> for SopUidString {
     type Error = BoundedStringError;
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
+    fn try_from(s: &str) -> BoundedResult<Self> {
         BoundedString::new_from_str(s).map(|bounded| Self(bounded))
     }
 }
 
 impl TryFrom<&String> for SopUidString {
     type Error = BoundedStringError;
-    fn try_from(s: &String) -> Result<Self, Self::Error> {
+    fn try_from(s: &String) -> BoundedResult<Self> {
         BoundedString::new_from_string(s).map(|bounded| Self(bounded))
     }
 }
@@ -206,21 +205,21 @@ impl DicomDateString {
 }
 impl TryFrom<String> for DicomDateString {
     type Error = BoundedStringError;
-    fn try_from(s: String) -> Result<Self, Self::Error> {
+    fn try_from(s: String) -> BoundedResult<Self> {
         FixedLengthString::new_from_string(&s).map(|fixed| Self(fixed))
     }
 }
 
 impl TryFrom<&str> for DicomDateString {
     type Error = BoundedStringError;
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
+    fn try_from(s: &str) -> BoundedResult<Self> {
         FixedLengthString::new_from_str(s).map(|fixed| Self(fixed))
     }
 }
 
 impl TryFrom<&String> for DicomDateString {
     type Error = BoundedStringError;
-    fn try_from(s: &String) -> Result<Self, Self::Error> {
+    fn try_from(s: &String) -> BoundedResult<Self> {
         FixedLengthString::new_from_string(s).map(|fixed| Self(fixed))
     }
 }
@@ -239,21 +238,21 @@ impl UuidString {
 }
 impl TryFrom<String> for UuidString {
     type Error = BoundedStringError;
-    fn try_from(s: String) -> Result<Self, Self::Error> {
+    fn try_from(s: String) -> BoundedResult<Self> {
         FixedLengthString::new_from_string(&s).map(|fixed| Self(fixed))
     }
 }
 
 impl TryFrom<&str> for UuidString {
     type Error = BoundedStringError;
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
+    fn try_from(s: &str) -> BoundedResult<Self> {
         FixedLengthString::new_from_str(s).map(|fixed| Self(fixed))
     }
 }
 
 impl TryFrom<&String> for UuidString {
     type Error = BoundedStringError;
-    fn try_from(s: &String) -> Result<Self, Self::Error> {
+    fn try_from(s: &String) -> BoundedResult<Self> {
         FixedLengthString::new_from_string(s).map(|fixed| Self(fixed))
     }
 }
@@ -384,6 +383,7 @@ mod tests {
             format!("Failed to create BoundedString: String too long: {} > 10", s.len())
         );
     }
+
     #[test]
 
     fn test_bounded_string_watch_context_handling2() {
