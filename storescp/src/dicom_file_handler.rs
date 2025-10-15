@@ -239,6 +239,7 @@ pub(crate) async fn process_dicom_file(
     let cdate = Utc::now().naive_utc();
     Ok(DicomObjectMeta {
         trace_id: trace_uid,
+        worker_node_id:  "DICOM_STORE_SCP".to_string(),
         tenant_id: tenant_id.to_string(),
         patient_id: pat_id.to_string(),
         study_uid: study_uid.to_string(),
@@ -251,8 +252,7 @@ pub(crate) async fn process_dicom_file(
         study_date: study_date.to_string(),
         transfer_status: transcode_status,
         number_of_frames: frames,
-        created_time: cdate,
-        updated_time: cdate,
+        created_time: cdate, 
         series_uid_hash: series_uid_hash_v,
         study_uid_hash: study_uid_hash_v,
         accession_number: accession_number.to_string(),

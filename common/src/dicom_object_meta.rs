@@ -14,6 +14,8 @@ pub enum TransferStatus {
 pub struct DicomObjectMeta {
     #[serde(rename = "trace_id")]
     pub trace_id: String,
+    #[serde(rename = "worker_node_id")]
+    pub worker_node_id: String,
     #[serde(rename = "tenant_id")]
     pub tenant_id: String,
     #[serde(rename = "patient_id")]
@@ -34,8 +36,6 @@ pub struct DicomObjectMeta {
     pub number_of_frames: i32,
     #[serde(rename = "created_time")]
     pub created_time:  NaiveDateTime,
-    #[serde(rename = "updated_time")]
-    pub updated_time: NaiveDateTime,
     #[serde(rename = "series_uid_hash")]
     pub series_uid_hash: u64,
     #[serde(rename = "study_uid_hash")]

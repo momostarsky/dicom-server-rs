@@ -64,10 +64,7 @@ impl MessagePublisher for KafkaMessagePublisher {
             self.topic
         );
         let payload = serde_json::to_vec(msg)?;
-        let key = format!(
-            "{}_{}",
-            msg.tenant_id, msg.sop_uid
-        );
+        let key = msg.trace_id.clone();
         let record: FutureRecord<String, Vec<u8>> =
             FutureRecord::to(&*self.topic).key(&key).payload(&payload);
 
@@ -102,10 +99,7 @@ impl MessagePublisher for KafkaMessagePublisher {
         for msg in messages {
             match serde_json::to_vec(msg) {
                 Ok(payload) => {
-                    let key = format!(
-                        "{}_{}",
-                        msg.tenant_id, msg.sop_uid
-                    );
+                    let key = msg.worker_node_id.clone();
                     wait_message.insert(key.clone(), payload.clone());
                 }
                 Err(e) => {
