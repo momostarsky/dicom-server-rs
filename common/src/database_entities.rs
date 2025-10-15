@@ -72,7 +72,7 @@ pub struct SeriesEntity {
     pub space_size: Option<i64>,         // 新增字段
     pub created_time: Option<NaiveDateTime>,
     pub updated_time: Option<NaiveDateTime>,
-    pub series_uid_hash: u64,            // 新增字段
+    pub series_uid_hash: u32,            // 新增字段
 
 }
 

@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 use tokio::runtime::Handle;
-use common::dicom_object_meta::DicomObjectMeta;
+use common::dicom_object_meta::DicomStoreMeta;
 
 // 全局logger静态变量，使用线程安全的方式
 static GLOBAL_LOGGER: OnceLock<Logger> = OnceLock::new();
@@ -137,7 +137,7 @@ pub async fn start_process(logger: &Logger) {
 
 async fn read_message(
     consumer: StreamConsumer,
-    vec: Arc<Mutex<Vec<DicomObjectMeta>>>,
+    vec: Arc<Mutex<Vec<DicomStoreMeta>>>,
     last_process_time: Arc<Mutex<Instant>>,
 ) {
     let logger = get_logger();
@@ -149,7 +149,7 @@ async fn read_message(
             Ok(message) => {
                 match message.payload() {
                     Some(payload) => {
-                        match serde_json::from_slice::<DicomObjectMeta>(payload) {
+                        match serde_json::from_slice::<DicomStoreMeta>(payload) {
                             Ok(dicom_message) => {
                                 // 将消息添加到共享向量中
                                 {
@@ -196,7 +196,7 @@ async fn read_message(
 static MAX_MESSAGES_PER_BATCH: usize = 50;
 static MAX_TIME_BETWEEN_BATCHES: Duration = Duration::from_secs(5);
 async fn persist_message_loop(
-    vec: Arc<Mutex<Vec<DicomObjectMeta>>>,
+    vec: Arc<Mutex<Vec<DicomStoreMeta>>>,
     last_process_time: Arc<Mutex<Instant>>,
 ) {
     let logger = get_logger();

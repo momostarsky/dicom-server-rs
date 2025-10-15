@@ -1,8 +1,7 @@
-use crate::database_entities::{
-    ImageEntity, PatientEntity, SeriesEntity, StudyEntity,
-};
+use crate::database_entities::{ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
 use crate::database_provider::DbProvider;
 use crate::database_provider_base::DbProviderBase;
+use crate::dicom_object_meta::DicomStoreMeta;
 use crate::message_sender::MessagePublisher;
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu::Whatever;
@@ -15,7 +14,6 @@ use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::{Arc, OnceLock};
-use crate::dicom_object_meta::DicomObjectMeta;
 
 pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let path = std::path::Path::new(p0);
@@ -109,22 +107,24 @@ pub fn setup_logging(policy_name: &str) -> Logger {
 }
 // ... existing code ...
 
-pub fn get_unique_tenant_ids(message: &[DicomObjectMeta]) -> Vec<String> {
-    let tenant_ids: HashSet<String> = message.iter().map(|m| m.tenant_id.clone()).collect();
-
+pub fn get_unique_tenant_ids(message: &[DicomStoreMeta]) -> Vec<String> {
+    let tenant_ids: HashSet<String> = message
+        .iter()
+        .map(|m| String::from(m.tenant_id.as_str()))
+        .collect();
     tenant_ids.into_iter().collect()
 }
 
 // 获取消息组中所有不同的 tenant_id
 pub async fn group_dicom_messages(
-    messages: &[DicomObjectMeta],
+    messages: &[DicomStoreMeta],
 ) -> Result<
     (
         Vec<PatientEntity>,
         Vec<StudyEntity>,
         Vec<SeriesEntity>,
         Vec<ImageEntity>,
-        Vec<DicomObjectMeta>,
+        Vec<DicomStoreMeta>,
     ),
     ReadError,
 > {
@@ -136,19 +136,19 @@ pub async fn group_dicom_messages(
     let mut study_entities: Vec<StudyEntity> = Vec::new();
     let mut series_entities: Vec<SeriesEntity> = Vec::new();
     let mut image_entities: Vec<ImageEntity> = Vec::new();
-    let mut failed_messages: Vec<DicomObjectMeta> = Vec::new();
-    let mut failed_message_set: HashSet<&DicomObjectMeta> = HashSet::new(); // 用于跟踪已失败的消息
+    let mut failed_messages: Vec<DicomStoreMeta> = Vec::new();
+    let mut failed_message_set: HashSet<&DicomStoreMeta> = HashSet::new(); // 用于跟踪已失败的消息
 
     for message in messages {
         match dicom_object::OpenFileOptions::new()
             .charset_override(CharacterSetOverride::AnyVr)
             .read_until(tags::PIXEL_DATA)
-            .open_file(&message.file_path)
+            .open_file(String::from(message.file_path.as_str()))
         {
             Ok(dicom_obj) => {
                 // 处理成功的DICOM对象
                 // 提取 patient
-                let key = format!("{}_{}", message.tenant_id, message.patient_id);
+                let key = format!("{}_{}", message.tenant_id.as_str(), message.patient_id.as_str());
                 if !patient_groups.contains_key(key.as_str()) {
                     match DbProviderBase::extract_patient_entity(
                         message.tenant_id.as_str(),
@@ -161,7 +161,7 @@ pub async fn group_dicom_messages(
                         Err(e) => {
                             tracing::warn!(
                                 "Failed to extract patient entity from file '{}': {}",
-                                message.file_path,
+                                message.file_path.as_str(),
                                 e
                             );
                             if !failed_message_set.contains(message) {
@@ -174,7 +174,7 @@ pub async fn group_dicom_messages(
                 }
 
                 // 提取 study
-                let key2 = format!("{}_{}", message.tenant_id, message.study_uid);
+                let key2 = format!("{}_{}", message.tenant_id.as_str(), message.study_uid.as_str());
                 match DbProviderBase::extract_study_entity(
                     message.tenant_id.as_str(),
                     &dicom_obj,
@@ -187,7 +187,7 @@ pub async fn group_dicom_messages(
                     Err(e) => {
                         tracing::warn!(
                             "Failed to extract study entity from file '{}': {}",
-                            message.file_path,
+                            message.file_path.as_str(),
                             e
                         );
                         if !failed_message_set.contains(message) {
@@ -198,7 +198,7 @@ pub async fn group_dicom_messages(
                     }
                 }
                 // 提取 series
-                let key3 = format!("{}_{}", message.tenant_id, message.series_uid);
+                let key3 = format!("{}_{}", message.tenant_id.as_str(), message.series_uid.as_str());
                 match DbProviderBase::extract_series_entity(
                     message.tenant_id.as_str(),
                     &dicom_obj,
@@ -211,7 +211,7 @@ pub async fn group_dicom_messages(
                     Err(e) => {
                         tracing::warn!(
                             "Failed to extract series entity from file '{}': {}",
-                            message.file_path,
+                            message.file_path.as_str(),
                             e
                         );
                         if !failed_message_set.contains(message) {
@@ -234,13 +234,13 @@ pub async fn group_dicom_messages(
                 ) {
                     Ok(mut sop_entity) => {
                         sop_entity.space_size = Some(message.file_size);
-                        sop_entity.transfer_syntax_uid = message.transfer_syntax_uid.clone();
+                        sop_entity.transfer_syntax_uid = String::from(message.transfer_syntax_uid.as_str());
                         image_entities.push(sop_entity);
                     }
                     Err(e) => {
                         tracing::warn!(
                             "Failed to extract image entity from file '{}': {}",
-                            message.file_path,
+                            message.file_path.as_str(),
                             e
                         );
                         if !failed_message_set.contains(message) {
@@ -266,7 +266,8 @@ pub async fn group_dicom_messages(
     for study_entity in &mut study_entities {
         // 查找对应的 DICOMObjectMeta 消息
         if let Some(meta_msg) = messages.iter().find(|m| {
-            m.tenant_id == study_entity.tenant_id && m.study_uid == study_entity.study_instance_uid
+            m.tenant_id.as_str() == study_entity.tenant_id.as_str()
+                && m.study_uid.as_str() == study_entity.study_instance_uid.as_str()
         }) {
             study_entity.study_uid_hash = meta_msg.study_uid_hash;
         }
@@ -275,8 +276,8 @@ pub async fn group_dicom_messages(
     for series_entity in &mut series_entities {
         // 查找对应的 DICOMObjectMeta 消息
         if let Some(meta_msg) = messages.iter().find(|m| {
-            m.tenant_id == series_entity.tenant_id
-                && m.series_uid == series_entity.series_instance_uid
+            m.tenant_id.as_str() == series_entity.tenant_id.as_str()
+                && m.series_uid.as_str() == series_entity.series_instance_uid.as_str()
         }) {
             series_entity.series_uid_hash = meta_msg.series_uid_hash;
         }
@@ -292,7 +293,7 @@ pub async fn group_dicom_messages(
 }
 
 async fn write_failed_messages_to_file(
-    failed_messages: &[DicomObjectMeta],
+    failed_messages: &[DicomStoreMeta],
 ) -> Result<(), Box<dyn std::error::Error>> {
     // 以追加模式打开文件
     let mut file = OpenOptions::new()
@@ -310,7 +311,7 @@ async fn write_failed_messages_to_file(
 }
 // 处理 主要队列  topic_main 的消息
 pub async fn process_storage_messages(
-    messages_to_process: &[DicomObjectMeta],
+    messages_to_process: &[DicomStoreMeta],
     db_provider: &Arc<dyn DbProvider>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if messages_to_process.is_empty() {
@@ -332,7 +333,7 @@ pub async fn process_storage_messages(
     for tenant_id in unique_tenant_ids {
         let tenant_msg = messages_to_process
             .iter()
-            .filter(|m| m.tenant_id == tenant_id)
+            .filter(|m| m.tenant_id.as_str() == tenant_id.as_str())
             .cloned()
             .collect::<Vec<_>>();
         match group_dicom_messages(&tenant_msg).await {
@@ -386,7 +387,7 @@ pub async fn process_storage_messages(
 // 发送消息到指定队列
 pub async fn publish_messages(
     message_producer: &dyn MessagePublisher,
-    dicom_message_lists: &[DicomObjectMeta],
+    dicom_message_lists: &[DicomStoreMeta],
 ) -> Result<(), Whatever> {
     if dicom_message_lists.is_empty() {
         return Ok(());

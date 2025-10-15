@@ -99,7 +99,7 @@ pub async fn run_store_async(
     let storage_producer = KafkaMessagePublisher::new(queue_topic_main.parse().unwrap());
     let log_producer = KafkaMessagePublisher::new(queue_topic_log.parse().unwrap());
 
-    let mut dicom_message_lists: Vec<common::dicom_object_meta::DicomObjectMeta> = vec![];
+    let mut dicom_message_lists: Vec<common::dicom_object_meta::DicomStoreMeta> = vec![];
     let ip_address = peer.ip().to_string();
     let client_ae_title = association.client_ae_title().to_string();
     loop {

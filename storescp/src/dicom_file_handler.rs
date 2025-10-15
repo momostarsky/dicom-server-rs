@@ -1,4 +1,4 @@
-use common::dicom_object_meta::{DicomObjectMeta, TransferStatus};
+use common::dicom_object_meta::{DicomStoreMeta, TransferStatus};
 use common::dicom_utils::get_tag_value;
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
@@ -101,7 +101,7 @@ pub(crate) async fn process_dicom_file(
     sop_instance_uid: &String, //当前文件的SOP实例ID
     ip: String,
     client_ae: String,
-) -> Result<DicomObjectMeta, Whatever> {
+) -> Result<DicomStoreMeta, Whatever> {
     let root_logger = get_logger();
     let logger = root_logger.new(o!("storescp"=>"process_dicom_file"));
     let obj = InMemDicomObject::read_dataset_with_ts(
@@ -236,28 +236,46 @@ pub(crate) async fn process_dicom_file(
     let saved_path = PathBuf::from(file_path); // 此时可以安全转移所有权
     let uuid_v7 = Uuid::now_v7();
     let trace_uid = uuid_v7.to_string(); // 或直接用 format!("{}", uuid_v7)
-    let cdate = Utc::now().naive_utc();
-    Ok(DicomObjectMeta {
-        trace_id: trace_uid,
-        worker_node_id:  "DICOM_STORE_SCP".to_string(),
-        tenant_id: tenant_id.to_string(),
-        patient_id: pat_id.to_string(),
-        study_uid: study_uid.to_string(),
-        series_uid: series_uid.to_string(),
-        sop_uid: sop_instance_uid.to_string(),
-        file_path: String::from(saved_path.to_str().unwrap()),
+    // 修改为
+    let cdate = chrono::Local::now().naive_local();
+    println!("study_uid_hash_v: {}", study_uid_hash_v);
+    println!("series_uid_hash_v: {}", series_uid_hash_v);
+    Ok(DicomStoreMeta {
+        trace_id: common::string_ext::UuidString::try_from(trace_uid)
+            .with_whatever_context(|err| format!("Failed to create trace_id: {}", err))?,
+        worker_node_id: common::string_ext::BoundedString::try_from("DICOM_STORE_SCP")
+            .with_whatever_context(|err| format!("Failed to create worker_node_id: {}", err))?,
+        tenant_id: common::string_ext::BoundedString::try_from(tenant_id)
+            .with_whatever_context(|err| format!("Failed to create tenant_id: {}", err))?,
+        patient_id: common::string_ext::BoundedString::try_from(pat_id)
+            .with_whatever_context(|err| format!("Failed to create patient_id: {}", err))?,
+        study_uid: common::string_ext::SopUidString::try_from(study_uid)
+            .with_whatever_context(|err| format!("Failed to create study_uid: {}", err))?,
+        series_uid: common::string_ext::SopUidString::try_from(series_uid)
+            .with_whatever_context(|err| format!("Failed to create series_uid: {}", err))?,
+        sop_uid: common::string_ext::SopUidString::try_from(sop_instance_uid)
+            .with_whatever_context(|err| format!("Failed to create sop_uid: {}", err))?,
+        file_path: common::string_ext::BoundedString::try_from(saved_path.to_str().unwrap())
+            .with_whatever_context(|err| format!("Failed to create file_path: {}", err))?,
         file_size: fsize,
-        transfer_syntax_uid: ts.to_string(),
-        target_ts: final_ts.to_string(),
-        study_date: study_date.to_string(),
+        transfer_syntax_uid: common::string_ext::SopUidString::try_from(ts).with_whatever_context(
+            |err| format!("Failed to create transfer_syntax_uid: {}", err),
+        )?,
+        target_ts: common::string_ext::SopUidString::try_from(final_ts)
+            .with_whatever_context(|err| format!("Failed to create target_ts: {}", err))?,
+        study_date: common::string_ext::DicomDateString::try_from(study_date)
+            .with_whatever_context(|err| format!("Failed to create study_date: {}", err))?,
         transfer_status: transcode_status,
         number_of_frames: frames,
-        created_time: cdate, 
+        created_time: cdate,
         series_uid_hash: series_uid_hash_v,
         study_uid_hash: study_uid_hash_v,
-        accession_number: accession_number.to_string(),
-        source_ip: ip,
-        source_ae: client_ae,
+        accession_number: common::string_ext::BoundedString::try_from(accession_number)
+            .with_whatever_context(|err| format!("Failed to create accession_number: {}", err))?,
+        source_ip: common::string_ext::BoundedString::try_from(ip)
+            .with_whatever_context(|err| format!("Failed to create source_ip: {}", err))?,
+        source_ae: common::string_ext::BoundedString::try_from(client_ae)
+            .with_whatever_context(|err| format!("Failed to create source_ae: {}", err))?,
     })
 }
 
@@ -271,7 +289,7 @@ pub(crate) async fn process_dicom_file(
 /// * `queue_topic_main` - 主题名称（用于storage_consumer）
 /// * `queue_topic_log` - 主题名称（用于日志提取）
 pub(crate) async fn classify_and_publish_dicom_messages(
-    dicom_message_lists: &Vec<DicomObjectMeta>,
+    dicom_message_lists: &Vec<DicomStoreMeta>,
     storage_producer: &KafkaMessagePublisher,
     log_producer: &KafkaMessagePublisher,
 ) -> Result<(), Box<dyn std::error::Error>> {

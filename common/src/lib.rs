@@ -17,6 +17,7 @@ pub mod cert_helper;
 pub mod license_manager;
 pub mod uid_hash;
 pub mod dicom_object_meta;
+pub mod string_ext;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DicomMessage {

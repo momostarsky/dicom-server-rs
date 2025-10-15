@@ -1,4 +1,4 @@
-use crate::uid_hash::uid_to_u64_deterministic_safe;
+use crate::uid_hash::{uid_to_u32_deterministic_safe, uid_to_u64_deterministic_safe};
 use config::{Config, ConfigError, Environment, File};
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
@@ -427,10 +427,10 @@ pub fn dicom_series_dir(
     study_uid: &str,
     series_uid: &str,
     create_not_exists: bool,
-) -> Result<(u64, u64, String), String> {
+) -> Result<(u64, u32, String), String> {
     let (study_uid_hash, series_uid_hash) = (
         uid_to_u64_deterministic_safe(study_uid),
-        uid_to_u64_deterministic_safe(series_uid),
+        uid_to_u32_deterministic_safe(study_uid,series_uid),
     );
     let app_config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
     let dicom_store_path = &app_config.local_storage.dicm_store_path;

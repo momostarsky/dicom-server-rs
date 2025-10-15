@@ -63,26 +63,10 @@ PROPERTIES (
 ```load from kafka
 STOP ROUTINE LOAD FOR dicom_routine_load;
 -- 重新创建任务，指定 JSON 格式
-CREATE ROUTINE LOAD dicom_routine_load ON dicom_object_meta
-PROPERTIES (
-    "desired_concurrent_number" = "3",
-    "max_batch_interval" = "10",
-    "max_batch_rows" = "300000",
-    "max_batch_size" = "209715200",
-    "format" = "json"
-)
-FROM KAFKA (
-        "kafka_broker_list" = "192.168.1.14:9092",
-        "kafka_topic" = "log_queue",
-        "kafka_partitions" = "0",
-        "property.kafka_default_offsets" = "OFFSET_BEGINNING"
-);
-
-
-CREATE ROUTINE LOAD dicom_routine_load ON dicom_object_meta
+ CREATE ROUTINE LOAD dicom_routine_load ON dicom_object_meta
 COLUMNS (
     trace_id,
-    worker_node_id = "default_worker",  -- 默认值
+    worker_node_id,
     tenant_id,
     patient_id,
     study_uid,
@@ -108,6 +92,26 @@ PROPERTIES (
     "max_batch_rows" = "300000",
     "max_batch_size" = "209715200",
     "format" = "json",
+    "jsonpaths" = "[\"$.trace_id\",
+                    \"$.worker_node_id\",
+                    \"$.tenant_id\",
+                    \"$.patient_id\",
+                    \"$.study_uid\",
+                    \"$.series_uid\",
+                    \"$.sop_uid\",
+                    \"$.file_size\",
+                    \"$.file_path\",
+                    \"$.transfer_syntax_uid\",
+                    \"$.number_of_frames\",
+                    \"$.created_time\",
+                    \"$.series_uid_hash\",
+                    \"$.study_uid_hash\",
+                    \"$.accession_number\",
+                    \"$.target_ts\",
+                    \"$.study_date\",
+                    \"$.transfer_status\",
+                    \"$.source_ip\",
+                    \"$.source_ae\"]",
     "max_error_number" = "1000"
 )
 FROM KAFKA (
@@ -117,6 +121,7 @@ FROM KAFKA (
     "property.kafka_default_offsets" = "OFFSET_BEGINNING"
 );
 
+ 
 SHOW ROUTINE LOAD FOR dicom_routine_load;
 
 ```

@@ -857,6 +857,7 @@ dependencies = [
  "slog-scope",
  "slog-stdlog",
  "slog-term",
+ "snafu",
  "sqlx",
  "tempfile",
  "thiserror 2.0.17",
@@ -4534,6 +4535,7 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 name = "storescp"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "clap",
  "common",
  "config",

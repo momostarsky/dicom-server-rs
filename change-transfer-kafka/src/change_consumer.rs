@@ -11,7 +11,7 @@ use std::{fs, thread};
 // use dicom_object::collector::CharacterSetOverride;
 use tokio::runtime::Handle;
 use tracing::log::error;
-use common::dicom_object_meta::DicomObjectMeta;
+use common::dicom_object_meta::DicomStoreMeta;
 
 pub async fn start_process() {
     // 设置日志系统
@@ -116,7 +116,7 @@ pub async fn start_process() {
 
 async fn read_message(
     consumer: StreamConsumer,
-    vec: Arc<Mutex<Vec<DicomObjectMeta>>>,
+    vec: Arc<Mutex<Vec<DicomStoreMeta>>>,
     last_process_time: Arc<Mutex<Instant>>,
 ) {
     let mut message_stream = consumer.stream();
@@ -127,7 +127,7 @@ async fn read_message(
             Ok(message) => {
                 match message.payload() {
                     Some(payload) => {
-                        match serde_json::from_slice::<DicomObjectMeta>(payload) {
+                        match serde_json::from_slice::<DicomStoreMeta>(payload) {
                             Ok(dicom_message) => {
                                 // 将消息添加到共享向量中
                                 {
@@ -174,7 +174,7 @@ async fn read_message(
 static MAX_MESSAGES_PER_BATCH: usize = 10;
 static MAX_TIME_BETWEEN_BATCHES: Duration = Duration::from_secs(5);
 async fn change_transfer_syntax(
-    vec: Arc<Mutex<Vec<DicomObjectMeta>>>,
+    vec: Arc<Mutex<Vec<DicomStoreMeta>>>,
     last_process_time: Arc<Mutex<Instant>>,
 ) {
     tracing::info!("Starting message persistence loop...");
@@ -236,7 +236,7 @@ async fn change_transfer_syntax(
         };
         let msg_size = messages_to_process.len();
         for dcm_msg in messages_to_process {
-            let target_path = format!("./{}.dcm", dcm_msg.sop_uid);
+            let target_path = format!("./{:?}.dcm", dcm_msg.sop_uid);
             let src_file = dcm_msg.file_path.as_str();
             let src_sz = dcm_msg.file_size as usize;
             // 处理文件转换

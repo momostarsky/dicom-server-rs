@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::time::Duration;
 use tracing::{debug, info, error};
-use crate::dicom_object_meta::DicomObjectMeta;
+use crate::dicom_object_meta::DicomStoreMeta;
 use crate::server_config;
 
 pub struct KafkaMessagePublisher {
@@ -58,13 +58,13 @@ impl KafkaMessagePublisher {
 
 #[async_trait]
 impl MessagePublisher for KafkaMessagePublisher {
-    async fn send_message(&self, msg: &DicomObjectMeta) -> Result<(), Box<dyn Error>> {
+    async fn send_message(&self, msg: &DicomStoreMeta) -> Result<(), Box<dyn Error>> {
         info!(
             "KafkaMessagePublisher send_message to topic: {}",
             self.topic
         );
         let payload = serde_json::to_vec(msg)?;
-        let key = msg.trace_id.clone();
+        let key =String::from(msg.trace_id.as_str());
         let record: FutureRecord<String, Vec<u8>> =
             FutureRecord::to(&*self.topic).key(&key).payload(&payload);
 
@@ -86,7 +86,7 @@ impl MessagePublisher for KafkaMessagePublisher {
 
     async fn send_batch_messages(
         &self,
-        messages: &[DicomObjectMeta],
+        messages: &[DicomStoreMeta],
     ) -> Result<(), Box<dyn Error>> {
         info!(
             "KafkaMessagePublisher send_batch_messages: {}  to topic {}",
@@ -99,7 +99,7 @@ impl MessagePublisher for KafkaMessagePublisher {
         for msg in messages {
             match serde_json::to_vec(msg) {
                 Ok(payload) => {
-                    let key = msg.worker_node_id.clone();
+                    let key =String::from(msg.trace_id.as_str());
                     wait_message.insert(key.clone(), payload.clone());
                 }
                 Err(e) => {
