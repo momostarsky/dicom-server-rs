@@ -444,3 +444,8 @@ pub fn dicom_series_dir(
     }
     Ok((study_uid_hash, series_uid_hash, series_dir))
 }
+
+
+pub fn dicom_file_path(dir:&str, sop_uid:&str)->String{
+     format!("{}/{}.dcm", dir, sop_uid)
+}

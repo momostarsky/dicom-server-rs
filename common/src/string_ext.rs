@@ -1,8 +1,7 @@
-
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 
-use snafu::{Snafu, Whatever};
+use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
 #[non_exhaustive]
@@ -283,8 +282,10 @@ impl TryFrom<&String> for UuidString {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::DateTime;
 
     use dicom_encoding::snafu::ResultExt;
+    use snafu::Whatever;
 
     #[test]
     fn test_bounded_string_valid_length() {
@@ -384,10 +385,22 @@ mod tests {
         );
     }
     #[test]
+
+    fn test_bounded_string_watch_context_handling2() {
+        let s = "this string is definitely too long for the limit".to_string();
+        let result: Result<BoundedString<10>, BoundedStringError> =  BoundedString::new(s.clone());
+
+        assert!(result.is_err());
+        let err: BoundedStringError = result.unwrap_err();
+        println!("Serialized JSON: {}", err.to_string());
+        assert_eq!(
+            err.to_string(),
+            BoundedStringError::TooLong { max: 10, len: s.len() }.to_string()
+        );
+    }
+    #[test]
     fn test_dicom_store_meta_json_fmt() {
         use crate::dicom_object_meta::DicomStoreMeta;
-        use chrono::NaiveDateTime;
-
         let meta = DicomStoreMeta {
             trace_id: "0199e6ae-8148-7e73-8d6c-c435bf126fe4".try_into().unwrap(),
             worker_node_id: "DICOM_STORE_SCP".try_into().unwrap(),
@@ -400,7 +413,9 @@ mod tests {
             file_path: "/media/dhz/DCP/dcm/1234567890/20210130/1.3.12.2.1107.5.2.12.21149.2021013010174414769824/1.3.46.670589.26.902153.2.20210130.102145.856875/1.3.46.670589.26.902153.4.20210130.102215.856875.0.dcm".try_into().unwrap(),
             transfer_syntax_uid: "1.2.840.10008.1.2.1".try_into().unwrap(),
             number_of_frames: 1,
-            created_time: NaiveDateTime::from_timestamp_opt(1728971020, 104453242).unwrap(),
+            created_time: DateTime::from_timestamp(1728971020, 104453242)
+                .unwrap()
+                .naive_utc(),
             series_uid_hash:  319228828,
             study_uid_hash: 12853552155529750978,
             accession_number: "14769824".try_into().unwrap(),

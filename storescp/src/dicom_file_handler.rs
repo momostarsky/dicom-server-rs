@@ -197,7 +197,7 @@ pub(crate) async fn process_dicom_file(
         tenant_id, study_date, study_uid, series_uid
     ))?;
 
-    let file_path = format!("{}/{}.dcm", dir_path, sop_instance_uid);
+    let file_path = server_config::dicom_file_path(&dir_path, sop_instance_uid);
 
     info!(logger, "file path: {}", file_path);
     let mut final_ts = ts.to_string();
@@ -237,9 +237,7 @@ pub(crate) async fn process_dicom_file(
     let uuid_v7 = Uuid::now_v7();
     let trace_uid = uuid_v7.to_string(); // 或直接用 format!("{}", uuid_v7)
     // 修改为
-    let cdate = chrono::Local::now().naive_local();
-    println!("study_uid_hash_v: {}", study_uid_hash_v);
-    println!("series_uid_hash_v: {}", series_uid_hash_v);
+    let cdate = chrono::Local::now().naive_local(); 
     Ok(DicomStoreMeta {
         trace_id: common::string_ext::UuidString::try_from(trace_uid)
             .with_whatever_context(|err| format!("Failed to create trace_id: {}", err))?,
