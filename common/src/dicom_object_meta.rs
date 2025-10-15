@@ -2,22 +2,7 @@ use crate::string_ext::{BoundedString, DicomDateString, SopUidString, UuidString
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
-use serde::{Deserializer,  Serializer};
 
-fn u64_to_string<S>(v: &u64, s: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    s.serialize_str(&v.to_string())
-}
-
-fn u64_from_string<'de, D>(d: D) -> Result<u64, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s = String::deserialize(d)?;
-    s.parse::<u64>().map_err(serde::de::Error::custom)
-}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum TransferStatus {
@@ -55,7 +40,7 @@ pub struct DicomStoreMeta {
     pub created_time: NaiveDateTime,
     #[serde(rename = "series_uid_hash")]
     pub series_uid_hash: u32,
-    #[serde(rename = "study_uid_hash", serialize_with = "u64_to_string", deserialize_with = "u64_from_string")]
+    #[serde(rename = "study_uid_hash")]
     pub study_uid_hash: u64,
     #[serde(rename = "accession_number")]
     pub accession_number: BoundedString<64>,
