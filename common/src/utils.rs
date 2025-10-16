@@ -1,7 +1,9 @@
 use crate::database_entities::{ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
 use crate::database_provider::DbProvider;
 use crate::database_provider_base::DbProviderBase;
-use crate::dicom_object_meta::DicomStoreMeta;
+use crate::dicom_object_meta::{
+    DicomImageMeta, DicomStateMeta, DicomStoreMeta, make_image_info, make_state_info,
+};
 use crate::message_sender::MessagePublisher;
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu::Whatever;
@@ -114,6 +116,67 @@ pub fn get_unique_tenant_ids(message: &[DicomStoreMeta]) -> Vec<String> {
         .collect();
     tenant_ids.into_iter().collect()
 }
+pub fn deduplicate_state_metas(state_metas: Vec<DicomStateMeta>) -> Vec<DicomStateMeta> {
+    use std::collections::HashMap;
+
+    let mut unique_map: HashMap<(String, String, String, String), DicomStateMeta> = HashMap::new();
+
+    for state_meta in state_metas {
+        let key = state_meta.unique_key();
+        // 如果键已存在，则新值会覆盖旧值
+        unique_map.insert(key, state_meta);
+    }
+
+    unique_map.into_values().collect()
+}
+pub async fn group_dicom_state(
+    messages: &[DicomStoreMeta],
+) -> Result<(Vec<DicomStateMeta>, Vec<DicomImageMeta>), ReadError> {
+    let logger = get_logger();
+    let logger = logger.new(o!("thread" => "group_dicom_state"));
+    info!(
+        logger,
+        "group_dicom_state batch of {} messages",
+        messages.len()
+    );
+
+    let mut state_metas: Vec<DicomStateMeta> = Vec::new();
+    let mut image_entities: Vec<DicomImageMeta> = Vec::new();
+
+    for message in messages {
+        match dicom_object::OpenFileOptions::new()
+            .charset_override(CharacterSetOverride::AnyVr)
+            .read_until(tags::PIXEL_DATA)
+            .open_file(String::from(message.file_path.as_str()))
+        {
+            Ok(dicom_obj) => {
+                let state_meta = make_state_info(message.tenant_id.as_str(), &dicom_obj);
+                let image_entity = make_image_info(message.tenant_id.as_str(), &dicom_obj);
+                if state_meta.is_ok() && image_entity.is_ok() {
+                    state_metas.push(state_meta.unwrap());
+                    image_entities.push(image_entity.unwrap());
+                } else {
+                    error!(
+                        logger,
+                        "Failed to extract state or image entity from file: {} , message: {:?}",
+                        message.file_path.as_str(),
+                        message
+                    );
+                }
+            }
+            Err(err) => {
+                error!(
+                    logger,
+                    "Failed to open DICOM file: {} , file_path: {}",
+                    err,
+                    message.file_path.as_str()
+                );
+            }
+        }
+    }
+    state_metas = deduplicate_state_metas(state_metas);
+    Ok((state_metas, image_entities))
+}
 
 // 获取消息组中所有不同的 tenant_id
 pub async fn group_dicom_messages(
@@ -148,7 +211,11 @@ pub async fn group_dicom_messages(
             Ok(dicom_obj) => {
                 // 处理成功的DICOM对象
                 // 提取 patient
-                let key = format!("{}_{}", message.tenant_id.as_str(), message.patient_id.as_str());
+                let key = format!(
+                    "{}_{}",
+                    message.tenant_id.as_str(),
+                    message.patient_id.as_str()
+                );
                 if !patient_groups.contains_key(key.as_str()) {
                     match DbProviderBase::extract_patient_entity(
                         message.tenant_id.as_str(),
@@ -174,7 +241,11 @@ pub async fn group_dicom_messages(
                 }
 
                 // 提取 study
-                let key2 = format!("{}_{}", message.tenant_id.as_str(), message.study_uid.as_str());
+                let key2 = format!(
+                    "{}_{}",
+                    message.tenant_id.as_str(),
+                    message.study_uid.as_str()
+                );
                 match DbProviderBase::extract_study_entity(
                     message.tenant_id.as_str(),
                     &dicom_obj,
@@ -198,7 +269,11 @@ pub async fn group_dicom_messages(
                     }
                 }
                 // 提取 series
-                let key3 = format!("{}_{}", message.tenant_id.as_str(), message.series_uid.as_str());
+                let key3 = format!(
+                    "{}_{}",
+                    message.tenant_id.as_str(),
+                    message.series_uid.as_str()
+                );
                 match DbProviderBase::extract_series_entity(
                     message.tenant_id.as_str(),
                     &dicom_obj,
@@ -234,7 +309,8 @@ pub async fn group_dicom_messages(
                 ) {
                     Ok(mut sop_entity) => {
                         sop_entity.space_size = Some(message.file_size);
-                        sop_entity.transfer_syntax_uid = String::from(message.transfer_syntax_uid.as_str());
+                        sop_entity.transfer_syntax_uid =
+                            String::from(message.transfer_syntax_uid.as_str());
                         image_entities.push(sop_entity);
                     }
                     Err(e) => {
@@ -403,7 +479,44 @@ pub async fn publish_messages(
         }
         Err(e) => {
             error!(logger, "Failed to publish_messages: {}", e);
-            // return Err(whatever!("Failed to publish_messages: {}", e));
+        }
+    }
+    Ok(())
+}
+pub async fn publish_state_messages(
+    message_producer: &dyn MessagePublisher,
+    state_metaes: &[DicomStateMeta],
+) -> Result<(), Whatever> {
+    if state_metaes.is_empty() {
+        return Ok(());
+    }
+    let logger = get_logger();
+    let logger = logger.new(o!("thread" => "publish_state_messages"));
+    match message_producer.send_state_messages(&state_metaes).await {
+        Ok(_) => {
+            info!(logger, "Successfully publish_state_messages");
+        }
+        Err(e) => {
+            error!(logger, "Failed to publish_state_messages: {}", e);
+        }
+    }
+    Ok(())
+}
+pub async fn publish_image_messages(
+    message_producer: &dyn MessagePublisher,
+    image_metaes: &[DicomImageMeta],
+) -> Result<(), Whatever> {
+    if image_metaes.is_empty() {
+        return Ok(());
+    }
+    let logger = get_logger();
+    let logger = logger.new(o!("thread" => "publish_image_messages"));
+    match message_producer.send_image_messages(&image_metaes).await {
+        Ok(_) => {
+            info!(logger, "Successfully publish_image_messages");
+        }
+        Err(e) => {
+            error!(logger, "Failed to publish_image_messages: {}", e); 
         }
     }
     Ok(())

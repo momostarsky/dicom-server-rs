@@ -281,8 +281,8 @@ pub(crate) async fn process_dicom_file(
 ///
 /// # 参数
 /// * `dicom_message_lists` - 需要处理的 DICOM 对象元数据列表
-/// * `storage_producer` - 用于发布受支持传输语法消息的 Kafka 生产者
-/// * `log_producer` - 用于发布不受支持传输语法消息的 Kafka 生产者
+/// * `storage_producer` - 用于提取PatientInfo, StudyInfo,SerisInfo 符合DICOM标准的实体信息
+/// * `log_producer` - 用于记录收图日志信息,方便后续统计收图效率
 /// * `logger` - 日志记录器
 /// * `queue_topic_main` - 主题名称（用于storage_consumer）
 /// * `queue_topic_log` - 主题名称（用于日志提取）

@@ -1,15 +1,16 @@
-use common::utils::process_storage_messages;
+use common::dicom_object_meta::{DicomImageMeta, DicomStateMeta, DicomStoreMeta};
+use common::message_sender_kafka::KafkaMessagePublisher;
+use common::utils::group_dicom_state;
 use common::{database_factory, server_config};
 use futures::StreamExt;
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message};
 use slog;
-use slog::{Logger, error, info};
+use slog::{Logger, error, info, o};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 use tokio::runtime::Handle;
-use common::dicom_object_meta::DicomStoreMeta;
 
 // 全局logger静态变量，使用线程安全的方式
 static GLOBAL_LOGGER: OnceLock<Logger> = OnceLock::new();
@@ -57,7 +58,10 @@ pub async fn start_process(logger: &Logger) {
     match db_provider.echo().await {
         Ok(msg) => info!(global_logger, "Database provider echo: {}", msg),
         Err(e) => {
-            error!(global_logger, "Failed to echo from database provider: {}", e);
+            error!(
+                global_logger,
+                "Failed to echo from database provider: {}", e
+            );
             std::process::exit(-2);
         }
     }
@@ -83,7 +87,10 @@ pub async fn start_process(logger: &Logger) {
     match consumer.subscribe(&[topic]) {
         Ok(_) => info!(global_logger, "Successfully subscribed to topic: {}", topic),
         Err(e) => {
-            error!(global_logger, "Failed to subscribe to topic {}: {}", topic, e);
+            error!(
+                global_logger,
+                "Failed to subscribe to topic {}: {}", topic, e
+            );
             std::process::exit(-1);
         }
     }
@@ -165,7 +172,11 @@ async fn read_message(
                                 {
                                     error!(logger, "Failed to commit message: {}", e);
                                 } else {
-                                    info!(logger, "Successfully processed and committed message:{}", message.offset());
+                                    info!(
+                                        logger,
+                                        "Successfully processed and committed message:{}",
+                                        message.offset()
+                                    );
                                 }
                             }
                             Err(e) => {
@@ -243,32 +254,43 @@ async fn persist_message_loop(
             tokio::time::sleep(Duration::from_secs(1)).await;
             continue;
         }
-
-        // 创建数据库提供者
-        let db_provider = match database_factory::create_db_instance().await {
-            Some(provider) => provider,
-            None => {
-                error!(
-                    logger,
-                    "Failed to create database provider: provider is None"
-                );
-                // 休眠一段时间，等待下一次处理
-                tokio::time::sleep(Duration::from_secs(1)).await;
+        let (state_metas, image_entities) = match group_dicom_state(&messages_to_process).await {
+            Ok((state_metas, image_entities)) => (state_metas, image_entities),
+            Err(e) => {
+                error!(logger, "Failed to group dicom state: {}", e);
                 continue;
             }
         };
-        match process_storage_messages(&messages_to_process, &db_provider).await {
-            Ok(_) => {
-                info!(logger, "Successfully processed batch of {} messages", messages_to_process.len());
-
-            }
-            Err(e) => {
-                error!(logger, "Failed to process storage messages: {}", e);
-                // 休眠一段时间，等待下一次处理
-                tokio::time::sleep(Duration::from_secs(5)).await;
-                continue;
-            }
+        //TODO 遍历输出状态
+        for state_meta in &state_metas {
+            info!(logger, "DicomStateMeta: {:?}", state_meta);
         }
+        //TODO 遍历输出图像
+        for image_entity in &image_entities {
+            info!(logger, "ImageEntity: {:?}", image_entity);
+        }
+        let app_config = server_config::load_config().unwrap();
+        let queue_config = app_config.message_queue;
+
+        let topic_state = &queue_config.topic_dicom_state.as_str();
+        let topic_image = &queue_config.topic_dicom_image.as_str();
+
+        let state_producer = KafkaMessagePublisher::new(topic_state.parse().unwrap());
+        let image_producer = KafkaMessagePublisher::new(topic_image.parse().unwrap());
+
+        // 发布状态消息和图像消息
+        if let Err(e) = publish_dicom_meta(
+            &state_metas,
+            &image_entities,
+            &state_producer,
+            &image_producer,
+        )
+        .await
+        {
+            error!(logger, "Failed to publish dicom meta: {}", e);
+            continue;
+        }
+
         // 更新最后处理时间
         {
             let mut time = last_process_time.lock().unwrap();
@@ -281,4 +303,102 @@ async fn persist_message_loop(
             messages_to_process.len()
         );
     }
+}
+
+async fn publish_dicom_meta(
+    state_metaes: &Vec<DicomStateMeta>,
+    image_metaes: &Vec<DicomImageMeta>,
+    state_producer: &KafkaMessagePublisher,
+    image_producer: &KafkaMessagePublisher,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root_logger = common::utils::get_logger();
+    let logger = root_logger.new(o!("storescp"=>"classify_and_publish_dicom_messages"));
+    if state_metaes.is_empty() || image_metaes.is_empty() {
+        info!(
+            logger,
+            "Empty dicom state meta list and image meta list, skip"
+        );
+        return Ok(());
+    }
+
+    let state_topic_name = state_producer.topic();
+    let image_topic_name = image_producer.topic();
+
+    // 并行发布状态消息和图像消息
+    let (state_result, image_result) = tokio::join!(
+        common::utils::publish_state_messages(state_producer, &state_metaes),
+        common::utils::publish_image_messages(image_producer, &image_metaes)
+    );
+    // 处理状态消息发布结果
+    match state_result {
+        Ok(_) => {
+            info!(
+                logger,
+                "Successfully published {} supported messages to Kafka: {}",
+                state_metaes.len(),
+                state_topic_name
+            );
+        }
+        Err(e) => {
+            error!(
+                logger,
+                "Failed to publish messages to Kafka: {}, topic: {}", e, state_topic_name
+            );
+        }
+    }
+
+    // 处理图像消息发布结果
+    match image_result {
+        Ok(_) => {
+            info!(
+                logger,
+                "Successfully published {} messages to Kafka: {}",
+                image_metaes.len(),
+                image_topic_name
+            );
+        }
+        Err(e) => {
+            error!(
+                logger,
+                "Failed to publish image messages to Kafka: {}, topic: {}", e, image_topic_name
+            );
+        }
+    }
+    //
+    // match common::utils::publish_state_messages(state_producer, &state_metaes).await {
+    //     Ok(_) => {
+    //         info!(
+    //             logger,
+    //             "Successfully published {} supported messages to Kafka: {}",
+    //             state_metaes.len(),
+    //             state_topic_name
+    //         );
+    //     }
+    //     Err(e) => {
+    //         error!(
+    //             logger,
+    //             "Failed to publish messages to Kafka: {}, topic: {}", e, state_topic_name
+    //         );
+    //     }
+    // }
+    //
+    //
+    // match common::utils::publish_image_messages(image_producer, &image_metaes).await {
+    //     Ok(_) => {
+    //         info!(
+    //             logger,
+    //             "Successfully published {} messages to Kafka: {}",
+    //             image_metaes.len(),
+    //             image_topic_name
+    //         );
+    //     }
+    //     Err(e) => {
+    //         error!(
+    //             logger,
+    //             "Failed to publish image messages to Kafka: {}, topic: {}", e, image_topic_name
+    //         );
+    //     }
+    // }
+
+    Ok(())
 }

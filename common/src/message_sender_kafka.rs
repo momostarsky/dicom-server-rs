@@ -1,5 +1,6 @@
-
+use crate::dicom_object_meta::{DicomImageMeta, DicomStateMeta, DicomStoreMeta};
 use crate::message_sender::MessagePublisher;
+use crate::server_config;
 use async_trait::async_trait;
 use futures_util::future::join_all;
 use rdkafka::ClientConfig;
@@ -8,9 +9,7 @@ use rdkafka::util::Timeout;
 use std::collections::HashMap;
 use std::error::Error;
 use std::time::Duration;
-use tracing::{debug, info, error};
-use crate::dicom_object_meta::DicomStoreMeta;
-use crate::server_config;
+use tracing::{debug, error, info};
 
 pub struct KafkaMessagePublisher {
     producer: FutureProducer,
@@ -64,30 +63,29 @@ impl MessagePublisher for KafkaMessagePublisher {
             self.topic
         );
         let payload = serde_json::to_vec(msg)?;
-        let key =String::from(msg.trace_id.as_str());
+        let key = String::from(msg.trace_id.as_str());
         let record: FutureRecord<String, Vec<u8>> =
             FutureRecord::to(&*self.topic).key(&key).payload(&payload);
 
-        match self.producer
+        match self
+            .producer
             .send(record, Timeout::After(Duration::from_secs(10))) // 增加超时时间到10秒
             .await
-            .map_err(|(e, _)| e) {
-                Ok(_) => {
-                    self.producer.flush(Duration::from_micros(500))?;
-                    debug!("Flushed KafkaMessagePublisher");
-                    Ok(())
-                },
-                Err(e) => {
-                    error!("Failed to send message to Kafka: {:?}", e);
-                    Err(Box::new(e))
-                }
+            .map_err(|(e, _)| e)
+        {
+            Ok(_) => {
+                self.producer.flush(Duration::from_micros(500))?;
+                debug!("Flushed KafkaMessagePublisher");
+                Ok(())
             }
+            Err(e) => {
+                error!("Failed to send message to Kafka: {:?}", e);
+                Err(Box::new(e))
+            }
+        }
     }
 
-    async fn send_batch_messages(
-        &self,
-        messages: &[DicomStoreMeta],
-    ) -> Result<(), Box<dyn Error>> {
+    async fn send_batch_messages(&self, messages: &[DicomStoreMeta]) -> Result<(), Box<dyn Error>> {
         info!(
             "KafkaMessagePublisher send_batch_messages: {}  to topic {}",
             messages.len(),
@@ -99,7 +97,7 @@ impl MessagePublisher for KafkaMessagePublisher {
         for msg in messages {
             match serde_json::to_vec(msg) {
                 Ok(payload) => {
-                    let key =String::from(msg.trace_id.as_str());
+                    let key = String::from(msg.trace_id.as_str());
                     wait_message.insert(key.clone(), payload.clone());
                 }
                 Err(e) => {
@@ -144,6 +142,147 @@ impl MessagePublisher for KafkaMessagePublisher {
         // 如果有错误，返回错误信息
         if error_count > 0 {
             Err("Some messages failed to send".into())
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn send_state_messages(&self, messages: &[DicomStateMeta]) -> Result<(), Box<dyn Error>> {
+        info!(
+            "KafkaMessagePublisher send_state_messages: {} to topic {}",
+            messages.len(),
+            self.topic
+        );
+
+        let mut wait_message = HashMap::new();
+
+        for msg in messages {
+            match serde_json::to_vec(msg) {
+                Ok(payload) => {
+                    // 使用 tenant_id + patient_id + study_uid + series_uid 作为唯一键
+                    // 使用哈希值作为消息键，避免键过长
+                    let key_source = format!("{}_{}_{}_{}",
+                                             msg.tenant_id.as_str(),
+                                             msg.patient_id.as_str(),
+                                             msg.study_uid.as_str(),
+                                             msg.series_uid.as_str());
+                    let key = format!("{:x}", md5::compute(key_source));
+                    wait_message.insert(key, payload);
+                   
+                }
+                Err(e) => {
+                    error!("Failed to serialize DicomStateMeta message: {:?}", e);
+                    return Err(Box::new(e));
+                }
+            }
+        }
+
+        let futures: Vec<_> = wait_message
+            .iter()
+            .map(|(key, payload)| {
+                let record = FutureRecord::to(&*self.topic)
+                    .key(&key[..])
+                    .payload(&payload[..]);
+                // 增加超时时间到10秒
+                self.producer
+                    .send(record, Timeout::After(Duration::from_secs(10)))
+            })
+            .collect();
+
+        let results = join_all(futures).await;
+
+        let mut success_count = 0;
+        let mut error_count = 0;
+
+        for result in results {
+            match result {
+                Ok(_) => success_count += 1,
+                Err(e) => {
+                    error!("Failed to send DicomStateMeta message: {:?}", e);
+                    error_count += 1;
+                }
+            }
+        }
+
+        info!(
+            "✅ 批量发送 DicomStateMeta 完成: 成功 {} 条, 失败 {} 条",
+            success_count, error_count
+        );
+
+        // 如果有错误，返回错误信息
+        if error_count > 0 {
+            Err("Some DicomStateMeta messages failed to send".into())
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn send_image_messages(&self, messages: &[DicomImageMeta]) -> Result<(), Box<dyn Error>> {
+        info!(
+            "KafkaMessagePublisher send_image_messages: {} to topic {}",
+            messages.len(),
+            self.topic
+        );
+
+        let mut wait_message = HashMap::new();
+
+        for msg in messages {
+            match serde_json::to_vec(msg) {
+                Ok(payload) => {
+                    // 使用 tenant_id + patient_id + study_uid + series_uid + sop_uid 作为唯一键
+                    let key_source = format!(
+                        "{}_{}_{}_{}_{}",
+                        msg.tenant_id.as_str(),
+                        msg.patient_id.as_str(),
+                        msg.study_uid.as_str(),
+                        msg.series_uid.as_str(),
+                        msg.sop_uid.as_str()
+                    );
+                    let key = format!("{:x}", md5::compute(key_source));
+                    wait_message.insert(key, payload);
+                }
+                Err(e) => {
+                    error!("Failed to serialize DicomImageMeta message: {:?}", e);
+                    return Err(Box::new(e));
+                }
+            }
+        }
+
+        let futures: Vec<_> = wait_message
+            .iter()
+            .map(|(key, payload)| {
+                let record = FutureRecord::to(&*self.topic)
+                    .key(&key[..])
+                    .payload(&payload[..]);
+                // 增加超时时间到10秒
+                self.producer
+                    .send(record, Timeout::After(Duration::from_secs(10)))
+            })
+            .collect();
+
+        let results = join_all(futures).await;
+
+        let mut success_count = 0;
+        let mut error_count = 0;
+
+        for result in results {
+            match result {
+                Ok(_) => success_count += 1,
+                Err(e) => {
+                    error!("Failed to send DicomImageMeta message: {:?}", e);
+                    error_count += 1;
+                }
+            }
+        }
+
+        info!(
+            "✅ 批量发送 DicomImageMeta 完成: 成功 {} 条, 失败 {} 条",
+            success_count, error_count
+        );
+
+        // 如果有错误，返回错误信息
+        if error_count > 0 {
+            Err("Some DicomImageMeta messages failed to send".into())
         } else {
             Ok(())
         }
