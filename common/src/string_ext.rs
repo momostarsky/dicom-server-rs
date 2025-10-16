@@ -17,6 +17,7 @@ type BoundedResult<T, E = BoundedStringError> = Result<T, E>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
+#[derive(Default)]
 pub struct BoundedString<const N: usize> {
     value: String,
 }
