@@ -1,4 +1,6 @@
-use crate::string_ext::{BoundedString, DicomDateString, ExtDicomDate, ExtDicomTime, SopUidString, UuidString};
+use crate::string_ext::{
+    BoundedString, DicomDateString, ExtDicomDate, ExtDicomTime, SopUidString, UuidString,
+};
 use crate::{dicom_utils, uid_hash};
 use chrono::NaiveDateTime;
 use dicom_core::value::DicomTime;
@@ -97,49 +99,93 @@ pub enum DicomParseError {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DicomStateMeta {
+    #[serde(rename = "tenant_id")]
     pub tenant_id: BoundedString<64>,
+    #[serde(rename = "patient_id")]
     pub patient_id: BoundedString<64>,
+    #[serde(rename = "study_uid")]
     pub study_uid: SopUidString,
+    #[serde(rename = "series_uid")]
     pub series_uid: SopUidString,
-    pub study_uid_hash: BoundedString<20>,
-    pub series_uid_hash: BoundedString<20>,
+    #[serde(rename = "study_uid_hash")]
+    pub study_uid_hash: u64,
+    #[serde(rename = "series_uid_hash")]
+    pub series_uid_hash: u64,
+    #[serde(rename = "study_date_origin")]
     pub study_date_origin: DicomDateString,
 
+    #[serde(rename = "patient_name")]
     pub patient_name: Option<BoundedString<64>>,
+    #[serde(rename = "patient_sex")]
     pub patient_sex: Option<BoundedString<1>>,
+    #[serde(rename = "patient_birth_date")]
     pub patient_birth_date: Option<chrono::NaiveDate>,
+    #[serde(rename = "patient_birth_time")]
     pub patient_birth_time: Option<ExtDicomTime>,
+    #[serde(rename = "patient_age")]
     pub patient_age: Option<BoundedString<16>>,
+    #[serde(rename = "patient_size")]
     pub patient_size: Option<f64>,
+    #[serde(rename = "patient_weight")]
     pub patient_weight: Option<f64>,
+    #[serde(rename = "medical_alerts")]
     pub medical_alerts: Option<BoundedString<64>>,
+    #[serde(rename = "allergies")]
     pub allergies: Option<BoundedString<64>>,
+    #[serde(rename = "pregnancy_status")]
     pub pregnancy_status: Option<i32>,
+    #[serde(rename = "occupation")]
     pub occupation: Option<BoundedString<64>>,
-    pub additional_patient_history: Option<BoundedString<512>>,
-    pub patient_comments: Option<BoundedString<512>>,
 
+    #[serde(rename = "study_date")]
     pub study_date: chrono::NaiveDate,
+    #[serde(rename = "study_time")]
     pub study_time: Option<ExtDicomTime>,
+    #[serde(rename = "accession_number")]
     pub accession_number: BoundedString<16>,
-    pub study_id: Option<BoundedString<64>>,
+    #[serde(rename = "study_id")]
+    pub study_id: Option<BoundedString<16>>,
+    #[serde(rename = "study_description")]
     pub study_description: Option<BoundedString<64>>,
+    ///用于标识转诊医生的姓名信息
+    #[serde(rename = "referring_name")]
     pub referring_physician_name: Option<BoundedString<64>>,
+    ///用于标识患者住院号或入院ID
+    #[serde(rename = "admission_id")]
     pub admission_id: Option<BoundedString<64>>,
+    ///用于标识执行检查的医师姓名
+    #[serde(rename = "performing_name")]
     pub performing_physician_name: Option<BoundedString<64>>,
-    pub procedure_code_sequence: Option<BoundedString<512>>,
-    pub received_instances: Option<i32>,
 
-    pub modality: String,
+    #[serde(rename = "modality")]
+    pub modality: Option<BoundedString<16>>,
+    #[serde(rename = "series_number")]
     pub series_number: Option<i32>,
+    #[serde(rename = "series_date")]
     pub series_date: Option<chrono::NaiveDate>,
+    #[serde(rename = "series_time")]
     pub series_time: Option<ExtDicomTime>,
+    #[serde(rename = "series_description")]
     pub series_description: Option<BoundedString<256>>,
+    #[serde(rename = "body_part_examined")]
     pub body_part_examined: Option<BoundedString<64>>,
+    #[serde(rename = "protocol_name")]
     pub protocol_name: Option<BoundedString<64>>,
+    #[serde(rename = "operators_name")]
     pub operators_name: Option<BoundedString<64>>,
-    pub number_of_series_related_instances: Option<i32>,
+    #[serde(rename = "manufacturer")]
+    pub manufacturer: Option<BoundedString<64>>,
+    #[serde(rename = "institution_name")]
+    pub institution_name: Option<BoundedString<64>>,
+    #[serde(rename = "device_serial_number")]
+    pub device_serial_number: Option<BoundedString<64>>,
+    #[serde(rename = "software_versions")]
+    pub software_versions: Option<BoundedString<64>>,
+    #[serde(rename = "series_related_instances")]
+    pub series_related_instances: Option<i32>,
+    #[serde(rename = "created_time")]
     pub created_time: Option<NaiveDateTime>,
+    #[serde(rename = "updated_time")]
     pub updated_time: Option<NaiveDateTime>,
 }
 
@@ -155,15 +201,13 @@ pub struct DicomImageMeta {
     pub study_date_origin: DicomDateString,
 
     pub instance_number: Option<i32>,
-    pub image_comments: Option<BoundedString<256>>,
+
     pub content_date: Option<DicomDateString>,
     pub content_time: Option<ExtDicomTime>,
-    pub acquisition_date: Option<DicomDateString>,
-    pub acquisition_time: Option<ExtDicomTime>,
-    pub acquisition_date_time: Option<chrono::NaiveDateTime>,
-    pub image_type: Option<BoundedString<256>>,
-    pub image_orientation_patient: Option<String>,
-    pub image_position_patient: Option<String>,
+
+    pub image_type: Option<BoundedString<128>>,
+    pub image_orientation_patient: Option<BoundedString<128>>,
+    pub image_position_patient: Option<BoundedString<64>>,
     pub slice_thickness: Option<f64>,
     pub spacing_between_slices: Option<f64>,
     pub slice_location: Option<f64>,
@@ -177,39 +221,14 @@ pub struct DicomImageMeta {
     pub pixel_representation: Option<i32>,
     pub rescale_intercept: Option<f64>,
     pub rescale_slope: Option<f64>,
-    pub rescale_type: Option<String>,
-    pub window_center: Option<String>,
-    pub window_width: Option<String>,
-    pub number_of_frames: i32,
-
-    /*
-    常见的应用场景
-        图像重建算法：例如，区分使用了“滤波反投影 (Filtered Back Projection)”还是“迭代重建 (Iterative Reconstruction)”算法。
-        后处理滤波：标识应用了哪些空间滤波器，如“锐化 (Edge Enhancement)”、“平滑 (Smoothing)”或“降噪 (Noise Reduction)”。
-        特殊成像模式：用于标识特定的采集或处理模式，如“能谱成像处理”、“去金属伪影处理 (Metal Artifact Reduction)”等。
-        数据校正：表示进行了哪些校正，如“散射校正”、“衰减校正”等。
-    为什么需要它？
-        互操作性：不同制造商的设备可能用不同的术语描述相似的处理。标准化的代码确保了信息在不同系统（如 PACS, RIS, 工作站）之间交换时的准确理解。
-        自动化处理：下游系统（如 AI 分析工具、图像分析软件）可以根据这个代码来判断图像的处理状态，从而调整其分析算法或解释结果。例如，知道图像经过了强烈的锐化处理，可能会影响对边缘或纹理的分析。
-        研究与质量保证：研究人员可以利用这些代码来筛选特定处理方式的图像集。质量保证流程可以检查预期的处理代码是否被正确应用。
-     */
-    // 设备处理描述  一个机器可读的、标准化的代码，确保不同厂商和系统之间对处理步骤的理解一致
-    pub acquisition_device_processing_description: Option<BoundedString<256>>,
-    // 设备处理代码  一个人类可读的文本描述（如 "Edge Enhancement", "Noise Reduction", "Filtered Back Projection"）
-    pub acquisition_device_processing_code: Option<BoundedString<256>>,
-    /*
-    核心功能
-    唯一标识设备：这是识别执行医学影像采集或处理的物理设备（如 CT 扫描仪、MRI 机器、X 光机、超声设备、工作站等）的主要方式之一。它通常是由设备制造商分配的、在该制造商产品线中唯一的序列号。
-    设备溯源：当需要追踪图像来源、进行质量控制、故障排查、维护记录查询或法规审计时，设备序列号是至关重要的信息。它能精确地定位到生成特定图像的那台具体机器。
-    数据关联：在 PACS（影像归档与通信系统）、RIS（放射信息系统）或研究数据库中，可以根据设备序列号来筛选、统计或分析来自特定设备的所有影像数据。
-     */
-    pub device_serial_number: Option<BoundedString<64>>,
-    pub software_versions: Option<BoundedString<64>>,
+    pub rescale_type: Option<BoundedString<64>>,
+    pub window_center: Option<BoundedString<64>>,
+    pub window_width: Option<BoundedString<64>>,
     pub transfer_syntax_uid: SopUidString,
     pub pixel_data_location: Option<BoundedString<512>>,
     pub thumbnail_location: Option<BoundedString<512>>,
     pub sop_class_uid: SopUidString,
-    pub image_status: Option<BoundedString<64>>,
+    pub image_status: Option<BoundedString<32>>,
     pub space_size: Option<u64>, // 新增字段
     pub created_time: Option<NaiveDateTime>,
     pub updated_time: Option<NaiveDateTime>,
@@ -266,13 +285,6 @@ pub fn make_image_info(
 
     // 图像相关信息
     let instance_number = dicom_utils::get_int_value(dicom_obj, tags::INSTANCE_NUMBER);
-    let image_comments = dicom_utils::get_text_value(dicom_obj, tags::IMAGE_COMMENTS)
-        .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<256>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert image comments".to_string())
-        })?;
 
     let content_date = dicom_utils::get_date_value_dicom(dicom_obj, tags::CONTENT_DATE)
         .map(|date| {
@@ -292,39 +304,34 @@ pub fn make_image_info(
             DicomParseError::InvalidTimeFormat("Failed to convert content time".to_string())
         })?;
 
-    let acquisition_date = dicom_utils::get_date_value_dicom(dicom_obj, tags::ACQUISITION_DATE)
-        .map(|date| {
-            let date_str = date.format("%Y%m%d").to_string();
-            DicomDateString::try_from(date_str)
-        })
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::InvalidDateFormat("Failed to convert acquisition date".to_string())
-        })?;
-
-    let acquisition_time = dicom_utils::get_text_value(dicom_obj, tags::ACQUISITION_TIME)
-        .filter(|v| !v.is_empty())
-        .map(|v| ExtDicomTime::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::InvalidTimeFormat("Failed to convert acquisition time".to_string())
-        })?;
-
-    let acquisition_date_time =
-        dicom_utils::get_datetime_value_dicom(dicom_obj, tags::ACQUISITION_DATE_TIME);
-
     let image_type = dicom_utils::get_text_value(dicom_obj, tags::IMAGE_TYPE)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<256>::try_from(v))
+        .map(|v| BoundedString::<128>::try_from(v))
         .transpose()
         .map_err(|_| {
             DicomParseError::ConversionError("Failed to convert image type".to_string())
         })?;
 
     let image_orientation_patient =
-        dicom_utils::get_text_value(dicom_obj, tags::IMAGE_ORIENTATION_PATIENT);
+        dicom_utils::get_text_value(dicom_obj, tags::IMAGE_ORIENTATION_PATIENT)
+            .filter(|v| !v.is_empty())
+            .map(|v| BoundedString::<128>::try_from(v))
+            .transpose()
+            .map_err(|_| {
+                DicomParseError::ConversionError(
+                    "Failed to convert image orientation patient".to_string(),
+                )
+            })?;
     let image_position_patient =
-        dicom_utils::get_text_value(dicom_obj, tags::IMAGE_POSITION_PATIENT);
+        dicom_utils::get_text_value(dicom_obj, tags::IMAGE_POSITION_PATIENT)
+            .filter(|v| !v.is_empty())
+            .map(|v| BoundedString::<64>::try_from(v))
+            .transpose()
+            .map_err(|_| {
+                DicomParseError::ConversionError(
+                    "Failed to convert image position patient".to_string(),
+                )
+            })?;
 
     let slice_thickness = dicom_utils::get_decimal_value(dicom_obj, tags::SLICE_THICKNESS);
     let spacing_between_slices =
@@ -352,51 +359,28 @@ pub fn make_image_info(
 
     let rescale_intercept = dicom_utils::get_decimal_value(dicom_obj, tags::RESCALE_INTERCEPT);
     let rescale_slope = dicom_utils::get_decimal_value(dicom_obj, tags::RESCALE_SLOPE);
-    let rescale_type = dicom_utils::get_text_value(dicom_obj, tags::RESCALE_TYPE);
-
-    let window_center = dicom_utils::get_text_value(dicom_obj, tags::WINDOW_CENTER);
-    let window_width = dicom_utils::get_text_value(dicom_obj, tags::WINDOW_WIDTH);
-
-    let number_of_frames = dicom_utils::get_tag_value(tags::NUMBER_OF_FRAMES, dicom_obj, 1);
-
-    let acquisition_device_processing_description =
-        dicom_utils::get_text_value(dicom_obj, tags::ACQUISITION_DEVICE_PROCESSING_DESCRIPTION)
-            .filter(|v| !v.is_empty())
-            .map(|v| BoundedString::<256>::try_from(v))
-            .transpose()
-            .map_err(|_| {
-                DicomParseError::ConversionError(
-                    "Failed to convert acquisition device processing description".to_string(),
-                )
-            })?;
-
-    let acquisition_device_processing_code =
-        dicom_utils::get_text_value(dicom_obj, tags::ACQUISITION_DEVICE_PROCESSING_CODE)
-            .filter(|v| !v.is_empty())
-            .map(|v| BoundedString::<256>::try_from(v))
-            .transpose()
-            .map_err(|_| {
-                DicomParseError::ConversionError(
-                    "Failed to convert acquisition device processing code".to_string(),
-                )
-            })?;
-
-    let device_serial_number = dicom_utils::get_text_value(dicom_obj, tags::DEVICE_SERIAL_NUMBER)
+    let rescale_type = dicom_utils::get_text_value(dicom_obj, tags::RESCALE_TYPE)
         .filter(|v| !v.is_empty())
         .map(|v| BoundedString::<64>::try_from(v))
         .transpose()
         .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert device serial number".to_string())
+            DicomParseError::ConversionError("Failed to convert rescale type".to_string())
         })?;
 
-    let software_versions = dicom_utils::get_text_value(dicom_obj, tags::SOFTWARE_VERSIONS)
+    let window_center = dicom_utils::get_text_value(dicom_obj, tags::WINDOW_CENTER)
         .filter(|v| !v.is_empty())
         .map(|v| BoundedString::<64>::try_from(v))
         .transpose()
         .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert software versions".to_string())
+            DicomParseError::ConversionError("Failed to convert window center".to_string())
         })?;
-
+    let window_width = dicom_utils::get_text_value(dicom_obj, tags::WINDOW_WIDTH)
+        .filter(|v| !v.is_empty())
+        .map(|v| BoundedString::<64>::try_from(v))
+        .transpose()
+        .map_err(|_| {
+            DicomParseError::ConversionError("Failed to convert window width".to_string())
+        })?;
     let transfer_syntax_uid = dicom_utils::get_text_value(dicom_obj, tags::TRANSFER_SYNTAX_UID)
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| "1.2.840.10008.1.2".to_string());
@@ -406,7 +390,7 @@ pub fn make_image_info(
         .ok_or_else(|| DicomParseError::MissingRequiredField("SOP Class UID".to_string()))?;
 
     let image_status = Some(
-        BoundedString::<64>::try_from("ACTIVE".to_string()).map_err(|_| {
+        BoundedString::<32>::try_from("ACTIVE".to_string()).map_err(|_| {
             DicomParseError::ConversionError("Failed to convert image status".to_string())
         })?,
     );
@@ -444,12 +428,10 @@ pub fn make_image_info(
         study_date_origin,
 
         instance_number,
-        image_comments,
+
         content_date,
         content_time,
-        acquisition_date,
-        acquisition_time,
-        acquisition_date_time,
+
         image_type,
         image_orientation_patient,
         image_position_patient,
@@ -469,12 +451,7 @@ pub fn make_image_info(
         rescale_type,
         window_center,
         window_width,
-        number_of_frames,
 
-        acquisition_device_processing_description,
-        acquisition_device_processing_code,
-        device_serial_number,
-        software_versions,
         transfer_syntax_uid: SopUidString::try_from(transfer_syntax_uid).unwrap(),
         pixel_data_location: None,
         thumbnail_location: None,
@@ -488,9 +465,21 @@ pub fn make_image_info(
     })
 }
 
+fn make_crc32(tenante_id: &str, study_uid:Option<&str>) -> u32 {
+    let mut data = vec![0u8; 128];
+    data[..tenante_id.len()].copy_from_slice(tenante_id.as_bytes());
+    if let Some(study_uid) = study_uid {
+        data[tenante_id.len()..tenante_id.len() + study_uid.len()]
+            .copy_from_slice(study_uid.as_bytes());
+    }
+    const_crc32::crc32(&data)
+}
+
 pub fn make_state_info(
     tenant_id: &str,
+
     dicom_obj: &InMemDicomObject,
+    msg_study_uid: Option<&str>,
 ) -> Result<DicomStateMeta, DicomParseError> {
     // 必填字段验证 - 确保不为空
     // 必填字段验证 - 确保不为空且长度不超过64
@@ -507,7 +496,7 @@ pub fn make_state_info(
         .ok_or_else(|| DicomParseError::MissingRequiredField("Series Instance UID".to_string()))?;
     let acc_num = dicom_utils::get_text_value(dicom_obj, tags::ACCESSION_NUMBER)
         .filter(|v| !v.is_empty() && v.len() <= 16)
-        .ok_or_else(|| DicomParseError::MissingRequiredField("Accession Number".to_string()))?;
+        .unwrap_or_else(|| format!("X32CRC{}", make_crc32(tenant_id, msg_study_uid))); // 当为空时设置默认值"X12333"
     // study_date 必须存在且为有效日期
     let study_date = dicom_utils::get_date_value_dicom(dicom_obj, tags::STUDY_DATE)
         .ok_or_else(|| DicomParseError::MissingRequiredField("Study Date".to_string()))?;
@@ -527,7 +516,10 @@ pub fn make_state_info(
     }
     let modality = dicom_utils::get_text_value(dicom_obj, tags::MODALITY)
         .filter(|v| !v.is_empty())
-        .ok_or_else(|| DicomParseError::MissingRequiredField("Modality".to_string()))?;
+        .map(|v| BoundedString::<16>::try_from(v))
+        .transpose()
+        .map_err(|_| DicomParseError::ConversionError("Failed to convert modality".to_string()))?;
+
     // 患者相关信息
     let patient_name = dicom_utils::get_text_value(dicom_obj, tags::PATIENT_NAME)
         .filter(|v| !v.is_empty())
@@ -590,25 +582,6 @@ pub fn make_state_info(
             DicomParseError::ConversionError("Failed to convert occupation".to_string())
         })?;
 
-    let additional_patient_history =
-        dicom_utils::get_text_value(dicom_obj, tags::ADDITIONAL_PATIENT_HISTORY)
-            .filter(|v| !v.is_empty())
-            .map(|v| BoundedString::<512>::try_from(v))
-            .transpose()
-            .map_err(|_| {
-                DicomParseError::ConversionError(
-                    "Failed to convert additional patient history".to_string(),
-                )
-            })?;
-
-    let patient_comments = dicom_utils::get_text_value(dicom_obj, tags::PATIENT_COMMENTS)
-        .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<512>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert patient comments".to_string())
-        })?;
-
     // 检查相关信息
     let study_time = dicom_utils::get_text_value(dicom_obj, tags::STUDY_TIME)
         .filter(|v| !v.is_empty())
@@ -620,7 +593,7 @@ pub fn make_state_info(
 
     let study_id = dicom_utils::get_text_value(dicom_obj, tags::STUDY_ID)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
+        .map(|v| BoundedString::<16>::try_from(v))
         .transpose()
         .map_err(|_| DicomParseError::ConversionError("Failed to convert study ID".to_string()))?;
 
@@ -661,19 +634,6 @@ pub fn make_state_info(
                     "Failed to convert performing physician name".to_string(),
                 )
             })?;
-
-    let procedure_code_sequence =
-        dicom_utils::get_text_value(dicom_obj, tags::PROCEDURE_CODE_SEQUENCE)
-            .filter(|v| !v.is_empty())
-            .map(|v| BoundedString::<512>::try_from(v))
-            .transpose()
-            .map_err(|_| {
-                DicomParseError::ConversionError(
-                    "Failed to convert procedure code sequence".to_string(),
-                )
-            })?;
-
-    let received_instances = Some(0); // 默认值
 
     // 序列相关信息
 
@@ -720,14 +680,42 @@ pub fn make_state_info(
             DicomParseError::ConversionError("Failed to convert operators name".to_string())
         })?;
 
-    let number_of_series_related_instances =
+    let manufacturer = dicom_utils::get_text_value(dicom_obj, tags::MANUFACTURER)
+        .filter(|v| !v.is_empty())
+        .map(|v| BoundedString::<64>::try_from(v))
+        .transpose()
+        .map_err(|_| {
+            DicomParseError::ConversionError("Failed to convert manufacturer".to_string())
+        })?;
+
+    let institution_name = dicom_utils::get_text_value(dicom_obj, tags::INSTITUTION_NAME)
+        .filter(|v| !v.is_empty())
+        .map(|v| BoundedString::<64>::try_from(v))
+        .transpose()
+        .map_err(|_| {
+            DicomParseError::ConversionError("Failed to convert institution name".to_string())
+        })?;
+    let device_serial_number = dicom_utils::get_text_value(dicom_obj, tags::DEVICE_SERIAL_NUMBER)
+        .filter(|v| !v.is_empty())
+        .map(|v| BoundedString::<64>::try_from(v))
+        .transpose()
+        .map_err(|_| {
+            DicomParseError::ConversionError("Failed to convert device serial number".to_string())
+        })?;
+
+    let software_versions = dicom_utils::get_text_value(dicom_obj, tags::SOFTWARE_VERSIONS)
+        .filter(|v| !v.is_empty())
+        .map(|v| BoundedString::<64>::try_from(v))
+        .transpose()
+        .map_err(|_| {
+            DicomParseError::ConversionError("Failed to convert software versions".to_string())
+        })?;
+    let series_related_instances =
         dicom_utils::get_int_value(dicom_obj, tags::NUMBER_OF_SERIES_RELATED_INSTANCES);
 
     // 计算哈希值
-    let study_uid_hash =
-        BoundedString::<20>::try_from(uid_hash::uid_to_u64(&study_uid).to_string()).unwrap();
-    let series_uid_hash =
-        BoundedString::<20>::try_from(uid_hash::uid_to_u64(&series_uid).to_string()).unwrap();
+    let study_uid_hash = uid_hash::uid_to_u64(&study_uid);
+    let series_uid_hash = uid_hash::uid_to_u64(&series_uid);
 
     // 时间戳
     let now = chrono::Local::now().naive_local();
@@ -747,7 +735,6 @@ pub fn make_state_info(
         study_uid_hash,
         series_uid_hash,
         study_date_origin,
-
         // 患者信息
         patient_name,
         patient_sex,
@@ -760,9 +747,6 @@ pub fn make_state_info(
         allergies,
         pregnancy_status,
         occupation,
-        additional_patient_history,
-        patient_comments,
-
         // 检查信息
         study_date,
         study_time,
@@ -772,9 +756,6 @@ pub fn make_state_info(
         referring_physician_name,
         admission_id,
         performing_physician_name,
-        procedure_code_sequence,
-        received_instances,
-
         // 序列信息
         modality,
         series_number,
@@ -784,7 +765,11 @@ pub fn make_state_info(
         body_part_examined,
         protocol_name,
         operators_name,
-        number_of_series_related_instances,
+        manufacturer,
+        institution_name,
+        device_serial_number,
+        software_versions,
+        series_related_instances,
         // 时间戳
         created_time: Some(now),
         updated_time: Some(now),
@@ -794,12 +779,12 @@ pub fn make_state_info(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::string_ext::ExtDicomTimeInvalidError;
     use dicom_object::collector::CharacterSetOverride;
     use dicom_object::open_file;
     use rstest::rstest;
     use std::fs;
     use std::path::Path;
-    use crate::string_ext::ExtDicomTimeInvalidError;
 
     #[rstest]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/107")]
@@ -816,41 +801,41 @@ mod tests {
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/118")]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/119")]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/120")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/121")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/122")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/123")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/124")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/125")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/126")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/127")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/128")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/129")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/130")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/131")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/132")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/133")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/134")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/135")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/136")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/137")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/138")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/139")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/140")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/141")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/142")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/143")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/144")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/145")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/146")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/147")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/148")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/149")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/150")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/151")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/152")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/153")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/154")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/4.90")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/121")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/122")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/123")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/124")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/125")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/126")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/127")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/128")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/129")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/130")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/131")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/132")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/133")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/134")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/135")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/136")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/137")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/138")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/139")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/140")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/141")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/142")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/143")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/144")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/145")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/146")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/147")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/148")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/149")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/150")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/151")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/152")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/153")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/154")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/4.90")]
 
     fn test_make_state_info_with_dicom_files(#[case] dicom_dir: &str) {
         // let dicom_dir = "/media/dhz/DCP/DicomTestDataSet/dcmFiles/103";
@@ -885,7 +870,7 @@ mod tests {
             {
                 Ok(dicom_obj) => {
                     // 尝试解析DICOM对象
-                    let result = make_state_info("1234567890", &dicom_obj);
+                    let result = make_state_info("1234567890", &dicom_obj, None);
 
                     match result {
                         Ok(state_meta) => {
@@ -906,7 +891,7 @@ mod tests {
                                 path
                             );
                             assert!(
-                                !state_meta.modality.is_empty(),
+                                !state_meta.modality.unwrap().as_str().is_empty(),
                                 "Modality should not be empty in file: {:?}",
                                 path
                             );
@@ -944,41 +929,41 @@ mod tests {
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/118")]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/119")]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/120")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/121")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/122")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/123")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/124")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/125")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/126")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/127")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/128")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/129")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/130")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/131")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/132")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/133")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/134")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/135")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/136")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/137")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/138")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/139")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/140")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/141")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/142")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/143")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/144")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/145")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/146")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/147")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/148")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/149")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/150")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/151")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/152")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/153")]
-    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/154")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/4.90")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/121")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/122")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/123")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/124")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/125")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/126")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/127")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/128")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/129")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/130")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/131")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/132")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/133")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/134")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/135")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/136")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/137")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/138")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/139")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/140")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/141")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/142")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/143")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/144")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/145")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/146")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/147")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/148")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/149")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/150")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/151")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/152")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/153")]
+    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/154")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/4.90")]
 
     fn test_make_image_info_with_dicom_files(#[case] dicom_dir: &str) {
         // let dicom_dir = "/media/dhz/DCP/DicomTestDataSet/dcmFiles/103";
@@ -1072,7 +1057,6 @@ mod tests {
             }
         }
     }
-
 
     // #[test]
     // fn test_make_state_info_with_sample_files() {
@@ -1181,7 +1165,8 @@ mod tests {
     #[test]
     fn test_try_from_str() {
         // 测试有效的字符串
-        let time_result: Result<ExtDicomTime, ExtDicomTimeInvalidError> = "123456.123456".try_into();
+        let time_result: Result<ExtDicomTime, ExtDicomTimeInvalidError> =
+            "123456.123456".try_into();
         assert!(time_result.is_ok());
 
         // 测试无效的字符串
@@ -1192,11 +1177,13 @@ mod tests {
     #[test]
     fn test_try_from_string() {
         // 测试有效的String
-        let time_result: Result<ExtDicomTime, ExtDicomTimeInvalidError> = "123456.123456".to_string().try_into();
+        let time_result: Result<ExtDicomTime, ExtDicomTimeInvalidError> =
+            "123456.123456".to_string().try_into();
         assert!(time_result.is_ok());
 
         // 测试无效的String
-        let time_result: Result<ExtDicomTime, ExtDicomTimeInvalidError> = "invalid".to_string().try_into();
+        let time_result: Result<ExtDicomTime, ExtDicomTimeInvalidError> =
+            "invalid".to_string().try_into();
         assert!(time_result.is_err());
     }
 
@@ -1219,5 +1206,4 @@ mod tests {
         let error_str = format!("{}", error);
         assert_eq!(error_str, "Invalid DICOM time: test error");
     }
-
 }

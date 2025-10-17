@@ -144,13 +144,14 @@ pub async fn group_dicom_state(
     let mut image_entities: Vec<DicomImageMeta> = Vec::new();
 
     for message in messages {
+        let study_uid =Option::from(message.study_uid.as_str());
         match dicom_object::OpenFileOptions::new()
             .charset_override(CharacterSetOverride::AnyVr)
             .read_until(tags::PIXEL_DATA)
             .open_file(String::from(message.file_path.as_str()))
         {
             Ok(dicom_obj) => {
-                let state_meta = make_state_info(message.tenant_id.as_str(), &dicom_obj);
+                let state_meta = make_state_info(message.tenant_id.as_str(), &dicom_obj,  study_uid);
                 let image_entity = make_image_info(message.tenant_id.as_str(), &dicom_obj);
                 if state_meta.is_ok() && image_entity.is_ok() {
                     state_metas.push(state_meta.unwrap());
