@@ -43,9 +43,9 @@ pub struct DicomStoreMeta {
     #[serde(rename = "created_time")]
     pub created_time: NaiveDateTime,
     #[serde(rename = "series_uid_hash")]
-    pub series_uid_hash: u32,
+    pub series_uid_hash: BoundedString<20>,
     #[serde(rename = "study_uid_hash")]
-    pub study_uid_hash: u64,
+    pub study_uid_hash: BoundedString<20>,
     #[serde(rename = "accession_number")]
     pub accession_number: BoundedString<64>,
     #[serde(rename = "target_ts")]
@@ -99,8 +99,8 @@ pub struct DicomStateMeta {
     pub patient_id: BoundedString<64>,
     pub study_uid: SopUidString,
     pub series_uid: SopUidString,
-    pub study_uid_hash: u64,
-    pub series_uid_hash: u32,
+    pub study_uid_hash: BoundedString<20>,
+    pub series_uid_hash: BoundedString<20>,
     pub study_date_origin: DicomDateString,
 
     pub patient_name: Option<BoundedString<64>>,
@@ -148,8 +148,8 @@ pub struct DicomImageMeta {
     pub study_uid: SopUidString,
     pub series_uid: SopUidString,
     pub sop_uid: SopUidString,
-    pub study_uid_hash: u64,
-    pub series_uid_hash: u32,
+    pub study_uid_hash: BoundedString<20>,
+    pub series_uid_hash: BoundedString<20>,
     pub study_date_origin: DicomDateString,
 
     pub instance_number: Option<i32>,
@@ -411,8 +411,8 @@ pub fn make_image_info(
     );
 
     // 计算哈希值
-    let study_uid_hash = uid_hash::uid_to_u64_deterministic_safe(&study_uid);
-    let series_uid_hash = uid_hash::uid_to_u32_deterministic_safe(&study_uid, &series_uid);
+    let study_uid_hash = BoundedString::<20>::try_from(uid_hash::uid_to_u64(&study_uid).to_string()).unwrap();
+    let series_uid_hash = BoundedString::<20>::try_from(uid_hash::uid_to_u64(&series_uid).to_string()).unwrap();
 
     // 时间戳
     let now = chrono::Local::now().naive_local();
@@ -721,8 +721,8 @@ pub fn make_state_info(
         dicom_utils::get_int_value(dicom_obj, tags::NUMBER_OF_SERIES_RELATED_INSTANCES);
 
     // 计算哈希值
-    let study_uid_hash = uid_hash::uid_to_u64_deterministic_safe(&study_uid);
-    let series_uid_hash = uid_hash::uid_to_u32_deterministic_safe(&study_uid, &series_uid);
+    let study_uid_hash = BoundedString::<20>::try_from(uid_hash::uid_to_u64(&study_uid).to_string()).unwrap();
+    let series_uid_hash = BoundedString::<20>::try_from(uid_hash::uid_to_u64(&series_uid).to_string()).unwrap();
 
     // 时间戳
     let now = chrono::Local::now().naive_local();

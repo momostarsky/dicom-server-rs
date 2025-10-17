@@ -8,6 +8,7 @@ use async_trait::async_trait;
 use sqlx::mysql::MySqlRow;
 use sqlx::{FromRow, MySql, MySqlPool, Row, Transaction};
 use tracing::{error, info};
+use crate::string_ext::BoundedString;
 
 #[async_trait]
 trait DbEntity {
@@ -112,8 +113,7 @@ impl FromRow<'_, MySqlRow> for SeriesEntity {
             received_instances: row.get("ReceivedInstances"),
             space_size: row.get("SpaceSize"),
             created_time: row.get("CreatedTime"),
-            updated_time: row.get("UpdatedTime"),
-            series_uid_hash: row.get("SeriesUIDHash"),
+            updated_time: row.get("UpdatedTime") ,
         })
     }
 }
@@ -146,8 +146,7 @@ impl FromRow<'_, MySqlRow> for StudyEntity {
             space_size: row.get("SpaceSize"),
             created_time: row.get("CreatedTime"),
             updated_time: row.get("UpdatedTime"),
-            study_date_origin: row.get("StudyDateOrigin"),
-            study_uid_hash: row.get("StudyUIDHash"),
+            study_date_origin: row.get("StudyDateOrigin"), 
         })
     }
 }
@@ -259,7 +258,9 @@ impl MySqlProvider {
      ReceivedInstances = VALUES(ReceivedInstances), SpaceSize = VALUES(SpaceSize), StudyDateOrigin = VALUES(StudyDateOrigin), StudyUIDHash = VALUES(StudyUIDHash)");
 
         let mut query = sqlx::query(&query_builder);
+
         for study in study_lists {
+
             query = query
                 .bind(tenant_id)
                 .bind(&study.study_instance_uid)
@@ -284,8 +285,7 @@ impl MySqlProvider {
                 .bind(&study.procedure_code_sequence)
                 .bind(&study.received_instances)
                 .bind(&study.space_size)
-                .bind(&study.study_date_origin)  // 新增字段
-                .bind(&study.study_uid_hash);    // 新增字段
+                .bind(&study.study_date_origin)  ;    // 新增字段
         }
 
         query.execute(&mut **tx).await?;
@@ -313,6 +313,7 @@ impl MySqlProvider {
         query_builder.push_str(" ON DUPLICATE KEY UPDATE Modality = VALUES(Modality), SeriesNumber = VALUES(SeriesNumber), SeriesDate = VALUES(SeriesDate), SeriesTime = VALUES(SeriesTime), SeriesDescription = VALUES(SeriesDescription), BodyPartExamined = VALUES(BodyPartExamined), ProtocolName = VALUES(ProtocolName), AcquisitionNumber = VALUES(AcquisitionNumber), AcquisitionTime = VALUES(AcquisitionTime), AcquisitionDate = VALUES(AcquisitionDate), AcquisitionDateTime = VALUES(AcquisitionDateTime), PerformingPhysicianName = VALUES(PerformingPhysicianName), OperatorsName = VALUES(OperatorsName), NumberOfSeriesRelatedInstances = VALUES(NumberOfSeriesRelatedInstances), ReceivedInstances = VALUES(ReceivedInstances), SpaceSize = VALUES(SpaceSize), SeriesUIDHash = VALUES(SeriesUIDHash)");
         let mut query = sqlx::query(&query_builder);
         for series in series_lists {
+
             query = query
                 .bind(tenant_id)
                 .bind(&series.series_instance_uid)
@@ -333,8 +334,7 @@ impl MySqlProvider {
                 .bind(&series.operators_name)
                 .bind(&series.number_of_series_related_instances)
                 .bind(&series.received_instances)
-                .bind(&series.space_size)
-                .bind(&series.series_uid_hash);  // 新增字段
+                .bind(&series.space_size) ;  // 新增字段
         }
 
         query.execute(&mut **tx).await?;

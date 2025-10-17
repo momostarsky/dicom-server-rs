@@ -339,25 +339,7 @@ pub async fn group_dicom_messages(
 
     //TODO: 对StudyUIDHash和SeriesUIDHash和 DicomObjectMeta的StudyUIDHash和SeriesUIDHash进行比对.
 
-    for study_entity in &mut study_entities {
-        // 查找对应的 DICOMObjectMeta 消息
-        if let Some(meta_msg) = messages.iter().find(|m| {
-            m.tenant_id.as_str() == study_entity.tenant_id.as_str()
-                && m.study_uid.as_str() == study_entity.study_instance_uid.as_str()
-        }) {
-            study_entity.study_uid_hash = meta_msg.study_uid_hash;
-        }
-    }
 
-    for series_entity in &mut series_entities {
-        // 查找对应的 DICOMObjectMeta 消息
-        if let Some(meta_msg) = messages.iter().find(|m| {
-            m.tenant_id.as_str() == series_entity.tenant_id.as_str()
-                && m.series_uid.as_str() == series_entity.series_instance_uid.as_str()
-        }) {
-            series_entity.series_uid_hash = meta_msg.series_uid_hash;
-        }
-    }
 
     Ok((
         patient_entities,
@@ -516,7 +498,7 @@ pub async fn publish_image_messages(
             info!(logger, "Successfully publish_image_messages");
         }
         Err(e) => {
-            error!(logger, "Failed to publish_image_messages: {}", e); 
+            error!(logger, "Failed to publish_image_messages: {}", e);
         }
     }
     Ok(())

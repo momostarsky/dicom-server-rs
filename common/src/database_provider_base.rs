@@ -115,7 +115,7 @@ impl DbProviderBase {
             created_time: None,
             updated_time: None,
             study_date_origin: dicom_utils::get_text_value(dicom_obj, tags::STUDY_DATE).unwrap(),
-            study_uid_hash: uid_hash::uid_to_u64_deterministic_safe(study_uid.as_str()),
+
         })
     }
 
@@ -171,7 +171,7 @@ impl DbProviderBase {
             space_size: Some(0),
             created_time: None,
             updated_time: None,
-            series_uid_hash: uid_hash::uid_to_u32_deterministic_safe(study_uid.clone(),series_uid.as_str()),
+
         })
     }
 
@@ -344,7 +344,7 @@ impl DbProviderBase {
             created_time: None,
             updated_time: None,
             study_date_origin: dicom_utils::get_text_value(dicom_obj, tags::STUDY_DATE).unwrap(),
-            study_uid_hash: uid_hash::uid_to_u64_deterministic_safe(study_uid.as_str()),
+
         };
 
         let series_entity = SeriesEntity {
@@ -379,7 +379,7 @@ impl DbProviderBase {
             space_size: Some(0),
             created_time: None,
             updated_time: None,
-            series_uid_hash: uid_hash::uid_to_u32_deterministic_safe(study_uid.as_str(), series_uid.as_str()),
+
         };
 
         let image_entity = ImageEntity {

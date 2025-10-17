@@ -286,6 +286,7 @@ mod tests {
 
     use dicom_encoding::snafu::ResultExt;
     use snafu::Whatever;
+    use crate::uid_hash::uid_to_u64;
 
     #[test]
     fn test_bounded_string_valid_length() {
@@ -417,8 +418,8 @@ mod tests {
             created_time: DateTime::from_timestamp(1728971020, 104453242)
                 .unwrap()
                 .naive_utc(),
-            series_uid_hash:  319228828,
-            study_uid_hash: 12853552155529750978,
+            series_uid_hash: BoundedString::<20>::new("102145856875".to_string()).unwrap(),
+            study_uid_hash: BoundedString::<20>::new("2021013010174".to_string()).unwrap(),
             accession_number: "14769824".try_into().unwrap(),
             target_ts: "1.2.840.10008.1.2.1".try_into().unwrap(),
             study_date: "20210130".try_into().unwrap(),

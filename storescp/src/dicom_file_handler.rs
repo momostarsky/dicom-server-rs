@@ -3,7 +3,6 @@ use common::dicom_utils::get_tag_value;
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
 use common::utils::get_logger;
-use dicom_core::chrono::Utc;
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu::{ResultExt, Whatever};
 use dicom_encoding::TransferSyntaxIndex;
@@ -16,6 +15,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use uuid::Uuid;
+use common::string_ext::BoundedString;
 
 /// 校验 DICOM StudyDate 格式是否符合 YYYYMMDD 格式
 fn validate_study_date_format(date_str: &str) -> Result<(), &'static str> {
@@ -266,8 +266,10 @@ pub(crate) async fn process_dicom_file(
         transfer_status: transcode_status,
         number_of_frames: frames,
         created_time: cdate,
-        series_uid_hash: series_uid_hash_v,
-        study_uid_hash: study_uid_hash_v,
+        series_uid_hash: BoundedString::try_from(series_uid_hash_v)
+            .with_whatever_context(|err| format!("Failed to create series_uid_hash: {}", err))?,
+        study_uid_hash: BoundedString::try_from(study_uid_hash_v)
+            .with_whatever_context(|err| format!("Failed to create study_uid_hash: {}", err))?,
         accession_number: common::string_ext::BoundedString::try_from(accession_number)
             .with_whatever_context(|err| format!("Failed to create accession_number: {}", err))?,
         source_ip: common::string_ext::BoundedString::try_from(ip)

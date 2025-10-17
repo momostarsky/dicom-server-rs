@@ -1,5 +1,6 @@
 use dicom_core::chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
+use crate::string_ext::BoundedString;
 
 // patient.rs
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,7 +45,7 @@ pub struct StudyEntity {
     pub created_time: Option<NaiveDateTime>,
     pub updated_time: Option<NaiveDateTime>,
     pub study_date_origin: String,       // 新增字段
-    pub study_uid_hash: u64,             // 新增字段
+   
 }
 
 // series.rs
@@ -72,7 +73,7 @@ pub struct SeriesEntity {
     pub space_size: Option<i64>,         // 新增字段
     pub created_time: Option<NaiveDateTime>,
     pub updated_time: Option<NaiveDateTime>,
-    pub series_uid_hash: u32,            // 新增字段
+   
 
 }
 

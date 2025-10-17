@@ -1,4 +1,4 @@
-use crate::uid_hash::{uid_to_u32_deterministic_safe, uid_to_u64_deterministic_safe};
+use crate::uid_hash::uid_to_u64;
 use config::{Config, ConfigError, Environment, File};
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
@@ -173,10 +173,7 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
                     }
                 }
                 Err(e) => {
-                    panic!(
-                        "Could not check if dicm_store_path directory exists: {}",
-                        e
-                    );
+                    panic!("Could not check if dicm_store_path directory exists: {}", e);
                 }
             }
             // TODO :验证能否在dicom_storage_path 下面创建目录及写入文件
@@ -393,9 +390,9 @@ pub fn dicom_study_dir(
     study_date: &str,
     study_uid: &str,
     create_not_exists: bool,
-) -> Result<(u64, String), String> {
+) -> Result<(String, String), String> {
     let app_config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
-    let study_uid_hash = uid_to_u64_deterministic_safe(study_uid);
+    let study_uid_hash = uid_to_u64(study_uid);
     let dicom_store_path = &app_config.local_storage.dicm_store_path;
     let study_dir = format!(
         "{}/{}/{}/{}",
@@ -405,7 +402,7 @@ pub fn dicom_study_dir(
         std::fs::create_dir_all(&study_dir)
             .map_err(|e| format!("Failed to create directory '{}': {}", study_dir, e))?;
     }
-    Ok((study_uid_hash, study_dir))
+    Ok((study_uid_hash.to_string(), study_dir))
 }
 
 pub fn json_metadata_dir(
@@ -430,11 +427,8 @@ pub fn dicom_series_dir(
     study_uid: &str,
     series_uid: &str,
     create_not_exists: bool,
-) -> Result<(u64, u32, String), String> {
-    let (study_uid_hash, series_uid_hash) = (
-        uid_to_u64_deterministic_safe(study_uid),
-        uid_to_u32_deterministic_safe(study_uid,series_uid),
-    );
+) -> Result<(String, String, String), String> {
+    let (study_uid_hash, series_uid_hash) = (uid_to_u64(study_uid), uid_to_u64(series_uid));
     let app_config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
     let dicom_store_path = &app_config.local_storage.dicm_store_path;
     let series_dir = format!(
@@ -445,10 +439,13 @@ pub fn dicom_series_dir(
         std::fs::create_dir_all(&series_dir)
             .map_err(|e| format!("Failed to create directory '{}': {}", series_dir, e))?;
     }
-    Ok((study_uid_hash, series_uid_hash, series_dir))
+    Ok((
+        study_uid_hash.to_string(),
+        series_uid_hash.to_string(),
+        series_dir,
+    ))
 }
 
-
-pub fn dicom_file_path(dir:&str, sop_uid:&str)->String{
-     format!("{}/{}.dcm", dir, sop_uid)
+pub fn dicom_file_path(dir: &str, sop_uid: &str) -> String {
+    format!("{}/{}.dcm", dir, sop_uid)
 }
