@@ -1,6 +1,7 @@
-use crate::string_ext::{BoundedString, DicomDateString, SopUidString, UuidString};
+use crate::string_ext::{BoundedString, DicomDateString, ExtDicomDate, ExtDicomTime, SopUidString, UuidString};
 use crate::{dicom_utils, uid_hash};
 use chrono::NaiveDateTime;
+use dicom_core::value::DicomTime;
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
 use gdcm_conv::TransferSyntax::ImplicitVRLittleEndian;
@@ -80,18 +81,19 @@ impl PartialEq for DicomStoreMeta {
 }
 impl Eq for DicomStoreMeta {}
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum DicomParseError {
     MissingRequiredField(String),
+    InvalidTimeFormat(String),
+    InvalidDateFormat(String),
     InvalidFormat(String),
-    ConversionError(String),
+
     TransferSyntaxUidIsEmpty(String),
     SopClassUidIsEmpty(String),
+    ConversionError(String),
     // 可以根据需要添加其他错误类型
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DicomStateMeta {
@@ -106,7 +108,7 @@ pub struct DicomStateMeta {
     pub patient_name: Option<BoundedString<64>>,
     pub patient_sex: Option<BoundedString<1>>,
     pub patient_birth_date: Option<chrono::NaiveDate>,
-    pub patient_birth_time: Option<BoundedString<16>>,
+    pub patient_birth_time: Option<ExtDicomTime>,
     pub patient_age: Option<BoundedString<16>>,
     pub patient_size: Option<f64>,
     pub patient_weight: Option<f64>,
@@ -118,7 +120,7 @@ pub struct DicomStateMeta {
     pub patient_comments: Option<BoundedString<512>>,
 
     pub study_date: chrono::NaiveDate,
-    pub study_time: Option<BoundedString<16>>,
+    pub study_time: Option<ExtDicomTime>,
     pub accession_number: BoundedString<16>,
     pub study_id: Option<BoundedString<64>>,
     pub study_description: Option<BoundedString<64>>,
@@ -131,7 +133,7 @@ pub struct DicomStateMeta {
     pub modality: String,
     pub series_number: Option<i32>,
     pub series_date: Option<chrono::NaiveDate>,
-    pub series_time: Option<BoundedString<16>>,
+    pub series_time: Option<ExtDicomTime>,
     pub series_description: Option<BoundedString<256>>,
     pub body_part_examined: Option<BoundedString<64>>,
     pub protocol_name: Option<BoundedString<64>>,
@@ -155,9 +157,9 @@ pub struct DicomImageMeta {
     pub instance_number: Option<i32>,
     pub image_comments: Option<BoundedString<256>>,
     pub content_date: Option<DicomDateString>,
-    pub content_time: Option<BoundedString<16>>,
+    pub content_time: Option<ExtDicomTime>,
     pub acquisition_date: Option<DicomDateString>,
-    pub acquisition_time: Option<BoundedString<16>>,
+    pub acquisition_time: Option<ExtDicomTime>,
     pub acquisition_date_time: Option<chrono::NaiveDateTime>,
     pub image_type: Option<BoundedString<256>>,
     pub image_orientation_patient: Option<String>,
@@ -227,7 +229,6 @@ impl DicomStateMeta {
 
 /// 对 Vec<DicomStateMeta> 进行去重处理
 
-
 pub fn make_image_info(
     tenant_id: &str,
     dicom_obj: &InMemDicomObject,
@@ -257,7 +258,7 @@ pub fn make_image_info(
 
     // 验证格式为 YYYYMMDD
     if study_date_str.len() != 8 || !study_date_str.chars().all(|c| c.is_ascii_digit()) {
-        return Err(DicomParseError::InvalidFormat(format!(
+        return Err(DicomParseError::InvalidDateFormat(format!(
             "Study Date must be in YYYYMMDD format, got: {}",
             study_date_str
         )));
@@ -280,15 +281,15 @@ pub fn make_image_info(
         })
         .transpose()
         .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert content date".to_string())
+            DicomParseError::InvalidDateFormat("Failed to convert content date".to_string())
         })?;
 
     let content_time = dicom_utils::get_text_value(dicom_obj, tags::CONTENT_TIME)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<16>::try_from(v))
+        .map(|v| ExtDicomTime::try_from(v))
         .transpose()
         .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert content time".to_string())
+            DicomParseError::InvalidTimeFormat("Failed to convert content time".to_string())
         })?;
 
     let acquisition_date = dicom_utils::get_date_value_dicom(dicom_obj, tags::ACQUISITION_DATE)
@@ -298,15 +299,15 @@ pub fn make_image_info(
         })
         .transpose()
         .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert acquisition date".to_string())
+            DicomParseError::InvalidDateFormat("Failed to convert acquisition date".to_string())
         })?;
 
     let acquisition_time = dicom_utils::get_text_value(dicom_obj, tags::ACQUISITION_TIME)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<16>::try_from(v))
+        .map(|v| ExtDicomTime::try_from(v))
         .transpose()
         .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert acquisition time".to_string())
+            DicomParseError::InvalidTimeFormat("Failed to convert acquisition time".to_string())
         })?;
 
     let acquisition_date_time =
@@ -411,8 +412,10 @@ pub fn make_image_info(
     );
 
     // 计算哈希值
-    let study_uid_hash = BoundedString::<20>::try_from(uid_hash::uid_to_u64(&study_uid).to_string()).unwrap();
-    let series_uid_hash = BoundedString::<20>::try_from(uid_hash::uid_to_u64(&series_uid).to_string()).unwrap();
+    let study_uid_hash =
+        BoundedString::<20>::try_from(uid_hash::uid_to_u64(&study_uid).to_string()).unwrap();
+    let series_uid_hash =
+        BoundedString::<20>::try_from(uid_hash::uid_to_u64(&series_uid).to_string()).unwrap();
 
     // 时间戳
     let now = chrono::Local::now().naive_local();
@@ -517,7 +520,7 @@ pub fn make_state_info(
 
     // 验证格式为 YYYYMMDD
     if study_date_str.len() != 8 || !study_date_str.chars().all(|c| c.is_ascii_digit()) {
-        return Err(DicomParseError::InvalidFormat(format!(
+        return Err(DicomParseError::InvalidDateFormat(format!(
             "Study Date must be in YYYYMMDD format, got: {}",
             study_date_str
         )));
@@ -546,10 +549,10 @@ pub fn make_state_info(
 
     let patient_birth_time = dicom_utils::get_text_value(dicom_obj, tags::PATIENT_BIRTH_TIME)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<16>::try_from(v))
+        .map(|v| ExtDicomTime::try_from(v))
         .transpose()
         .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert patient birth time".to_string())
+            DicomParseError::InvalidTimeFormat("Failed to convert patient birth time".to_string())
         })?;
 
     // 患者其他信息
@@ -609,10 +612,10 @@ pub fn make_state_info(
     // 检查相关信息
     let study_time = dicom_utils::get_text_value(dicom_obj, tags::STUDY_TIME)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<16>::try_from(v))
+        .map(|v| ExtDicomTime::try_from(v))
         .transpose()
         .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert study time".to_string())
+            DicomParseError::InvalidTimeFormat("Failed to convert study time".to_string())
         })?;
 
     let study_id = dicom_utils::get_text_value(dicom_obj, tags::STUDY_ID)
@@ -679,10 +682,10 @@ pub fn make_state_info(
 
     let series_time = dicom_utils::get_text_value(dicom_obj, tags::SERIES_TIME)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<16>::try_from(v))
+        .map(|v| ExtDicomTime::try_from(v))
         .transpose()
         .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert series time".to_string())
+            DicomParseError::InvalidTimeFormat("Failed to convert series time".to_string())
         })?;
 
     let series_description = dicom_utils::get_text_value(dicom_obj, tags::SERIES_DESCRIPTION)
@@ -721,8 +724,10 @@ pub fn make_state_info(
         dicom_utils::get_int_value(dicom_obj, tags::NUMBER_OF_SERIES_RELATED_INSTANCES);
 
     // 计算哈希值
-    let study_uid_hash = BoundedString::<20>::try_from(uid_hash::uid_to_u64(&study_uid).to_string()).unwrap();
-    let series_uid_hash = BoundedString::<20>::try_from(uid_hash::uid_to_u64(&series_uid).to_string()).unwrap();
+    let study_uid_hash =
+        BoundedString::<20>::try_from(uid_hash::uid_to_u64(&study_uid).to_string()).unwrap();
+    let series_uid_hash =
+        BoundedString::<20>::try_from(uid_hash::uid_to_u64(&series_uid).to_string()).unwrap();
 
     // 时间戳
     let now = chrono::Local::now().naive_local();
@@ -794,6 +799,7 @@ mod tests {
     use rstest::rstest;
     use std::fs;
     use std::path::Path;
+    use crate::string_ext::ExtDicomTimeInvalidError;
 
     #[rstest]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/107")]
@@ -1067,6 +1073,7 @@ mod tests {
         }
     }
 
+
     // #[test]
     // fn test_make_state_info_with_sample_files() {
     //     let dicom_dir = "/media/dhz/DCP/DicomTestDataSet";
@@ -1134,4 +1141,83 @@ mod tests {
     //         println!("Successfully processed {} DICOM files ({} sampled)", dicom_files.len(), max_files);
     //     }
     // }
+
+    #[test]
+    fn test_from_str_valid_formats() {
+        // 测试完整的 HHMMSS.ffffff 格式
+        let time1 = ExtDicomTime::from_str("123456.123456");
+        assert!(time1.is_some());
+        let time1 = time1.unwrap();
+        assert!(time1.as_naive_time().is_some());
+
+        // 测试 HHMMSS 格式
+        let time2 = ExtDicomTime::from_str("123456");
+        assert!(time2.is_some());
+        let time2 = time2.unwrap();
+        assert!(time2.as_naive_time().is_some());
+
+        // 测试空字符串
+        let time3 = ExtDicomTime::from_str("");
+        assert!(time3.is_some());
+        let time3 = time3.unwrap();
+        assert!(time3.as_naive_time().is_none());
+    }
+
+    #[test]
+    fn test_normalize_dicom_time() {
+        // 测试毫秒部分补齐
+        let normalized1 = ExtDicomTime::normalize_dicom_time("123456.123").unwrap();
+        assert_eq!(normalized1, "123456.123000");
+
+        // 测试毫秒部分截断
+        let normalized2 = ExtDicomTime::normalize_dicom_time("123456.1234567").unwrap();
+        assert_eq!(normalized2, "123456.123456");
+
+        // 测试无毫秒部分
+        let normalized3 = ExtDicomTime::normalize_dicom_time("123456").unwrap();
+        assert_eq!(normalized3, "123456");
+    }
+
+    #[test]
+    fn test_try_from_str() {
+        // 测试有效的字符串
+        let time_result: Result<ExtDicomTime, ExtDicomTimeInvalidError> = "123456.123456".try_into();
+        assert!(time_result.is_ok());
+
+        // 测试无效的字符串
+        let time_result: Result<ExtDicomTime, ExtDicomTimeInvalidError> = "invalid".try_into();
+        assert!(time_result.is_err());
+    }
+
+    #[test]
+    fn test_try_from_string() {
+        // 测试有效的String
+        let time_result: Result<ExtDicomTime, ExtDicomTimeInvalidError> = "123456.123456".to_string().try_into();
+        assert!(time_result.is_ok());
+
+        // 测试无效的String
+        let time_result: Result<ExtDicomTime, ExtDicomTimeInvalidError> = "invalid".to_string().try_into();
+        assert!(time_result.is_err());
+    }
+
+    #[test]
+    fn test_display() {
+        // 测试有值的时间显示
+        let dicom_time = ExtDicomTime::from_str("123456.123456").unwrap();
+        let display_str = format!("{}", dicom_time);
+        // 注意：chrono的format可能会有不同的输出格式
+
+        // 测试无值的时间显示
+        let dicom_time_none = ExtDicomTime::new(None);
+        let display_str_none = format!("{}", dicom_time_none);
+        assert_eq!(display_str_none, "");
+    }
+
+    #[test]
+    fn test_error_display() {
+        let error = ExtDicomTimeInvalidError::new("test error");
+        let error_str = format!("{}", error);
+        assert_eq!(error_str, "Invalid DICOM time: test error");
+    }
+
 }
