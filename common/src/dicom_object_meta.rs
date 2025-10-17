@@ -46,11 +46,11 @@ pub struct DicomStoreMeta {
     #[serde(rename = "created_time")]
     pub created_time: NaiveDateTime,
     #[serde(rename = "series_uid_hash")]
-    pub series_uid_hash: BoundedString<20>,
+    pub series_uid_hash: u64,
     #[serde(rename = "study_uid_hash")]
-    pub study_uid_hash: BoundedString<20>,
+    pub study_uid_hash: u64,
     #[serde(rename = "accession_number")]
-    pub accession_number: BoundedString<64>,
+    pub accession_number: BoundedString<16>,
     #[serde(rename = "target_ts")]
     pub target_ts: SopUidString,
     #[serde(rename = "study_date")]
@@ -58,7 +58,7 @@ pub struct DicomStoreMeta {
     #[serde(rename = "transfer_status")]
     pub transfer_status: TransferStatus,
     #[serde(rename = "source_ip")]
-    pub source_ip: BoundedString<32>,
+    pub source_ip: BoundedString<24>,
     #[serde(rename = "source_ae")]
     pub source_ae: BoundedString<64>,
 }
@@ -191,48 +191,121 @@ pub struct DicomStateMeta {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DicomImageMeta {
+    #[serde(rename = "tenant_id")]
     pub tenant_id: BoundedString<64>,
+
+    #[serde(rename = "patient_id")]
     pub patient_id: BoundedString<64>,
+
+    #[serde(rename = "study_uid")]
     pub study_uid: SopUidString,
+
+    #[serde(rename = "series_uid")]
     pub series_uid: SopUidString,
+
+    #[serde(rename = "sop_uid")]
     pub sop_uid: SopUidString,
+
+    #[serde(rename = "study_uid_hash")]
     pub study_uid_hash: BoundedString<20>,
+
+    #[serde(rename = "series_uid_hash")]
     pub series_uid_hash: BoundedString<20>,
+
+    #[serde(rename = "study_date_origin")]
     pub study_date_origin: DicomDateString,
 
+    #[serde(rename = "instance_number")]
     pub instance_number: Option<i32>,
 
+    #[serde(rename = "content_date")]
     pub content_date: Option<DicomDateString>,
+
+    #[serde(rename = "content_time")]
     pub content_time: Option<ExtDicomTime>,
 
+    #[serde(rename = "image_type")]
     pub image_type: Option<BoundedString<128>>,
+
+    #[serde(rename = "image_orientation_patient")]
     pub image_orientation_patient: Option<BoundedString<128>>,
+
+    #[serde(rename = "image_position_patient")]
     pub image_position_patient: Option<BoundedString<64>>,
+
+    #[serde(rename = "slice_thickness")]
     pub slice_thickness: Option<f64>,
+
+    #[serde(rename = "spacing_between_slices")]
     pub spacing_between_slices: Option<f64>,
+
+    #[serde(rename = "slice_location")]
     pub slice_location: Option<f64>,
+
+    #[serde(rename = "samples_per_pixel")]
     pub samples_per_pixel: Option<i32>,
+
+    #[serde(rename = "photometric_interpretation")]
     pub photometric_interpretation: Option<BoundedString<32>>,
+
+    #[serde(rename = "width")]
     pub width: Option<i32>,
+
+    #[serde(rename = "columns")]
     pub columns: Option<i32>,
+
+    #[serde(rename = "bits_allocated")]
     pub bits_allocated: Option<i32>,
+
+    #[serde(rename = "bits_stored")]
     pub bits_stored: Option<i32>,
+
+    #[serde(rename = "high_bit")]
     pub high_bit: Option<i32>,
+
+    #[serde(rename = "pixel_representation")]
     pub pixel_representation: Option<i32>,
+
+    #[serde(rename = "rescale_intercept")]
     pub rescale_intercept: Option<f64>,
+
+    #[serde(rename = "rescale_slope")]
     pub rescale_slope: Option<f64>,
+
+    #[serde(rename = "rescale_type")]
     pub rescale_type: Option<BoundedString<64>>,
+
+    #[serde(rename = "window_center")]
     pub window_center: Option<BoundedString<64>>,
+
+    #[serde(rename = "window_width")]
     pub window_width: Option<BoundedString<64>>,
+
+    #[serde(rename = "transfer_syntax_uid")]
     pub transfer_syntax_uid: SopUidString,
+
+    #[serde(rename = "pixel_data_location")]
     pub pixel_data_location: Option<BoundedString<512>>,
+
+    #[serde(rename = "thumbnail_location")]
     pub thumbnail_location: Option<BoundedString<512>>,
+
+    #[serde(rename = "sop_class_uid")]
     pub sop_class_uid: SopUidString,
+
+    #[serde(rename = "image_status")]
     pub image_status: Option<BoundedString<32>>,
-    pub space_size: Option<u64>, // 新增字段
+
+    #[serde(rename = "space_size")]
+    pub space_size: Option<u64>,
+
+    #[serde(rename = "created_time")]
     pub created_time: Option<NaiveDateTime>,
+
+    #[serde(rename = "updated_time")]
     pub updated_time: Option<NaiveDateTime>,
 }
+
 
 impl DicomStateMeta {
     /// 基于 tenant_id, patient_id, study_uid, series_uid 创建唯一标识符

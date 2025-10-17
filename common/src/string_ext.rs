@@ -686,8 +686,8 @@ mod tests {
             created_time: DateTime::from_timestamp(1728971020, 104453242)
                 .unwrap()
                 .naive_utc(),
-            series_uid_hash: BoundedString::<20>::new("102145856875".to_string()).unwrap(),
-            study_uid_hash: BoundedString::<20>::new("2021013010174".to_string()).unwrap(),
+            series_uid_hash: 123456789,
+            study_uid_hash: 323456789,
             accession_number: "14769824".try_into().unwrap(),
             target_ts: "1.2.840.10008.1.2.1".try_into().unwrap(),
             study_date: "20210130".try_into().unwrap(),

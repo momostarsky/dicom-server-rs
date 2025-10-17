@@ -390,7 +390,7 @@ pub fn dicom_study_dir(
     study_date: &str,
     study_uid: &str,
     create_not_exists: bool,
-) -> Result<(String, String), String> {
+) -> Result<(u64, String), String> {
     let app_config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
     let study_uid_hash = uid_to_u64(study_uid);
     let dicom_store_path = &app_config.local_storage.dicm_store_path;
@@ -402,7 +402,7 @@ pub fn dicom_study_dir(
         std::fs::create_dir_all(&study_dir)
             .map_err(|e| format!("Failed to create directory '{}': {}", study_dir, e))?;
     }
-    Ok((study_uid_hash.to_string(), study_dir))
+    Ok((study_uid_hash , study_dir))
 }
 
 pub fn json_metadata_dir(
@@ -427,7 +427,7 @@ pub fn dicom_series_dir(
     study_uid: &str,
     series_uid: &str,
     create_not_exists: bool,
-) -> Result<(String, String, String), String> {
+) -> Result<(u64, u64, String), String> {
     let (study_uid_hash, series_uid_hash) = (uid_to_u64(study_uid), uid_to_u64(series_uid));
     let app_config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
     let dicom_store_path = &app_config.local_storage.dicm_store_path;
@@ -440,8 +440,8 @@ pub fn dicom_series_dir(
             .map_err(|e| format!("Failed to create directory '{}': {}", series_dir, e))?;
     }
     Ok((
-        study_uid_hash.to_string(),
-        series_uid_hash.to_string(),
+        study_uid_hash,
+        series_uid_hash,
         series_dir,
     ))
 }

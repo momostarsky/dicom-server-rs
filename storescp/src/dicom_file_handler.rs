@@ -266,10 +266,8 @@ pub(crate) async fn process_dicom_file(
         transfer_status: transcode_status,
         number_of_frames: frames,
         created_time: cdate,
-        series_uid_hash: BoundedString::try_from(series_uid_hash_v)
-            .with_whatever_context(|err| format!("Failed to create series_uid_hash: {}", err))?,
-        study_uid_hash: BoundedString::try_from(study_uid_hash_v)
-            .with_whatever_context(|err| format!("Failed to create study_uid_hash: {}", err))?,
+        series_uid_hash: series_uid_hash_v,
+        study_uid_hash: study_uid_hash_v,
         accession_number: common::string_ext::BoundedString::try_from(accession_number)
             .with_whatever_context(|err| format!("Failed to create accession_number: {}", err))?,
         source_ip: common::string_ext::BoundedString::try_from(ip)
