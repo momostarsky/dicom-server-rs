@@ -7,7 +7,7 @@ members = [
     "charset-helper",
     "mysql-demo",
     "change-transfer-kafka", "license-server","logstate"
-]
+, "dicom-encrypt"]
 
 # use edition 2021 resolver
 resolver = "2"
