@@ -5,7 +5,7 @@
   "database": {
     "dbtype": "MYSQL",
     "host": "192.168.1.14",
-    "port": 3306,
+    "port": 9030,
     "username": "dicomstore",
     "password": "hzjp#123",
     "database": "dicomdb"

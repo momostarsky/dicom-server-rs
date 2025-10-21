@@ -717,34 +717,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fd1289c04a9ea8cb22300a459a72a385d7c73d3259e2ed7dcb2af674838cfa9"
 
 [[package]]
-name = "change-transfer-kafka"
-version = "0.1.0"
-dependencies = [
- "clap",
- "common",
- "config",
- "dicom-core 0.9.0",
- "dicom-dictionary-std 0.9.0",
- "dicom-encoding 0.9.0",
- "dicom-object 0.9.0",
- "dicom-transfer-syntax-registry 0.9.0",
- "dicom-ul 0.9.0",
- "dotenv",
- "futures",
- "gdcm_conv",
- "install",
- "rdkafka",
- "serde",
- "serde_json",
- "snafu",
- "sqlx",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "urlencoding",
-]
-
-[[package]]
 name = "charset-helper"
 version = "0.1.0"
 dependencies = [
@@ -2392,12 +2364,6 @@ checksum = "879f10e63c20629ecabbb64a8010319738c66a5cd0c29b02d63d272b03751d01"
 dependencies = [
  "generic-array",
 ]
-
-[[package]]
-name = "install"
-version = "0.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a37f5624a15b3b2aeaba5a8bff9e6998ef4a1d23224e6eebc8139dc5619df78"
 
 [[package]]
 name = "interpolate_name"

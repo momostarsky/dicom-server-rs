@@ -1,7 +1,7 @@
 use common::dicom_object_meta::{DicomImageMeta, DicomStateMeta, DicomStoreMeta};
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::utils::group_dicom_state;
-use common::{database_factory, server_config};
+use common::{server_config};
 use futures::StreamExt;
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message};
@@ -44,27 +44,9 @@ pub async fn start_process(logger: &Logger) {
         }
     };
 
-    let db_provider = match database_factory::create_db_instance().await {
-        Some(provider) => provider,
-        None => {
-            error!(
-                global_logger,
-                "Failed to create database provider: provider is None"
-            );
-            std::process::exit(-2);
-        }
-    };
 
-    match db_provider.echo().await {
-        Ok(msg) => info!(global_logger, "Database provider echo: {}", msg),
-        Err(e) => {
-            error!(
-                global_logger,
-                "Failed to echo from database provider: {}", e
-            );
-            std::process::exit(-2);
-        }
-    }
+
+
 
     let kafka_config = config.kafka;
 

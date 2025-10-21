@@ -1,3 +1,6 @@
+extern crate core;
+ 
+
 use serde::{Deserialize, Serialize};
 
 pub mod cert_helper;

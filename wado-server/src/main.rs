@@ -11,25 +11,23 @@ use actix_web::{App, HttpServer, middleware, web};
 use common::database_provider::DbProvider;
 use common::license_manager::validate_client_certificate;
 use common::server_config::AppConfig;
+use common::utils::setup_logging;
 use common::{database_factory, server_config};
 use slog;
-use slog::{Drain, Logger, error, info, o};
-use slog_async;
-use slog_term;
+use slog::{ Logger, error, info, o};
 use std::sync::Arc;
-use common::utils::setup_logging;
 
 fn configure_log() -> Logger {
     // let decorator = slog_term::TermDecorator::new().build();
     // let console_drain = slog_term::FullFormat::new(decorator).build().fuse();
-    // 
+    //
     // // It is used for Synchronization
     // let console_drain = slog_async::Async::new(console_drain).build().fuse();
-    // 
+    //
     // // Root logger
     // Logger::root(console_drain, o!("v"=>env!("CARGO_PKG_VERSION")))
-    let log = setup_logging("license-server");
-    info!(log, "License server started");
+    let log = setup_logging("wado-server");
+    info!(log, "Wado server started");
     log.clone()
 }
 // 定义应用状态
@@ -59,7 +57,12 @@ async fn main() -> std::io::Result<()> {
 
     let client_info = match validate_client_certificate().await {
         Ok(client_info) => {
-            info!(log, "Client Certificate Validated, Client ID: {:?}, HashCode:{:?}", client_info.0,client_info.1);
+            info!(
+                log,
+                "Client Certificate Validated, Client ID: {:?}, HashCode:{:?}",
+                client_info.0,
+                client_info.1
+            );
             client_info
         }
         Err(e) => {
@@ -77,7 +80,10 @@ async fn main() -> std::io::Result<()> {
         Some(id) => id,
         None => {
             info!(log, "Certificate does not contain a valid Client ID");
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, "Invalid Client ID in certificate"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Invalid Client ID in certificate",
+            ));
         }
     };
 
@@ -85,10 +91,12 @@ async fn main() -> std::io::Result<()> {
         Some(code) => code,
         None => {
             info!(log, "Certificate does not contain a valid Hash Code");
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, "Invalid Hash Code in certificate"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Invalid Hash Code in certificate",
+            ));
         }
     };
-
 
     let license = match &config.dicom_license_server {
         None => {
@@ -107,7 +115,7 @@ async fn main() -> std::io::Result<()> {
     };
 
     let hash_code_matches = {
-        let expected = &license.license_key;  // license_key 实际上存储的是 hash_code
+        let expected = &license.license_key; // license_key 实际上存储的是 hash_code
         openssl::memcmp::eq(expected.as_bytes(), cert_hash_code.as_bytes())
     };
 
@@ -115,8 +123,16 @@ async fn main() -> std::io::Result<()> {
         info!(log, "License Server Validation Success");
     } else {
         info!(log, "License Server Validation Failed");
-        info!(log, "Expected Client ID: {}, Certificate Client ID: {}", license.client_id, cert_client_id);
-        info!(log, "Expected Hash Code: {}, Certificate Hash Code: {}", license.license_key, cert_hash_code);
+        info!(
+            log,
+            "Expected Client ID: {}, Certificate Client ID: {}", license.client_id, cert_client_id
+        );
+        info!(
+            log,
+            "Expected Hash Code: {}, Certificate Hash Code: {}",
+            license.license_key,
+            cert_hash_code
+        );
         return Err(std::io::Error::new(
             std::io::ErrorKind::Other,
             "License Server Validation Failed",
@@ -179,35 +195,30 @@ async fn main() -> std::io::Result<()> {
     //     }
     // }
 
-    let g_config = config.clone();
-    // let db_config = config.database.unwrap();
-    let server_config = config.server;
-    let local_storage_config = config.local_storage;
 
-    info!(
-        log,
-        "Starting the server at {}:{}", server_config.host, server_config.port
-    );
-    info!(log, "LocalStorage Config is: {:?}", local_storage_config);
     let db_provider = database_factory::create_db_instance().await;
     if db_provider.is_none() {
-        error!(
-            log,
-            "Starting the server at {}:{}", server_config.host, server_config.port
-        );
+        error!(log, "db_provider is none");
         return Err(std::io::Error::new(
             std::io::ErrorKind::Other,
             "db_provider is none",
         ));
     }
-
+    let g_config = config.clone();
+    // let db_config = config.database.unwrap();
+    let server_config = config.server;
+    let local_storage_config = config.local_storage;
+    info!(log, "LocalStorage Config is: {:?}", local_storage_config);
     let db_instance = db_provider.unwrap();
     let app_state = AppState {
         log: log.clone(),
         db: db_instance as Arc<dyn DbProvider + Send + Sync>, // 正确的类型转换
         config: g_config,
     };
-
+    info!(
+        log,
+        "Starting the server at {}:{}", server_config.host, server_config.port
+    );
     HttpServer::new(move || {
         let mut cors = Cors::default()
             .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])

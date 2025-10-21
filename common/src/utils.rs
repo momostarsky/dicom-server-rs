@@ -1,7 +1,5 @@
 use std::option::Option;
-use crate::database_entities::{ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
-use crate::database_provider::DbProvider;
-use crate::database_provider_base::DbProviderBase;
+
 use crate::dicom_object_meta::{
     DicomImageMeta, DicomStateMeta, DicomStoreMeta, make_image_info, make_state_info,
 };
@@ -12,12 +10,11 @@ use dicom_object::ReadError;
 use dicom_object::file::CharacterSetOverride;
 use slog::LevelFilter;
 use slog::{Drain, Logger, error, info, o};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fs;
 use std::fs::OpenOptions;
-use std::io::Write;
-use std::sync::{Arc, OnceLock};
 
+use std::sync::OnceLock;
 
 pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let path = std::path::Path::new(p0);
@@ -146,7 +143,7 @@ pub async fn group_dicom_state(
     let mut image_entities: Vec<DicomImageMeta> = Vec::new();
 
     for message in messages {
-        let study_uid =Option::from(message.study_uid.as_str());
+        let study_uid = Option::from(message.study_uid.as_str());
         let space_size = Option::from(message.file_size);
         match dicom_object::OpenFileOptions::new()
             .charset_override(CharacterSetOverride::AnyVr)
@@ -154,8 +151,9 @@ pub async fn group_dicom_state(
             .open_file(String::from(message.file_path.as_str()))
         {
             Ok(dicom_obj) => {
-                let state_meta = make_state_info(message.tenant_id.as_str(), &dicom_obj,  study_uid);
-                let image_entity = make_image_info(message.tenant_id.as_str(), &dicom_obj, space_size);
+                let state_meta = make_state_info(message.tenant_id.as_str(), &dicom_obj, study_uid);
+                let image_entity =
+                    make_image_info(message.tenant_id.as_str(), &dicom_obj, space_size);
                 if state_meta.is_ok() && image_entity.is_ok() {
                     state_metas.push(state_meta.unwrap());
 
@@ -181,270 +179,6 @@ pub async fn group_dicom_state(
     }
     state_metas = deduplicate_state_metas(state_metas);
     Ok((state_metas, image_entities))
-}
-
-// 获取消息组中所有不同的 tenant_id
-pub async fn group_dicom_messages(
-    messages: &[DicomStoreMeta],
-) -> Result<
-    (
-        Vec<PatientEntity>,
-        Vec<StudyEntity>,
-        Vec<SeriesEntity>,
-        Vec<ImageEntity>,
-        Vec<DicomStoreMeta>,
-    ),
-    ReadError,
-> {
-    let mut patient_groups: HashMap<String, bool> = HashMap::new();
-    let mut study_groups: HashMap<String, bool> = HashMap::new();
-    let mut series_groups: HashMap<String, bool> = HashMap::new();
-
-    let mut patient_entities: Vec<PatientEntity> = Vec::new();
-    let mut study_entities: Vec<StudyEntity> = Vec::new();
-    let mut series_entities: Vec<SeriesEntity> = Vec::new();
-    let mut image_entities: Vec<ImageEntity> = Vec::new();
-    let mut failed_messages: Vec<DicomStoreMeta> = Vec::new();
-    let mut failed_message_set: HashSet<&DicomStoreMeta> = HashSet::new(); // 用于跟踪已失败的消息
-
-    for message in messages {
-        match dicom_object::OpenFileOptions::new()
-            .charset_override(CharacterSetOverride::AnyVr)
-            .read_until(tags::PIXEL_DATA)
-            .open_file(String::from(message.file_path.as_str()))
-        {
-            Ok(dicom_obj) => {
-                // 处理成功的DICOM对象
-                // 提取 patient
-                let key = format!(
-                    "{}_{}",
-                    message.tenant_id.as_str(),
-                    message.patient_id.as_str()
-                );
-                if !patient_groups.contains_key(key.as_str()) {
-                    match DbProviderBase::extract_patient_entity(
-                        message.tenant_id.as_str(),
-                        &dicom_obj,
-                    ) {
-                        Ok(patient_entity) => {
-                            patient_entities.push(patient_entity);
-                            patient_groups.insert(key.clone(), true);
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "Failed to extract patient entity from file '{}': {}",
-                                message.file_path.as_str(),
-                                e
-                            );
-                            if !failed_message_set.contains(message) {
-                                failed_messages.push(message.clone());
-                                failed_message_set.insert(message);
-                            }
-                            continue;
-                        }
-                    }
-                }
-
-                // 提取 study
-                let key2 = format!(
-                    "{}_{}",
-                    message.tenant_id.as_str(),
-                    message.study_uid.as_str()
-                );
-                match DbProviderBase::extract_study_entity(
-                    message.tenant_id.as_str(),
-                    &dicom_obj,
-                    message.patient_id.as_str(),
-                ) {
-                    Ok(study_entity) => {
-                        study_entities.push(study_entity);
-                        study_groups.insert(key2.clone(), true);
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            "Failed to extract study entity from file '{}': {}",
-                            message.file_path.as_str(),
-                            e
-                        );
-                        if !failed_message_set.contains(message) {
-                            failed_messages.push(message.clone());
-                            failed_message_set.insert(message);
-                        }
-                        continue;
-                    }
-                }
-                // 提取 series
-                let key3 = format!(
-                    "{}_{}",
-                    message.tenant_id.as_str(),
-                    message.series_uid.as_str()
-                );
-                match DbProviderBase::extract_series_entity(
-                    message.tenant_id.as_str(),
-                    &dicom_obj,
-                    message.study_uid.as_str(),
-                ) {
-                    Ok(series_entity) => {
-                        series_entities.push(series_entity);
-                        series_groups.insert(key3.clone(), true);
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            "Failed to extract series entity from file '{}': {}",
-                            message.file_path.as_str(),
-                            e
-                        );
-                        if !failed_message_set.contains(message) {
-                            failed_messages.push(message.clone());
-                            failed_message_set.insert(message);
-                        }
-                        continue;
-                    }
-                }
-                if !patient_groups.contains_key(key.as_str()) {
-                    continue;
-                }
-
-                match DbProviderBase::extract_image_entity(
-                    message.tenant_id.as_str(),
-                    &dicom_obj,
-                    message.patient_id.as_str(),
-                    message.study_uid.as_str(),
-                    message.series_uid.as_str(),
-                ) {
-                    Ok(mut sop_entity) => {
-                        sop_entity.space_size = Some(message.file_size);
-                        sop_entity.transfer_syntax_uid =
-                            String::from(message.transfer_syntax_uid.as_str());
-                        image_entities.push(sop_entity);
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            "Failed to extract image entity from file '{}': {}",
-                            message.file_path.as_str(),
-                            e
-                        );
-                        if !failed_message_set.contains(message) {
-                            failed_messages.push(message.clone());
-                            failed_message_set.insert(message);
-                        }
-                        continue;
-                    }
-                }
-            }
-            Err(_) => {
-                // 记录错误但继续处理其他文件
-                if !failed_message_set.contains(message) {
-                    failed_messages.push(message.clone());
-                    failed_message_set.insert(message);
-                }
-            }
-        }
-    }
-
-    //TODO: 对StudyUIDHash和SeriesUIDHash和 DicomObjectMeta的StudyUIDHash和SeriesUIDHash进行比对.
-
-
-
-    Ok((
-        patient_entities,
-        study_entities,
-        series_entities,
-        image_entities,
-        failed_messages,
-    ))
-}
-
-async fn write_failed_messages_to_file(
-    failed_messages: &[DicomStoreMeta],
-) -> Result<(), Box<dyn std::error::Error>> {
-    // 以追加模式打开文件
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("./consumer_failed.json")?;
-
-    // 为每条失败消息写入一行JSON
-    for message in failed_messages {
-        let json_line = serde_json::to_string(message)?;
-        writeln!(file, "{}", json_line)?;
-    }
-
-    Ok(())
-}
-// 处理 主要队列  topic_main 的消息
-pub async fn process_storage_messages(
-    messages_to_process: &[DicomStoreMeta],
-    db_provider: &Arc<dyn DbProvider>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    if messages_to_process.is_empty() {
-        return Ok(());
-    }
-    let logger = get_logger();
-    let logger = logger.new(o!("thread" => "process_storage_messages"));
-    info!(
-        logger,
-        "XXX Processing batch of {} messages",
-        messages_to_process.len()
-    );
-    let unique_tenant_ids = get_unique_tenant_ids(&messages_to_process);
-    info!(
-        logger,
-        "Processing data for tenant IDs: {:?}", unique_tenant_ids
-    );
-
-    for tenant_id in unique_tenant_ids {
-        let tenant_msg = messages_to_process
-            .iter()
-            .filter(|m| m.tenant_id.as_str() == tenant_id.as_str())
-            .cloned()
-            .collect::<Vec<_>>();
-        match group_dicom_messages(&tenant_msg).await {
-            Ok((patients, studies, series, images, failed_messages)) => {
-                // 保存失败的消息到数据库
-                if !failed_messages.is_empty() {
-                    // 将失败的消息追加写入文件 ./failed.json
-                    match write_failed_messages_to_file(&failed_messages).await {
-                        Ok(_) => {
-                            info!(
-                                logger,
-                                "Successfully wrote {} failed messages to failed.json",
-                                failed_messages.len()
-                            );
-                        }
-                        Err(e) => {
-                            error!(logger, "Failed to write failed messages to file: {}", e);
-                        }
-                    }
-                }
-
-                // 持久化成功提取的数据到数据库
-                if let Err(e) = db_provider
-                    .persist_to_database(tenant_id.as_str(), &patients, &studies, &series, &images)
-                    .await
-                {
-                    error!(
-                        logger,
-                        "Failed to persist DICOM data to database for tenant {}: {}", tenant_id, e
-                    );
-                    continue;
-                }
-
-                info!(
-                    logger,
-                    "Successfully processed data for tenant {}", tenant_id
-                );
-            }
-            Err(e) => {
-                error!(
-                    logger,
-                    "Failed to group DICOM messages for tenant {}: {}", tenant_id, e
-                );
-                continue;
-            }
-        }
-    }
-    Ok(())
 }
 
 // 发送消息到指定队列
