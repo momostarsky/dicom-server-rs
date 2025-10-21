@@ -1,6 +1,5 @@
 use dicom_core::chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
-use crate::string_ext::BoundedString;
 
 // patient.rs
 #[derive(Debug, Clone, Serialize, Deserialize)]

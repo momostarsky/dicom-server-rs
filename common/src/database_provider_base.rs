@@ -1,6 +1,6 @@
 use crate::database_entities::{ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
-use crate::{dicom_utils, uid_hash};
 use crate::dicom_utils::get_tag_value;
+use crate::dicom_utils;
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
 use std::fmt;

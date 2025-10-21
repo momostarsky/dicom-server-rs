@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use sqlx::mysql::MySqlRow;
 use sqlx::{FromRow, MySql, MySqlPool, Row, Transaction};
 use tracing::{error, info};
-use crate::string_ext::BoundedString;
+
 
 #[async_trait]
 trait DbEntity {

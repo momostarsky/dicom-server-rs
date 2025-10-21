@@ -1,3 +1,4 @@
+use std::option::Option;
 use crate::database_entities::{ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
 use crate::database_provider::DbProvider;
 use crate::database_provider_base::DbProviderBase;
@@ -16,6 +17,7 @@ use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::{Arc, OnceLock};
+
 
 pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let path = std::path::Path::new(p0);
@@ -145,6 +147,7 @@ pub async fn group_dicom_state(
 
     for message in messages {
         let study_uid =Option::from(message.study_uid.as_str());
+        let space_size = Option::from(message.file_size);
         match dicom_object::OpenFileOptions::new()
             .charset_override(CharacterSetOverride::AnyVr)
             .read_until(tags::PIXEL_DATA)
@@ -152,9 +155,10 @@ pub async fn group_dicom_state(
         {
             Ok(dicom_obj) => {
                 let state_meta = make_state_info(message.tenant_id.as_str(), &dicom_obj,  study_uid);
-                let image_entity = make_image_info(message.tenant_id.as_str(), &dicom_obj);
+                let image_entity = make_image_info(message.tenant_id.as_str(), &dicom_obj, space_size);
                 if state_meta.is_ok() && image_entity.is_ok() {
                     state_metas.push(state_meta.unwrap());
+
                     image_entities.push(image_entity.unwrap());
                 } else {
                     error!(
