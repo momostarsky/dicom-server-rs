@@ -14,18 +14,6 @@ pub fn get_redis_connection_with_config(config: &RedisConfig) -> redis::Connecti
     connect_with_config(config)
 }
 
-// 通过配置设置Redis值
-pub(crate) fn set_redis_value_with_config<RV: redis::FromRedisValue>(
-    config: &RedisConfig,
-    key: &str,
-    value: &str,
-) {
-    let mut redis_conn = get_redis_connection_with_config(config);
-    redis_conn
-        .set::<&str, &str, RV>(key, value)
-        .expect("Failed to set value");
-}
-
 // 通过配置设置带过期时间的Redis值
 pub(crate) fn set_redis_value_with_expiry_and_config<RV: redis::FromRedisValue>(
     config: &RedisConfig,

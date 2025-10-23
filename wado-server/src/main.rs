@@ -14,7 +14,7 @@ use common::server_config::AppConfig;
 use common::utils::setup_logging;
 use common::{database_factory, server_config};
 use slog;
-use slog::{ Logger, error, info, o};
+use slog::{ Logger, error, info};
 use std::sync::Arc;
 
 fn configure_log() -> Logger {

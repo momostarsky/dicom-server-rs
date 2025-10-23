@@ -1,7 +1,6 @@
-use chrono::{DateTime, Utc};
-use dicom_core::chrono::NaiveDateTime;
-use serde::{Deserialize, Serialize};
 use crate::string_ext::UidHashValue;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 // study.rs
 #[derive(Debug, Clone, Serialize, Deserialize)]

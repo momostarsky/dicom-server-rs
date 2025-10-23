@@ -9,33 +9,18 @@ use common::dicom_utils::get_tag_values;
 use common::server_config::{dicom_series_dir, dicom_study_dir, json_metadata_dir};
 use dicom_dictionary_std::tags;
 use dicom_object::OpenFileOptions;
-use serde::Deserialize;
 use serde_json::{Map, json};
 use slog::{error, info};
 use std::path::PathBuf;
 
-#[derive(Deserialize, Debug)]
-struct StudyQueryParams {
-    #[serde(rename = "charset")]
-    #[warn(dead_code)]
-    charset: Option<String>,
-    #[serde(rename = "anonymize")]
-    anonymize: Option<bool>,
-    #[serde(rename = "includeField")]
-    include_field: Option<Vec<String>>,
-    #[serde(rename = "excludeField")]
-    exclude_field: Option<Vec<String>>,
-}
-static WADO_CHARSET: &str = "charset";
-static WADO_ANONYMIZE: &str = "anonymize";
-static WADO_INCLUDE_FIELD: &str = "includeField";
-static WADO_EXCLUDE_FIELD: &str = "excludeField";
+
+
 
 static ACCEPT_DICOM_JSON_TYPE: &str = "application/dicom+json";
 static ACCEPT_JSON_TYPE: &str = "application/json";
-static ACCEPT_DICOM_TYPE: &str = "application/dicom";
+//static ACCEPT_DICOM_TYPE: &str = "application/dicom";
 static ACCEPT_OCTET_STREAM: &str = "application/octet-stream";
-static MULIPART_ACCEPT_OCTET_STREAM: &str = "multipart/related; type=application/octet-stream";
+//static MULIPART_ACCEPT_OCTET_STREAM: &str = "multipart/related; type=application/octet-stream";
 
 // 检查Accept头部是否包含指定的MIME类型（不区分大小写）
 fn is_accept_type_supported(accept_header: &str, expected_type: &str) -> bool {

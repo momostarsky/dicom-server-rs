@@ -1,16 +1,11 @@
 mod register_controller;
 
-use std::fs;
 use crate::register_controller::{
     client_registe_get, client_registe_post, get_ca_certificate, manual_hello,
 };
 use actix_cors::Cors;
 use actix_web::{App, HttpServer, middleware, web};
 
-use common::cert_helper::{
-    generate_ca_root, generate_client_and_sign, validate_client_certificate_with_ca,
-};
-use common::license_manager::validate_client_certificate;
 use common::utils::setup_logging;
 use slog::Logger;
 use slog::info;

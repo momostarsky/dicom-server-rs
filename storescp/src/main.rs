@@ -6,15 +6,12 @@ use common::server_config;
 use common::utils::{get_logger, setup_logging};
 use dicom_core::{dicom_value, DataElement, VR};
 use dicom_dictionary_std::tags;
-use dicom_encoding::{snafu, TransferSyntaxIndex};
+use dicom_encoding::{snafu};
 use dicom_object::{InMemDicomObject, StandardDataDictionary};
-use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use slog::{error, info, o};
 use snafu::Report;
-use std::collections::HashSet;
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
-    path::PathBuf,
 };
 
 mod dicom_file_handler;

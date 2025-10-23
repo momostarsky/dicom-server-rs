@@ -15,7 +15,6 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use uuid::Uuid;
-use common::string_ext::BoundedString;
 
 /// 校验 DICOM StudyDate 格式是否符合 YYYYMMDD 格式
 fn validate_study_date_format(date_str: &str) -> Result<(), &'static str> {
