@@ -2,7 +2,8 @@ use chrono::NaiveTime;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::fmt;
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
+use seahash::SeaHasher;
 
 #[derive(Debug, Snafu)]
 #[non_exhaustive]
@@ -284,14 +285,23 @@ impl TryFrom<&String> for UuidString {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
-pub struct UidHashString(pub(crate) FixedLengthString<64>);
+pub struct UidHashString(pub(crate) BoundedString<20>);
 
 impl UidHashString {
-    pub fn from_fixed_length_string(fixed: FixedLengthString<64>) -> Self {
-        Self(fixed)
+
+    pub fn make_from(uid: &str) -> Self {
+            let mut hasher = SeaHasher::new();
+            uid.hash(&mut hasher);
+            let hash_value = hasher.finish();
+            // 格式化为20位字符串，前面补X
+            let hash_str = format!("{:020X}", hash_value);
+            Self(BoundedString::new_from_str(&hash_str).unwrap())
+    }
+    pub fn from_bounded_string(bounded: BoundedString<20>) -> Self {
+        Self(bounded)
     }
     pub fn from_string(s: String) -> Self {
-        Self(FixedLengthString::new_from_string(&s).unwrap())
+        Self(BoundedString::new_from_string(&s).unwrap())
     }
 
     pub fn as_str(&self) -> &str {
@@ -303,7 +313,7 @@ impl UidHashString {
 impl TryFrom<&String> for UidHashString {
     type Error = BoundedStringError;
     fn try_from(s: &String) -> BoundedResult<Self> {
-        FixedLengthString::new_from_string(s).map(|fixed| Self(fixed))
+        BoundedString::new_from_string(s).map(|fixed| Self(fixed))
     }
 }
 // 为 UidHashString 实现 From<String>
@@ -593,7 +603,7 @@ mod tests {
 
 
     use std::fmt;
-    use crate::uid_hash::uid_hash_hex;
+
 
     // 为 BoundedString 实现 Display trait
 impl<const N: usize> fmt::Display for BoundedString<N> {
@@ -648,8 +658,8 @@ impl fmt::Display for UuidString {
             created_time: DateTime::from_timestamp(1728971020, 104453242)
                 .unwrap()
                 .naive_utc(),
-            series_uid_hash: UidHashString::from_string(uid_hash_hex("123456789")),
-            study_uid_hash: UidHashString::from_string(uid_hash_hex("323456789")),
+            series_uid_hash: UidHashString::make_from("123456789"),
+            study_uid_hash: UidHashString::make_from("323456789"),
             accession_number: "14769824".try_into().unwrap(),
             target_ts: "1.2.840.10008.1.2.1".try_into().unwrap(),
             study_date: "20210130".try_into().unwrap(),

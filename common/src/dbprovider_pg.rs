@@ -348,6 +348,77 @@ impl DbProvider for PgDbProvider {
 
     }
 
+   async fn save_state_list(&self, state_meta_list: &[DicomStateMeta]) -> Result<(), DbError> {
+    if state_meta_list.is_empty() {
+        return Ok(());
+    }
+
+    let pool = self.pool.clone();
+
+    // 使用事务来确保所有数据要么全部保存成功，要么全部失败
+    let mut tx = match pool.begin().await {
+        Ok(tx) => tx,
+        Err(e) => {
+            error!("Failed to begin transaction: {}", e);
+            return Err(DbError::DatabaseError(e));
+        }
+    };
+
+    for state_meta in state_meta_list {
+        match sqlx::query::<Postgres>(Self::INSERT_OR_UPDATE_STATE_META_QUERY)
+            .bind(state_meta.tenant_id.as_str())
+            .bind(state_meta.patient_id.as_str())
+            .bind(state_meta.study_uid.as_str())
+            .bind(state_meta.series_uid.as_str())
+            .bind(state_meta.study_uid_hash.as_str())
+            .bind(state_meta.series_uid_hash.as_str())
+            .bind(state_meta.study_date_origin.as_str())
+            .bind(state_meta.accession_number.as_str())
+            .bind(state_meta.modality.as_ref().unwrap().as_str())
+            .bind(state_meta.series_number.unwrap())
+            .bind(state_meta.series_date)
+            .bind(state_meta.series_time.as_ref().unwrap().as_naive_time())
+            .bind(state_meta.series_description.as_ref().unwrap().as_str())
+            .bind(state_meta.body_part_examined.as_ref().unwrap().as_str())
+            .bind(state_meta.protocol_name.as_ref().unwrap().as_str())
+            .bind(state_meta.study_date)
+            .bind(state_meta.study_time.as_ref().unwrap().as_naive_time())
+            .bind(state_meta.study_id.as_ref().unwrap().as_str())
+            .bind(state_meta.study_description.as_ref().unwrap().as_str())
+            .bind(state_meta.patient_age.as_ref().unwrap().as_str())
+            .bind(state_meta.patient_size)
+            .bind(state_meta.patient_weight)
+            .bind(state_meta.patient_sex.as_ref().unwrap().as_str())
+            .bind(state_meta.patient_name.as_ref().unwrap().as_str())
+            .bind(state_meta.patient_birth_date)
+            .bind(state_meta.patient_birth_time.as_ref().unwrap().as_naive_time())
+            .bind(state_meta.created_time)
+            .bind(state_meta.updated_time)
+            .execute(&mut *tx)
+            .await
+        {
+            Ok(_) => continue,
+            Err(e) => {
+                error!("Failed to save dicom state meta: {}", e);
+                // 回滚事务
+                if let Err(rollback_err) = tx.rollback().await {
+                    error!("Failed to rollback transaction: {}", rollback_err);
+                }
+                return Err(DbError::DatabaseError(e));
+            }
+        }
+    }
+
+    // 提交事务
+    match tx.commit().await {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            error!("Failed to commit transaction: {}", e);
+            Err(DbError::DatabaseError(e))
+        }
+    }
+}
+
 }
 
 #[cfg(test)]
@@ -356,7 +427,7 @@ mod tests {
     use crate::string_ext::*;
     use chrono::NaiveDate;
     use sqlx::postgres::PgPoolOptions;
-    use crate::uid_hash::uid_hash_hex;
+
 
     #[tokio::test]
     async fn test_save_state_info() -> Result<(), Box<dyn std::error::Error>> {
@@ -376,8 +447,8 @@ mod tests {
         let patient_id = BoundedString::<64>::try_from("test_patient_456".to_string())?;
         let study_uid = SopUidString::try_from("1.2.3.4.5.6.7.8.9")?;
         let series_uid = SopUidString::try_from("9.8.7.6.5.4.3.2.1")?;
-        let study_uid_hash = UidHashString::from_string(uid_hash_hex("1.2.3.4.5.6.7.8.9"));
-        let series_uid_hash = UidHashString::from_string(uid_hash_hex("9.8.7.6.5.4.3.2.1"));
+        let study_uid_hash = UidHashString::make_from("1.2.3.4.5.6.7.8.9");
+        let series_uid_hash = UidHashString::make_from("9.8.7.6.5.4.3.2.1");
         let study_date_origin = DicomDateString::try_from("20231201".to_string())?;
         let accession_number = BoundedString::<16>::try_from("ACC123456".to_string())?;
         let modality = Some(BoundedString::<16>::try_from("CT".to_string())?);

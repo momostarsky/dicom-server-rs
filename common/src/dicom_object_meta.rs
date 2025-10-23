@@ -1,5 +1,5 @@
 use crate::string_ext::{BoundedString, DicomDateString, ExtDicomTime, SopUidString, UidHashString, UuidString};
-use crate::{dicom_utils, uid_hash};
+use crate::{dicom_utils};
 use chrono::{NaiveDate, NaiveDateTime};
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
@@ -499,12 +499,8 @@ pub fn make_image_info(
     );
 
     // 计算哈希值
-    let study_uid_hash =
-        UidHashString::try_from(uid_hash::uid_hash_hex(&common_meta.study_uid).as_str() )
-            .unwrap();
-    let series_uid_hash =
-        UidHashString::try_from(uid_hash::uid_hash_hex(&common_meta.series_uid).as_str() )
-            .unwrap();
+    let study_uid_hash = UidHashString::make_from(&common_meta.study_uid.as_str());
+    let series_uid_hash =  UidHashString::make_from( &common_meta.series_uid.as_str() ) ;
 
 
 
@@ -797,8 +793,8 @@ pub fn make_state_info(
         dicom_utils::get_int_value(dicom_obj, tags::NUMBER_OF_SERIES_RELATED_INSTANCES);
 
     // 计算哈希值
-    let study_uid_hash = UidHashString::from_string(uid_hash::uid_hash_hex(&common_meta.study_uid).to_string()) ;
-    let series_uid_hash = UidHashString::from_string(uid_hash::uid_hash_hex(&common_meta.series_uid).to_string());
+    let study_uid_hash = UidHashString::make_from(&common_meta.study_uid.as_str());
+    let series_uid_hash = UidHashString::make_from(&common_meta.series_uid.as_str());
 
     // 时间戳
     let now = chrono::Local::now().naive_local();

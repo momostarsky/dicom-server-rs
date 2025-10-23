@@ -19,7 +19,6 @@ pub mod message_sender_kafka;
 pub mod dbprovider_mysql;
 pub mod server_config;
 pub mod string_ext;
-pub mod uid_hash;
 pub mod utils;
 mod dbprovider_pg;
 

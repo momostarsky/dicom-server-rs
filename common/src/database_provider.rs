@@ -35,4 +35,9 @@ pub trait DbProvider: Send + Sync {
         &self,
         state_meta: &DicomStateMeta,
     ) -> Result<(), DbError>;
+
+    async fn save_state_list(
+        &self,
+        state_meta: &[DicomStateMeta],
+    ) -> Result<(), DbError>;
 }
