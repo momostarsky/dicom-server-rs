@@ -14,6 +14,7 @@ use slog::{error, info};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::LazyLock;
+use chrono::NaiveDate;
 use uuid::Uuid;
 
 /// 校验 DICOM StudyDate 格式是否符合 YYYYMMDD 格式
@@ -260,8 +261,9 @@ pub(crate) async fn process_dicom_file(
         )?,
         target_ts: common::string_ext::SopUidString::try_from(final_ts)
             .with_whatever_context(|err| format!("Failed to create target_ts: {}", err))?,
-        study_date: common::string_ext::DicomDateString::try_from(study_date)
+        study_date: NaiveDate::parse_from_str(study_date.as_str(), "%Y%m%d")
             .with_whatever_context(|err| format!("Failed to create study_date: {}", err))?,
+
         transfer_status: transcode_status,
         number_of_frames: frames,
         created_time: cdate,

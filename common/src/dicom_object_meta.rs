@@ -1,6 +1,6 @@
 use crate::string_ext::{BoundedString, DicomDateString, ExtDicomTime, SopUidString, UidHashString, UuidString};
 use crate::{dicom_utils};
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
 use serde::{Deserialize, Serialize};
@@ -54,7 +54,7 @@ pub struct DicomStoreMeta {
     #[serde(rename = "target_ts")]
     pub target_ts: SopUidString,
     #[serde(rename = "study_date")]
-    pub study_date: DicomDateString,
+    pub study_date: NaiveDate,
     #[serde(rename = "transfer_status")]
     pub transfer_status: TransferStatus,
     #[serde(rename = "source_ip")]
@@ -119,9 +119,9 @@ pub struct DicomStateMeta {
     #[serde(rename = "patient_sex")]
     pub patient_sex: Option<BoundedString<1>>,
     #[serde(rename = "patient_birth_date")]
-    pub patient_birth_date: Option<chrono::NaiveDate>,
+    pub patient_birth_date: Option<NaiveDate>,
     #[serde(rename = "patient_birth_time")]
-    pub patient_birth_time: Option<ExtDicomTime>,
+    pub patient_birth_time: Option<NaiveTime>,
     #[serde(rename = "patient_age")]
     pub patient_age: Option<BoundedString<16>>,
     #[serde(rename = "patient_size")]
@@ -138,49 +138,31 @@ pub struct DicomStateMeta {
     pub occupation: Option<BoundedString<64>>,
 
     #[serde(rename = "study_date")]
-    pub study_date: chrono::NaiveDate,
+    pub study_date: NaiveDate,
     #[serde(rename = "study_time")]
-    pub study_time: Option<ExtDicomTime>,
+    pub study_time: Option<NaiveTime>,
     #[serde(rename = "accession_number")]
     pub accession_number: BoundedString<16>,
     #[serde(rename = "study_id")]
     pub study_id: Option<BoundedString<16>>,
     #[serde(rename = "study_description")]
     pub study_description: Option<BoundedString<64>>,
-    ///用于标识转诊医生的姓名信息
-    #[serde(rename = "referring_name")]
-    pub referring_physician_name: Option<BoundedString<64>>,
-    ///用于标识患者住院号或入院ID
-    #[serde(rename = "admission_id")]
-    pub admission_id: Option<BoundedString<64>>,
-    ///用于标识执行检查的医师姓名
-    #[serde(rename = "performing_name")]
-    pub performing_physician_name: Option<BoundedString<64>>,
+
 
     #[serde(rename = "modality")]
     pub modality: Option<BoundedString<16>>,
     #[serde(rename = "series_number")]
     pub series_number: Option<i32>,
     #[serde(rename = "series_date")]
-    pub series_date: Option<chrono::NaiveDate>,
+    pub series_date: Option<NaiveDate>,
     #[serde(rename = "series_time")]
-    pub series_time: Option<ExtDicomTime>,
+    pub series_time: Option<NaiveTime>,
     #[serde(rename = "series_description")]
     pub series_description: Option<BoundedString<256>>,
     #[serde(rename = "body_part_examined")]
     pub body_part_examined: Option<BoundedString<64>>,
     #[serde(rename = "protocol_name")]
     pub protocol_name: Option<BoundedString<64>>,
-    #[serde(rename = "operators_name")]
-    pub operators_name: Option<BoundedString<64>>,
-    #[serde(rename = "manufacturer")]
-    pub manufacturer: Option<BoundedString<64>>,
-    #[serde(rename = "institution_name")]
-    pub institution_name: Option<BoundedString<64>>,
-    #[serde(rename = "device_serial_number")]
-    pub device_serial_number: Option<BoundedString<64>>,
-    #[serde(rename = "software_versions")]
-    pub software_versions: Option<BoundedString<64>>,
     #[serde(rename = "series_related_instances")]
     pub series_related_instances: Option<i32>,
     #[serde(rename = "created_time")]
@@ -620,7 +602,7 @@ pub fn make_state_info(
 
     let patient_birth_time = dicom_utils::get_text_value(dicom_obj, tags::PATIENT_BIRTH_TIME)
         .filter(|v| !v.is_empty())
-        .map(|v| ExtDicomTime::try_from(v))
+        .map(|v| NaiveTime::parse_from_str(v.as_str(), "%H%M%S.%f"))
         .transpose()
         .map_err(|_| {
             DicomParseError::InvalidTimeFormat("Failed to convert patient birth time".to_string())
@@ -664,7 +646,7 @@ pub fn make_state_info(
     // 检查相关信息
     let study_time = dicom_utils::get_text_value(dicom_obj, tags::STUDY_TIME)
         .filter(|v| !v.is_empty())
-        .map(|v| ExtDicomTime::try_from(v))
+        .map(|v| NaiveTime::parse_from_str(v.as_str(), "%H%M%S.%f"))
         .transpose()
         .map_err(|_| {
             DicomParseError::InvalidTimeFormat("Failed to convert study time".to_string())
@@ -684,35 +666,35 @@ pub fn make_state_info(
             DicomParseError::ConversionError("Failed to convert study description".to_string())
         })?;
 
-    let referring_physician_name =
-        dicom_utils::get_text_value(dicom_obj, tags::REFERRING_PHYSICIAN_NAME)
-            .filter(|v| !v.is_empty())
-            .map(|v| BoundedString::<64>::try_from(v))
-            .transpose()
-            .map_err(|_| {
-                DicomParseError::ConversionError(
-                    "Failed to convert referring physician name".to_string(),
-                )
-            })?;
-
-    let admission_id = dicom_utils::get_text_value(dicom_obj, tags::ADMISSION_ID)
-        .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert admission ID".to_string())
-        })?;
-
-    let performing_physician_name =
-        dicom_utils::get_text_value(dicom_obj, tags::PERFORMING_PHYSICIAN_NAME)
-            .filter(|v| !v.is_empty())
-            .map(|v| BoundedString::<64>::try_from(v))
-            .transpose()
-            .map_err(|_| {
-                DicomParseError::ConversionError(
-                    "Failed to convert performing physician name".to_string(),
-                )
-            })?;
+    // let referring_physician_name =
+    //     dicom_utils::get_text_value(dicom_obj, tags::REFERRING_PHYSICIAN_NAME)
+    //         .filter(|v| !v.is_empty())
+    //         .map(|v| BoundedString::<64>::try_from(v))
+    //         .transpose()
+    //         .map_err(|_| {
+    //             DicomParseError::ConversionError(
+    //                 "Failed to convert referring physician name".to_string(),
+    //             )
+    //         })?;
+    //
+    // let admission_id = dicom_utils::get_text_value(dicom_obj, tags::ADMISSION_ID)
+    //     .filter(|v| !v.is_empty())
+    //     .map(|v| BoundedString::<64>::try_from(v))
+    //     .transpose()
+    //     .map_err(|_| {
+    //         DicomParseError::ConversionError("Failed to convert admission ID".to_string())
+    //     })?;
+    //
+    // let performing_physician_name =
+    //     dicom_utils::get_text_value(dicom_obj, tags::PERFORMING_PHYSICIAN_NAME)
+    //         .filter(|v| !v.is_empty())
+    //         .map(|v| BoundedString::<64>::try_from(v))
+    //         .transpose()
+    //         .map_err(|_| {
+    //             DicomParseError::ConversionError(
+    //                 "Failed to convert performing physician name".to_string(),
+    //             )
+    //         })?;
 
     // 序列相关信息
 
@@ -721,7 +703,7 @@ pub fn make_state_info(
 
     let series_time = dicom_utils::get_text_value(dicom_obj, tags::SERIES_TIME)
         .filter(|v| !v.is_empty())
-        .map(|v| ExtDicomTime::try_from(v))
+        .map(|v| NaiveTime::parse_from_str(v.as_str(), "%H%M%S.%f"))
         .transpose()
         .map_err(|_| {
             DicomParseError::InvalidTimeFormat("Failed to convert series time".to_string())
@@ -751,44 +733,44 @@ pub fn make_state_info(
             DicomParseError::ConversionError("Failed to convert protocol name".to_string())
         })?;
 
-    let operators_name = dicom_utils::get_text_value(dicom_obj, tags::OPERATORS_NAME)
-        .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert operators name".to_string())
-        })?;
+    // let operators_name = dicom_utils::get_text_value(dicom_obj, tags::OPERATORS_NAME)
+    //     .filter(|v| !v.is_empty())
+    //     .map(|v| BoundedString::<64>::try_from(v))
+    //     .transpose()
+    //     .map_err(|_| {
+    //         DicomParseError::ConversionError("Failed to convert operators name".to_string())
+    //     })?;
 
-    let manufacturer = dicom_utils::get_text_value(dicom_obj, tags::MANUFACTURER)
-        .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert manufacturer".to_string())
-        })?;
-
-    let institution_name = dicom_utils::get_text_value(dicom_obj, tags::INSTITUTION_NAME)
-        .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert institution name".to_string())
-        })?;
-    let device_serial_number = dicom_utils::get_text_value(dicom_obj, tags::DEVICE_SERIAL_NUMBER)
-        .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert device serial number".to_string())
-        })?;
-
-    let software_versions = dicom_utils::get_text_value(dicom_obj, tags::SOFTWARE_VERSIONS)
-        .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert software versions".to_string())
-        })?;
+    // let manufacturer = dicom_utils::get_text_value(dicom_obj, tags::MANUFACTURER)
+    //     .filter(|v| !v.is_empty())
+    //     .map(|v| BoundedString::<64>::try_from(v))
+    //     .transpose()
+    //     .map_err(|_| {
+    //         DicomParseError::ConversionError("Failed to convert manufacturer".to_string())
+    //     })?;
+    //
+    // let institution_name = dicom_utils::get_text_value(dicom_obj, tags::INSTITUTION_NAME)
+    //     .filter(|v| !v.is_empty())
+    //     .map(|v| BoundedString::<64>::try_from(v))
+    //     .transpose()
+    //     .map_err(|_| {
+    //         DicomParseError::ConversionError("Failed to convert institution name".to_string())
+    //     })?;
+    // let device_serial_number = dicom_utils::get_text_value(dicom_obj, tags::DEVICE_SERIAL_NUMBER)
+    //     .filter(|v| !v.is_empty())
+    //     .map(|v| BoundedString::<64>::try_from(v))
+    //     .transpose()
+    //     .map_err(|_| {
+    //         DicomParseError::ConversionError("Failed to convert device serial number".to_string())
+    //     })?;
+    //
+    // let software_versions = dicom_utils::get_text_value(dicom_obj, tags::SOFTWARE_VERSIONS)
+    //     .filter(|v| !v.is_empty())
+    //     .map(|v| BoundedString::<64>::try_from(v))
+    //     .transpose()
+    //     .map_err(|_| {
+    //         DicomParseError::ConversionError("Failed to convert software versions".to_string())
+    //     })?;
     let series_related_instances =
         dicom_utils::get_int_value(dicom_obj, tags::NUMBER_OF_SERIES_RELATED_INSTANCES);
 
@@ -832,9 +814,7 @@ pub fn make_state_info(
         accession_number,
         study_id,
         study_description,
-        referring_physician_name,
-        admission_id,
-        performing_physician_name,
+
         // 序列信息
         modality,
         series_number,
@@ -843,11 +823,7 @@ pub fn make_state_info(
         series_description,
         body_part_examined,
         protocol_name,
-        operators_name,
-        manufacturer,
-        institution_name,
-        device_serial_number,
-        software_versions,
+
         series_related_instances,
         // 时间戳
         created_time: Some(now),

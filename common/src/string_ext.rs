@@ -64,6 +64,11 @@ impl<const N: usize> BoundedString<N> {
     pub fn as_str(&self) -> &str {
         &self.value
     }
+
+    // 使用 deref 方式访问
+    pub fn as_ref(&self) -> &String {
+        &self.value
+    }
 }
 impl<const N: usize> Hash for BoundedString<N> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -307,6 +312,10 @@ impl UidHashString {
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
+    // 使用 deref 方式访问
+    pub fn as_ref(&self) -> &String {
+        self.0.as_ref()
+    }
 }
 
 
@@ -477,7 +486,7 @@ impl std::error::Error for ExtDicomDateInvalidError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::DateTime;
+    use chrono::{DateTime, NaiveDate};
 
     use dicom_encoding::snafu::ResultExt;
     use snafu::Whatever;
@@ -662,7 +671,7 @@ impl fmt::Display for UuidString {
             study_uid_hash: UidHashString::make_from("323456789"),
             accession_number: "14769824".try_into().unwrap(),
             target_ts: "1.2.840.10008.1.2.1".try_into().unwrap(),
-            study_date: "20210130".try_into().unwrap(),
+            study_date: NaiveDate::from_ymd_opt(2021, 1, 30).unwrap(),
             transfer_status: crate::dicom_object_meta::TransferStatus::NoNeedTransfer,
             source_ip: "127.0.0.1".try_into().unwrap(),
             source_ae: "STORE-SCU".try_into().unwrap(),

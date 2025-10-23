@@ -21,7 +21,7 @@ impl sqlx::Type<Postgres> for UidHashString {
 }
 impl Encode<'_, Postgres> for  UidHashString {
     fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> Result<IsNull, BoxDynError> {
-        <&str as Encode<Postgres>>::encode(self.0.as_str(), buf)
+        <&str as Encode<Postgres>>::encode(self.as_str(), buf)
     }
 }
 
@@ -31,7 +31,7 @@ impl Encode<'_, Postgres> for  UidHashString {
 // 为 BoundedString 实现 PostgreSQL 的 Encode trait
 impl<const N: usize> Encode<'_, Postgres> for BoundedString<N> {
     fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> Result<IsNull, BoxDynError> {
-        <&str as Encode<Postgres>>::encode(self.value.as_str(), buf)
+        <&str as Encode<Postgres>>::encode(self.as_str(), buf)
     }
 }
 
@@ -39,7 +39,7 @@ impl<const N: usize> Encode<'_, Postgres> for BoundedString<N> {
 
 impl<const N: usize> Encode<'_, Postgres> for FixedLengthString<N> {
     fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> Result<IsNull, BoxDynError> {
-        <&str as Encode<Postgres>>::encode(self.value.as_str(), buf)
+        <&str as Encode<Postgres>>::encode(self.as_str(), buf)
     }
 }
 
@@ -319,12 +319,12 @@ impl DbProvider for PgDbProvider {
                         .bind(state_meta.modality.as_ref().unwrap().as_str())
                         .bind(state_meta.series_number.unwrap())
                         .bind(state_meta.series_date)
-                        .bind(state_meta.series_time.as_ref().unwrap().as_naive_time())
+                        .bind(state_meta.series_time.as_ref().unwrap())
                         .bind(state_meta.series_description.as_ref().unwrap().as_str())
                         .bind(state_meta.body_part_examined.as_ref().unwrap().as_str())
                         .bind(state_meta.protocol_name.as_ref().unwrap().as_str())
                         .bind(state_meta.study_date)
-                        .bind(state_meta.study_time.as_ref().unwrap().as_naive_time())
+                        .bind(state_meta.study_time.as_ref().unwrap() )
                         .bind(state_meta.study_id.as_ref().unwrap().as_str())
                         .bind(state_meta.study_description.as_ref().unwrap().as_str())
                         .bind(state_meta.patient_age.as_ref().unwrap().as_str())
@@ -333,7 +333,7 @@ impl DbProvider for PgDbProvider {
                         .bind(state_meta.patient_sex.as_ref().unwrap().as_str())
                         .bind(state_meta.patient_name.as_ref().unwrap().as_str())
                         .bind(state_meta.patient_birth_date)
-                        .bind(state_meta.patient_birth_time.as_ref().unwrap().as_naive_time())
+                        .bind(state_meta.patient_birth_time.as_ref().unwrap())
                         .bind(state_meta.created_time)
                         .bind(state_meta.updated_time)
                       .execute(&pool)
@@ -377,12 +377,12 @@ impl DbProvider for PgDbProvider {
             .bind(state_meta.modality.as_ref().unwrap().as_str())
             .bind(state_meta.series_number.unwrap())
             .bind(state_meta.series_date)
-            .bind(state_meta.series_time.as_ref().unwrap().as_naive_time())
+            .bind(state_meta.series_time.as_ref().unwrap() )
             .bind(state_meta.series_description.as_ref().unwrap().as_str())
             .bind(state_meta.body_part_examined.as_ref().unwrap().as_str())
             .bind(state_meta.protocol_name.as_ref().unwrap().as_str())
             .bind(state_meta.study_date)
-            .bind(state_meta.study_time.as_ref().unwrap().as_naive_time())
+            .bind(state_meta.study_time.as_ref().unwrap() )
             .bind(state_meta.study_id.as_ref().unwrap().as_str())
             .bind(state_meta.study_description.as_ref().unwrap().as_str())
             .bind(state_meta.patient_age.as_ref().unwrap().as_str())
@@ -391,7 +391,7 @@ impl DbProvider for PgDbProvider {
             .bind(state_meta.patient_sex.as_ref().unwrap().as_str())
             .bind(state_meta.patient_name.as_ref().unwrap().as_str())
             .bind(state_meta.patient_birth_date)
-            .bind(state_meta.patient_birth_time.as_ref().unwrap().as_naive_time())
+            .bind(state_meta.patient_birth_time.as_ref().unwrap())
             .bind(state_meta.created_time)
             .bind(state_meta.updated_time)
             .execute(&mut *tx)
@@ -423,9 +423,10 @@ impl DbProvider for PgDbProvider {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
     use super::*;
     use crate::string_ext::*;
-    use chrono::NaiveDate;
+    use chrono::{NaiveDate, NaiveTime};
     use sqlx::postgres::PgPoolOptions;
 
 
@@ -454,19 +455,19 @@ mod tests {
         let modality = Some(BoundedString::<16>::try_from("CT".to_string())?);
         let series_number = Some(1);
         let series_date = Some(NaiveDate::from_ymd_opt(2023, 12, 1).unwrap());
-        let series_time = Some(ExtDicomTime::try_from("120000".to_string())?);
+        let series_time = Some(NaiveTime::parse_from_str("120000","%H%M%S" )?);
         let series_description = Some(BoundedString::<256>::try_from("Test Series".to_string())?);
         let body_part_examined = Some(BoundedString::<64>::try_from("CHEST".to_string())?);
         let protocol_name = Some(BoundedString::<64>::try_from("CHEST CT".to_string())?);
         let study_date = NaiveDate::from_ymd_opt(2023, 12, 1).unwrap();
-        let study_time = Some(ExtDicomTime::try_from("120000".to_string())?);
+        let study_time = Some(NaiveTime::parse_from_str("120000","%H%M%S" )?);
         let study_id = Some(BoundedString::<16>::try_from("STUDY123".to_string())?);
         let study_description = Some(BoundedString::<64>::try_from("Test Study".to_string())?);
         let patient_age = Some(BoundedString::<16>::try_from("045Y".to_string())?);
         let patient_sex = Some(BoundedString::<1>::try_from("M".to_string())?);
         let patient_name = Some(BoundedString::<64>::try_from("TEST^PATIENT".to_string())?);
         let patient_birth_date = Some(NaiveDate::from_ymd_opt(1978, 1, 1).unwrap());
-        let patient_birth_time = Some(ExtDicomTime::try_from("080000".to_string())?);
+        let patient_birth_time = Some(NaiveTime::parse_from_str("080000","%H%M%S" )?);
         let created_time = Some(chrono::Local::now().naive_local());
         let updated_time = Some(chrono::Local::now().naive_local());
 
@@ -495,9 +496,7 @@ mod tests {
             accession_number,
             study_id,
             study_description,
-            referring_physician_name: None,
-            admission_id: None,
-            performing_physician_name: None,
+
             modality,
             series_number,
             series_date,
@@ -505,11 +504,6 @@ mod tests {
             series_description,
             body_part_examined,
             protocol_name,
-            operators_name: None,
-            manufacturer: None,
-            institution_name: None,
-            device_serial_number: None,
-            software_versions: None,
             series_related_instances: None,
             created_time,
             updated_time,
