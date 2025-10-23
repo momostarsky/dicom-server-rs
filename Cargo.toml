@@ -4,10 +4,8 @@ members = [
     "storescp",
     "common",
     "consumer-storage-kafka",
-    "charset-helper",
     "mysql-demo",
-    "license-server","logstate"
-, "dicom-encrypt"]
+    "license-server"]
 
 # use edition 2021 resolver
 resolver = "2"

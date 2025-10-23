@@ -1,6 +1,7 @@
 use crate::database_entities::{SeriesEntity, StudyEntity};
 use async_trait::async_trait;
 use thiserror::Error;
+use crate::dicom_object_meta::DicomStateMeta;
 
 #[derive(Error, Debug)]
 pub enum DbError {
@@ -29,4 +30,9 @@ pub trait DbProvider: Send + Sync {
         tenant_id: &str,
         series_uid: &str,
     ) -> Result<Option<SeriesEntity>, DbError>;
+
+    async fn save_state_info(
+        &self,
+        state_meta: &DicomStateMeta,
+    ) -> Result<(), DbError>;
 }

@@ -1,12 +1,13 @@
 use dicom_core::chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
+use crate::string_ext::UidHashValue;
 
 // study.rs
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StudyEntity {
     pub tenant_id: String,
     pub study_instance_uid: String,
-    pub study_uid_hash: String,
+    pub study_uid_hash: UidHashValue,
     pub patient_id: String,
     pub patient_name: Option<String>,
     pub patient_age: Option<String>,
@@ -31,7 +32,7 @@ pub struct SeriesEntity {
     pub series_instance_uid: String,
     pub study_instance_uid: String,
     pub patient_id: String,
-    pub modality: String,
+    pub modality: Option<String>,
     pub series_number: Option<i32>,
     pub series_date: Option<chrono::NaiveDate>,
     pub series_time:  Option<chrono::NaiveTime>,

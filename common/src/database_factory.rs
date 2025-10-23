@@ -1,5 +1,5 @@
 use crate::database_provider::DbProvider;
-use crate::mysql_provider::MySqlProvider;
+use crate::dbprovider_mysql::MySqlProvider;
 use crate::server_config;
 use sqlx::Executor;
 use sqlx::mysql::{MySqlConnectOptions, MySqlPoolOptions};

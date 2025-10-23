@@ -1,6 +1,6 @@
-use crate::string_ext::{BoundedString, DicomDateString, ExtDicomTime, SopUidString, UuidString};
+use crate::string_ext::{BoundedString, DicomDateString, ExtDicomTime, SopUidString, UidHashValue, UuidString};
 use crate::{dicom_utils, uid_hash};
-use chrono::NaiveDateTime;
+use chrono::{NaiveDate, NaiveDateTime};
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,10 @@ pub enum TransferStatus {
     Success,
     Failed,
 }
+
+
+
+
 /// DicomStoreMeta 用于DICOM-CStoreSCP服务记录收图日志.
 /// 包含了所有必要的元数据字段.每一个DicomStoreMeta实例标识接收一个DICOM文件.并成功写入磁盘.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -104,9 +108,9 @@ pub struct DicomStateMeta {
     #[serde(rename = "series_uid")]
     pub series_uid: SopUidString,
     #[serde(rename = "study_uid_hash")]
-    pub study_uid_hash: u64,
+    pub study_uid_hash: UidHashValue,
     #[serde(rename = "series_uid_hash")]
-    pub series_uid_hash: u64,
+    pub series_uid_hash: UidHashValue,
     #[serde(rename = "study_date_origin")]
     pub study_date_origin: DicomDateString,
 
@@ -318,7 +322,7 @@ struct DicomCommonMeta {
     study_uid: String,
     series_uid: String,
     sop_uid: String,
-    study_date: DicomDateString,
+    study_date:NaiveDate,
     study_date_str: String,
 }
 
@@ -367,7 +371,7 @@ impl DicomCommonMeta {
             study_uid,
             series_uid,
             sop_uid,
-            study_date: DicomDateString::try_from(study_date_str.clone()).unwrap(),
+            study_date: NaiveDate::parse_from_str(&study_date_str, "%Y%m%d").unwrap(),
             study_date_str,
         })
     }
@@ -658,8 +662,7 @@ pub fn make_state_info(
         .map_err(|_| {
             DicomParseError::ConversionError("Failed to convert occupation".to_string())
         })?;
-    let study_date =
-        dicom_utils::get_date_value_dicom(dicom_obj, tags::STUDY_DATE).unwrap_or_default();
+    let study_date =common_meta.study_date;
     // 检查相关信息
     let study_time = dicom_utils::get_text_value(dicom_obj, tags::STUDY_TIME)
         .filter(|v| !v.is_empty())
@@ -792,8 +795,8 @@ pub fn make_state_info(
         dicom_utils::get_int_value(dicom_obj, tags::NUMBER_OF_SERIES_RELATED_INSTANCES);
 
     // 计算哈希值
-    let study_uid_hash = uid_hash::uid_to_u64(&common_meta.study_uid);
-    let series_uid_hash = uid_hash::uid_to_u64(&common_meta.series_uid);
+    let study_uid_hash = UidHashValue(uid_hash::uid_to_u64(&common_meta.study_uid));
+    let series_uid_hash = UidHashValue(uid_hash::uid_to_u64(&common_meta.series_uid));
 
     // 时间戳
     let now = chrono::Local::now().naive_local();

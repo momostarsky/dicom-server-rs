@@ -16,11 +16,12 @@ pub mod dicom_utils;
 pub mod license_manager;
 pub mod message_sender;
 pub mod message_sender_kafka;
-pub mod mysql_provider;
+pub mod dbprovider_mysql;
 pub mod server_config;
 pub mod string_ext;
 pub mod uid_hash;
 pub mod utils;
+mod dbprovider_pg;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DicomMessage {

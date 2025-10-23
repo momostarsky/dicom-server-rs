@@ -25,6 +25,7 @@ async-trait = "0.1.89"
 sqlx = { version = "0.8.6", features = ["mysql", "chrono",
     "runtime-tokio-rustls",
     "mysql",
+    "postgres",
     "macros",
     "runtime-tokio-native-tls"] }
 tracing = "0.1.41"

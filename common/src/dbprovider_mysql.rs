@@ -1,12 +1,21 @@
 use crate::database_entities::{SeriesEntity, StudyEntity};
 use crate::database_provider::{DbError, DbProvider};
-use crate::dicom_utils::{parse_dicom_date_from_str, parse_dicom_time_from_str};
+use crate::dicom_utils::{parse_dicom_time_from_str};
 use async_trait::async_trait;
 
 
 use sqlx::mysql::MySqlRow;
-use sqlx::{FromRow, MySqlPool, Row};
+use sqlx::{Database, FromRow, MySql, MySqlPool, Row};
 use tracing::{error, info};
+use crate::dicom_object_meta::DicomStateMeta;
+use crate::string_ext::UidHashValue;
+
+impl sqlx::Type<MySql> for UidHashValue {
+    fn type_info() -> <MySql as Database>::TypeInfo {
+        <i64 as sqlx::Type<MySql>>::type_info()
+    }
+}
+
 
 impl FromRow<'_, MySqlRow> for SeriesEntity {
     fn from_row(row: &MySqlRow) -> Result<Self, sqlx::Error> {
@@ -48,7 +57,7 @@ impl FromRow<'_, MySqlRow> for StudyEntity {
             patient_name: row.get("patient_name"),
             patient_birth_date: row.get("patient_birth_date"),
             patient_birth_time: row.get("patient_birth_time"),
-            study_uid_hash: row.get("study_uid_hash"),
+            study_uid_hash: UidHashValue::from(row.get::<i64,_>("study_uid_hash")),
             study_date_origin: row.get("study_date_origin"),
         })
     }
@@ -148,5 +157,9 @@ impl DbProvider for MySqlProvider {
                 Err(DbError::DatabaseError(e))
             }
         }
+    }
+
+    async fn save_state_info(&self, state_meta: &DicomStateMeta) -> Result<(), DbError> {
+        todo!()
     }
 }

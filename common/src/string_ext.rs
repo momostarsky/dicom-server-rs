@@ -13,13 +13,33 @@ pub enum BoundedStringError {
     LengthError { fixlen: usize, len: usize },
 }
 
+
+#[derive(Debug, Clone, Copy,Serialize,Deserialize)]
+#[serde(transparent)]
+pub  struct UidHashValue(pub  u64);
+
+impl From<i64> for UidHashValue {
+    fn from(value: i64) -> Self {
+        UidHashValue(value as u64)
+    }
+}
+impl From<u64> for UidHashValue {
+    fn from(value: u64) -> Self {
+        UidHashValue(value )
+    }
+}
+
+
+
+
+
 type BoundedResult<T, E = BoundedStringError> = Result<T, E>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 #[derive(Default)]
 pub struct BoundedString<const N: usize> {
-    value: String,
+    pub value: String,
 }
 
 impl<const N: usize> BoundedString<N> {
@@ -97,7 +117,7 @@ impl<const N: usize> TryFrom<&String> for BoundedString<N> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct FixedLengthString<const N: usize> {
-    value: String,
+    pub(crate) value: String,
 }
 
 impl<const N: usize> FixedLengthString<N> {
@@ -302,7 +322,7 @@ impl std::error::Error for ExtDicomTimeInvalidError {}
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
 pub struct ExtDicomTime {
-    value: Option<NaiveTime>,
+    pub(crate) value: Option<NaiveTime>,
 }
 
 impl fmt::Display for ExtDicomTime {
@@ -408,71 +428,11 @@ impl fmt::Display for ExtDicomDateInvalidError {
 
 impl std::error::Error for ExtDicomDateInvalidError {}
 
-/// DICOM日期字符串，格式为 YYYYMMDD, 长度为 8, 例如 "20231005"
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(transparent)]
-pub struct ExtDicomDate {
-    value: Option<chrono::NaiveDate>,
-}
 
-impl fmt::Display for ExtDicomDate {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.value {
-            Some(date) => write!(f, "{}", date.format("%Y%m%d")),
-            None => write!(f, ""),
-        }
-    }
-}
 
-impl ExtDicomDate {
-    pub fn new(value: Option<chrono::NaiveDate>) -> Self {
-        Self { value }
-    }
 
-    pub fn as_naive_date(&self) -> Option<&chrono::NaiveDate> {
-        self.value.as_ref()
-    }
 
-    pub fn into_naive_date(self) -> Option<chrono::NaiveDate> {
-        self.value
-    }
 
-    pub fn from_str(s: &str) -> Option<Self> {
-        if s.is_empty() {
-            return Some(ExtDicomDate::new(None));
-        }
-
-        match chrono::NaiveDate::parse_from_str(s, "%Y%m%d") {
-            Ok(date) => Some(ExtDicomDate::new(Some(date))),
-            Err(_) => None,
-        }
-    }
-}
-
-impl TryFrom<&str> for ExtDicomDate {
-    type Error = ExtDicomDateInvalidError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        ExtDicomDate::from_str(value).ok_or_else(|| ExtDicomDateInvalidError::new("Invalid format"))
-    }
-}
-
-impl TryFrom<&String> for ExtDicomDate {
-    type Error = ExtDicomDateInvalidError;
-
-    fn try_from(value: &String) -> Result<Self, Self::Error> {
-        ExtDicomDate::from_str(value).ok_or_else(|| ExtDicomDateInvalidError::new("Invalid format"))
-    }
-}
-
-impl TryFrom<String> for ExtDicomDate {
-    type Error = ExtDicomDateInvalidError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        ExtDicomDate::from_str(&value)
-            .ok_or_else(|| ExtDicomDateInvalidError::new("Invalid format"))
-    }
-}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -480,77 +440,7 @@ mod tests {
 
     use dicom_encoding::snafu::ResultExt;
     use snafu::Whatever;
-    #[test]
-    fn test_dicom_date_from_str() {
-        // 测试有效的日期格式
-        let date = ExtDicomDate::from_str("20231005");
-        assert!(date.is_some());
-        let date = date.unwrap();
-        assert!(date.value.is_some());
 
-        // 测试空字符串
-        let date = ExtDicomDate::from_str("");
-        assert!(date.is_some());
-        let date = date.unwrap();
-        assert!(date.value.is_none());
-    }
-
-    #[test]
-    fn test_dicom_date_invalid_format() {
-        // 测试无效的日期格式
-        let date = ExtDicomDate::from_str("2023-10-05"); // 不符合DICOM格式
-        assert!(date.is_none());
-
-        let date = ExtDicomDate::from_str("231005"); // 缺少年份
-        assert!(date.is_none());
-    }
-
-    #[test]
-    fn test_dicom_date_try_from_str() {
-        // 测试 TryFrom<&str>
-        let date_result: Result<ExtDicomDate, ExtDicomDateInvalidError> = "20231005".try_into();
-        assert!(date_result.is_ok());
-
-        // 测试无效格式
-        let date_result: Result<ExtDicomDate, ExtDicomDateInvalidError> = "invalid".try_into();
-        assert!(date_result.is_err());
-    }
-
-    #[test]
-    fn test_dicom_date_try_from_string() {
-        // 测试 TryFrom<String>
-        let date_result: Result<ExtDicomDate, ExtDicomDateInvalidError> = "20231005".to_string().try_into();
-        assert!(date_result.is_ok());
-
-        // 测试无效格式
-        let date_result: Result<ExtDicomDate, ExtDicomDateInvalidError> = "invalid".to_string().try_into();
-        assert!(date_result.is_err());
-    }
-
-    #[test]
-    fn test_dicom_date_display() {
-        // 测试有值的日期显示
-        let dicom_date = ExtDicomDate::from_str("20231005").unwrap();
-        let display_str = format!("{}", dicom_date);
-        assert_eq!(display_str, "20231005");
-
-        // 测试无值的日期显示
-        let dicom_date_none = ExtDicomDate::new(None);
-        let display_str_none = format!("{}", dicom_date_none);
-        assert_eq!(display_str_none, "");
-    }
-
-    #[test]
-    fn test_dicom_date_accessors() {
-        // 测试访问器方法
-        let dicom_date = ExtDicomDate::from_str("20231005").unwrap();
-        let naive_date = dicom_date.as_naive_date();
-        assert!(naive_date.is_some());
-
-        let dicom_date_none = ExtDicomDate::new(None);
-        let naive_date_none = dicom_date_none.as_naive_date();
-        assert!(naive_date_none.is_none());
-    }
     #[test]
     fn test_bounded_string_valid_length() {
         // 测试正常长度的字符串
@@ -668,6 +558,46 @@ mod tests {
             .to_string()
         );
     }
+
+
+
+    use std::fmt;
+
+// 为 BoundedString 实现 Display trait
+impl<const N: usize> fmt::Display for BoundedString<N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
+// 为 FixedLengthString 实现 Display trait
+impl<const N: usize> fmt::Display for FixedLengthString<N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
+// 为 SopUidString 实现 Display trait
+impl fmt::Display for SopUidString {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.as_str())
+    }
+}
+
+// 为 DicomDateString 实现 Display trait
+impl fmt::Display for DicomDateString {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.as_str())
+    }
+}
+
+// 为 UuidString 实现 Display trait
+impl fmt::Display for UuidString {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.as_str())
+    }
+}
+
     #[test]
     fn test_dicom_store_meta_json_fmt() {
         use crate::dicom_object_meta::DicomStoreMeta;
