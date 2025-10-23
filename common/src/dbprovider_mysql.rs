@@ -9,17 +9,17 @@ use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use tracing::{error, info};
 use crate::dicom_object_meta::DicomStateMeta;
-use crate::string_ext::UidHashValue;
+use crate::string_ext::UidHashString;
 
-impl sqlx::Type<MySql> for UidHashValue {
+impl sqlx::Type<MySql> for UidHashString {
     fn type_info() -> <MySql as Database>::TypeInfo {
         <i64 as sqlx::Type<MySql>>::type_info()
     }
 }
 
-impl Encode<'_, MySql> for  UidHashValue {
+impl Encode<'_, MySql> for  UidHashString {
     fn encode_by_ref(&self, buf: &mut <MySql as Database>::ArgumentBuffer<'_>) -> Result<IsNull, BoxDynError> {
-        <i64 as Encode<MySql>>::encode(self.0 as i64, buf)
+        <&str as Encode<MySql>>::encode(&self.0.as_str(), buf)
     }
 }
 
@@ -64,7 +64,7 @@ impl FromRow<'_, MySqlRow> for StudyEntity {
             patient_name: row.get("patient_name"),
             patient_birth_date: row.get("patient_birth_date"),
             patient_birth_time: row.get("patient_birth_time"),
-            study_uid_hash: UidHashValue::from(row.get::<i64,_>("study_uid_hash")),
+            study_uid_hash: UidHashString::from_string(row.get::<String,_>("study_uid_hash")),
             study_date_origin: row.get("study_date_origin"),
         })
     }
@@ -235,8 +235,8 @@ impl DbProvider for MySqlProvider {
             .bind(state_meta.patient_id.as_str())
             .bind(state_meta.study_uid.as_str())
             .bind(state_meta.series_uid.as_str())
-            .bind(state_meta.study_uid_hash.0 as i64)
-            .bind(state_meta.series_uid_hash.0 as i64)
+            .bind(state_meta.study_uid_hash.as_str())
+            .bind(state_meta.series_uid_hash.as_str())
             .bind(state_meta.study_date_origin.as_str())
             .bind(state_meta.accession_number.as_str())
             .bind(state_meta.modality.as_ref().unwrap().as_str())
@@ -277,6 +277,7 @@ mod tests {
     use crate::string_ext::*;
     use chrono::NaiveDate;
     use sqlx::mysql::MySqlPoolOptions;
+    use crate::uid_hash::uid_hash_hex;
 
     #[tokio::test]
     async fn test_save_state_info_mysql() -> Result<(), Box<dyn std::error::Error>> {
@@ -300,8 +301,8 @@ mod tests {
         let patient_id = BoundedString::<64>::try_from("test_patient_456".to_string())?;
         let study_uid = SopUidString::try_from("1.2.3.4.5.6.7.8.9")?;
         let series_uid = SopUidString::try_from("9.8.7.6.5.4.3.2.1")?;
-        let study_uid_hash = UidHashValue::from(12345u64);
-        let series_uid_hash = UidHashValue::from(67890u64);
+        let study_uid_hash = UidHashString::from_string(uid_hash_hex("1.2.3.4.5.6.7.8.9"));
+        let series_uid_hash = UidHashString::from_string(uid_hash_hex("9.8.7.6.5.4.3.2.1"));
         let study_date_origin = DicomDateString::try_from("20231201".to_string())?;
         let accession_number = BoundedString::<16>::try_from("ACC123456".to_string())?;
         let modality = Some(BoundedString::<16>::try_from("CT".to_string())?);

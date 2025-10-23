@@ -11,17 +11,17 @@ use crate::dicom_object_meta::DicomStateMeta;
 
 
 use sqlx::Postgres;
-use crate::string_ext::{BoundedString, DicomDateString, ExtDicomTime, FixedLengthString, SopUidString, UidHashValue, UuidString};
+use crate::string_ext::{BoundedString, DicomDateString, ExtDicomTime, FixedLengthString, SopUidString, UidHashString, UuidString};
 
 
-impl sqlx::Type<Postgres> for UidHashValue {
+impl sqlx::Type<Postgres> for UidHashString {
     fn type_info() -> <Postgres as Database>::TypeInfo {
-        <i64 as sqlx::Type<Postgres>>::type_info()
+        <&str as sqlx::Type<Postgres>>::type_info()
     }
 }
-impl Encode<'_, Postgres> for  UidHashValue {
+impl Encode<'_, Postgres> for  UidHashString {
     fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> Result<IsNull, BoxDynError> {
-        <i64 as Encode<Postgres>>::encode(self.0 as i64, buf)
+        <&str as Encode<Postgres>>::encode(self.0.as_str(), buf)
     }
 }
 
@@ -30,37 +30,38 @@ impl Encode<'_, Postgres> for  UidHashValue {
 
 // 为 BoundedString 实现 PostgreSQL 的 Encode trait
 impl<const N: usize> Encode<'_, Postgres> for BoundedString<N> {
-    fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> std::result::Result<IsNull, BoxDynError> {
+    fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> Result<IsNull, BoxDynError> {
         <&str as Encode<Postgres>>::encode(self.value.as_str(), buf)
     }
 }
 
 
+
 impl<const N: usize> Encode<'_, Postgres> for FixedLengthString<N> {
-    fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> std::result::Result<IsNull, BoxDynError> {
+    fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> Result<IsNull, BoxDynError> {
         <&str as Encode<Postgres>>::encode(self.value.as_str(), buf)
     }
 }
 
 
 impl Encode<'_, Postgres> for SopUidString {
-    fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> std::result::Result<IsNull, BoxDynError> {
+    fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> Result<IsNull, BoxDynError> {
         <&str as Encode<Postgres>>::encode(self.as_str(), buf)
     }
 }
 
 impl Encode<'_, Postgres> for UuidString {
-    fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> std::result::Result<IsNull, BoxDynError> {
+    fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> Result<IsNull, BoxDynError> {
         <&str as Encode<Postgres>>::encode(self.as_str(), buf)
     }
 }
 impl Encode<'_, Postgres> for DicomDateString {
-    fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> std::result::Result<IsNull, BoxDynError> {
+    fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> Result<IsNull, BoxDynError> {
         <&str as Encode<Postgres>>::encode(self.as_str(), buf)
     }
 }
 impl Encode<'_, Postgres> for ExtDicomTime {
-    fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> std::result::Result<IsNull, BoxDynError> {
+    fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> Result<IsNull, BoxDynError> {
         match &self.value {
             Some(time) => {
                 let time_str = time.format("%H%M%S%.f").to_string();
@@ -117,7 +118,7 @@ impl sqlx::Type<Postgres> for ExtDicomTime {
 }
 
 impl FromRow<'_, PgRow> for SeriesEntity {
-    fn from_row(row: &'_ PgRow) -> std::result::Result<Self, Error> {
+    fn from_row(row: &'_ PgRow) -> Result<Self, Error> {
        Ok(SeriesEntity{
            tenant_id: row.get("tenant_id"),
            series_instance_uid: row.get("series_uid"),
@@ -137,7 +138,7 @@ impl FromRow<'_, PgRow> for SeriesEntity {
 }
 
 impl FromRow<'_, PgRow> for StudyEntity {
-    fn from_row(row: &'_ PgRow) -> std::result::Result<Self, Error> {
+    fn from_row(row: &'_ PgRow) -> Result<Self, Error> {
         Ok(StudyEntity {
             tenant_id: row.get("tenant_id"),
             patient_id: row.get("patient_id"),
@@ -148,7 +149,7 @@ impl FromRow<'_, PgRow> for StudyEntity {
             patient_weight: row.get("patient_weight"),
             patient_birth_date: row.get("patient_birth_date"),
             study_instance_uid: row.get("study_uid"),
-            study_uid_hash: UidHashValue::from(row.get::<i64,_>("study_uid_hash")),
+            study_uid_hash: UidHashString::from_string(row.get::<String,_>("study_uid_hash")),
             study_date: row.get("study_date"),
             study_time: row.get("study_time"),
             accession_number: row.get("accession_number"),
@@ -271,7 +272,7 @@ impl PgDbProvider {
 }
 #[async_trait]
 impl DbProvider for PgDbProvider {
-    async fn get_study_info(&self, tenant_id: &str, study_uid: &str) -> std::result::Result<Option<StudyEntity>, DbError> {
+    async fn get_study_info(&self, tenant_id: &str, study_uid: &str) -> Result<Option<StudyEntity>, DbError> {
         let pool = self.pool.clone();
         match sqlx::query_as(Self::GET_STUDY_INFO_QUERY)
             .bind(tenant_id)
@@ -287,7 +288,7 @@ impl DbProvider for PgDbProvider {
         }
     }
 
-    async fn get_series_info(&self, tenant_id: &str, series_uid: &str) -> std::result::Result<Option<SeriesEntity>, DbError> {
+    async fn get_series_info(&self, tenant_id: &str, series_uid: &str) -> Result<Option<SeriesEntity>, DbError> {
         let pool = self.pool.clone();
         match sqlx::query_as(Self::GET_SERIES_INFO_QUERY)
             .bind(tenant_id)
@@ -304,15 +305,15 @@ impl DbProvider for PgDbProvider {
     }
 
 
-    async fn save_state_info(&self, state_meta: &DicomStateMeta) -> std::result::Result<(), DbError> {
+    async fn save_state_info(&self, state_meta: &DicomStateMeta) -> Result<(), DbError> {
         let pool = self.pool.clone();
         match sqlx::query::<Postgres>(Self::INSERT_OR_UPDATE_STATE_META_QUERY)
                         .bind(state_meta.tenant_id.as_str())
                         .bind(state_meta.patient_id.as_str())
                         .bind(state_meta.study_uid.as_str())
                         .bind(state_meta.series_uid.as_str())
-                        .bind(state_meta.study_uid_hash)
-                        .bind(state_meta.series_uid_hash)
+                        .bind(state_meta.study_uid_hash.as_str())
+                        .bind(state_meta.series_uid_hash.as_str())
                         .bind(state_meta.study_date_origin.as_str())
                         .bind(state_meta.accession_number.as_str())
                         .bind(state_meta.modality.as_ref().unwrap().as_str())
@@ -355,6 +356,7 @@ mod tests {
     use crate::string_ext::*;
     use chrono::NaiveDate;
     use sqlx::postgres::PgPoolOptions;
+    use crate::uid_hash::uid_hash_hex;
 
     #[tokio::test]
     async fn test_save_state_info() -> Result<(), Box<dyn std::error::Error>> {
@@ -374,8 +376,8 @@ mod tests {
         let patient_id = BoundedString::<64>::try_from("test_patient_456".to_string())?;
         let study_uid = SopUidString::try_from("1.2.3.4.5.6.7.8.9")?;
         let series_uid = SopUidString::try_from("9.8.7.6.5.4.3.2.1")?;
-        let study_uid_hash = UidHashValue::from(12345i64);
-        let series_uid_hash = UidHashValue::from(67890i64);
+        let study_uid_hash = UidHashString::from_string(uid_hash_hex("1.2.3.4.5.6.7.8.9"));
+        let series_uid_hash = UidHashString::from_string(uid_hash_hex("9.8.7.6.5.4.3.2.1"));
         let study_date_origin = DicomDateString::try_from("20231201".to_string())?;
         let accession_number = BoundedString::<16>::try_from("ACC123456".to_string())?;
         let modality = Some(BoundedString::<16>::try_from("CT".to_string())?);

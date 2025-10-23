@@ -1,4 +1,4 @@
-use crate::uid_hash::uid_to_u64;
+use crate::uid_hash::{uid_hash_hex, uid_to_u64};
 use config::{Config, ConfigError, Environment, File};
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
@@ -6,6 +6,7 @@ use dotenv::dotenv;
 use serde::Deserialize;
 use std::env;
 use std::sync::Once;
+use crate::string_ext::UidHashString;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct RedisConfig {
@@ -457,8 +458,8 @@ pub fn dicom_series_dir(
     study_uid: &str,
     series_uid: &str,
     create_not_exists: bool,
-) -> Result<(u64, u64, String), String> {
-    let (study_uid_hash, series_uid_hash) = (uid_to_u64(study_uid), uid_to_u64(series_uid));
+) -> Result<(UidHashString, UidHashString, String), String> {
+    let (study_uid_hash, series_uid_hash) = (uid_hash_hex(study_uid), uid_hash_hex(series_uid));
     let app_config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
     let dicom_store_path = &app_config.local_storage.dicm_store_path;
     let series_dir = format!(
@@ -470,8 +471,8 @@ pub fn dicom_series_dir(
             .map_err(|e| format!("Failed to create directory '{}': {}", series_dir, e))?;
     }
     Ok((
-        study_uid_hash,
-        series_uid_hash,
+        study_uid_hash.into(),
+        series_uid_hash.into(),
         series_dir,
     ))
 }

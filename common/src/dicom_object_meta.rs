@@ -1,4 +1,4 @@
-use crate::string_ext::{BoundedString, DicomDateString, ExtDicomTime, SopUidString, UidHashValue, UuidString};
+use crate::string_ext::{BoundedString, DicomDateString, ExtDicomTime, SopUidString, UidHashString, UuidString};
 use crate::{dicom_utils, uid_hash};
 use chrono::{NaiveDate, NaiveDateTime};
 use dicom_dictionary_std::tags;
@@ -36,7 +36,7 @@ pub struct DicomStoreMeta {
     #[serde(rename = "sop_uid")]
     pub sop_uid: SopUidString,
     #[serde(rename = "file_size")]
-    pub file_size: u64,
+    pub file_size: u32,
     #[serde(rename = "file_path")]
     pub file_path: BoundedString<512>,
     #[serde(rename = "transfer_syntax_uid")]
@@ -46,9 +46,9 @@ pub struct DicomStoreMeta {
     #[serde(rename = "created_time")]
     pub created_time: NaiveDateTime,
     #[serde(rename = "series_uid_hash")]
-    pub series_uid_hash: u64,
+    pub series_uid_hash: UidHashString,
     #[serde(rename = "study_uid_hash")]
-    pub study_uid_hash: u64,
+    pub study_uid_hash: UidHashString,
     #[serde(rename = "accession_number")]
     pub accession_number: BoundedString<16>,
     #[serde(rename = "target_ts")]
@@ -108,9 +108,9 @@ pub struct DicomStateMeta {
     #[serde(rename = "series_uid")]
     pub series_uid: SopUidString,
     #[serde(rename = "study_uid_hash")]
-    pub study_uid_hash: UidHashValue,
+    pub study_uid_hash: UidHashString,
     #[serde(rename = "series_uid_hash")]
-    pub series_uid_hash: UidHashValue,
+    pub series_uid_hash: UidHashString,
     #[serde(rename = "study_date_origin")]
     pub study_date_origin: DicomDateString,
 
@@ -207,10 +207,10 @@ pub struct DicomImageMeta {
     pub sop_uid: SopUidString,
 
     #[serde(rename = "study_uid_hash")]
-    pub study_uid_hash: BoundedString<20>,
+    pub study_uid_hash: UidHashString ,
 
     #[serde(rename = "series_uid_hash")]
-    pub series_uid_hash: BoundedString<20>,
+    pub series_uid_hash: UidHashString ,
 
     #[serde(rename = "study_date_origin")]
     pub study_date_origin: DicomDateString,
@@ -297,7 +297,7 @@ pub struct DicomImageMeta {
     pub image_status: Option<BoundedString<32>>,
 
     #[serde(rename = "space_size")]
-    pub space_size: Option<u64>,
+    pub space_size: Option<u32>,
 
     #[serde(rename = "created_time")]
     pub created_time: Option<NaiveDateTime>,
@@ -382,7 +382,7 @@ impl DicomCommonMeta {
 pub fn make_image_info(
     tenant_id: &str,
     dicom_obj: &InMemDicomObject,
-    fsize: Option<u64>,
+    fsize: Option<u32>,
 ) -> Result<DicomImageMeta, DicomParseError> {
     // 使用公共提取器获取基本信息
     let common_meta = DicomCommonMeta::extract_from_dicom(dicom_obj)?;
@@ -500,11 +500,13 @@ pub fn make_image_info(
 
     // 计算哈希值
     let study_uid_hash =
-        BoundedString::<20>::try_from(uid_hash::uid_to_u64(&common_meta.study_uid).to_string())
+        UidHashString::try_from(uid_hash::uid_hash_hex(&common_meta.study_uid).as_str() )
             .unwrap();
     let series_uid_hash =
-        BoundedString::<20>::try_from(uid_hash::uid_to_u64(&common_meta.series_uid).to_string())
+        UidHashString::try_from(uid_hash::uid_hash_hex(&common_meta.series_uid).as_str() )
             .unwrap();
+
+
 
     // 时间戳
     let now = chrono::Local::now().naive_local();
@@ -795,8 +797,8 @@ pub fn make_state_info(
         dicom_utils::get_int_value(dicom_obj, tags::NUMBER_OF_SERIES_RELATED_INSTANCES);
 
     // 计算哈希值
-    let study_uid_hash = UidHashValue(uid_hash::uid_to_u64(&common_meta.study_uid));
-    let series_uid_hash = UidHashValue(uid_hash::uid_to_u64(&common_meta.series_uid));
+    let study_uid_hash = UidHashString::from_string(uid_hash::uid_hash_hex(&common_meta.study_uid).to_string()) ;
+    let series_uid_hash = UidHashString::from_string(uid_hash::uid_hash_hex(&common_meta.series_uid).to_string());
 
     // 时间戳
     let now = chrono::Local::now().naive_local();

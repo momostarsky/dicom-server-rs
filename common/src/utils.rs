@@ -153,7 +153,7 @@ pub async fn group_dicom_state(
             Ok(dicom_obj) => {
                 let state_meta = make_state_info(message.tenant_id.as_str(), &dicom_obj, study_uid);
                 let image_entity =
-                    make_image_info(message.tenant_id.as_str(), &dicom_obj, space_size);
+                    make_image_info(message.tenant_id.as_str(), &dicom_obj,  space_size );
                 if state_meta.is_ok() && image_entity.is_ok() {
                     state_metas.push(state_meta.unwrap());
 

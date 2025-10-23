@@ -1,4 +1,4 @@
-use crate::string_ext::UidHashValue;
+use crate::string_ext::{UidHashString};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 pub struct StudyEntity {
     pub tenant_id: String,
     pub study_instance_uid: String,
-    pub study_uid_hash: UidHashValue,
+    pub study_uid_hash: UidHashString,
     pub patient_id: String,
     pub patient_name: Option<String>,
     pub patient_age: Option<String>,

@@ -55,3 +55,4 @@ regex = "1.11.2"
 lazy_static = "1.5.0"
 tempfile = "3.22.0"
 reqwest = { version = "0.11.27", features = ["json"] }
+sha2 = "0.10.9"

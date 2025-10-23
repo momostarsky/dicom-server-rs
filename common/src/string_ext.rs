@@ -14,21 +14,6 @@ pub enum BoundedStringError {
 }
 
 
-#[derive(Debug, Clone, Copy,Serialize,Deserialize)]
-#[serde(transparent)]
-pub  struct UidHashValue(pub  u64);
-
-impl From<i64> for UidHashValue {
-    fn from(value: i64) -> Self {
-        UidHashValue(value as u64)
-    }
-}
-impl From<u64> for UidHashValue {
-    fn from(value: u64) -> Self {
-        UidHashValue(value )
-    }
-}
-
 
 
 
@@ -293,6 +278,52 @@ impl TryFrom<&String> for UuidString {
     type Error = BoundedStringError;
     fn try_from(s: &String) -> BoundedResult<Self> {
         FixedLengthString::new_from_string(s).map(|fixed| Self(fixed))
+    }
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(transparent)]
+pub struct UidHashString(pub(crate) FixedLengthString<64>);
+
+impl UidHashString {
+    pub fn from_fixed_length_string(fixed: FixedLengthString<64>) -> Self {
+        Self(fixed)
+    }
+    pub fn from_string(s: String) -> Self {
+        Self(FixedLengthString::new_from_string(&s).unwrap())
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+
+impl TryFrom<&String> for UidHashString {
+    type Error = BoundedStringError;
+    fn try_from(s: &String) -> BoundedResult<Self> {
+        FixedLengthString::new_from_string(s).map(|fixed| Self(fixed))
+    }
+}
+// 为 UidHashString 实现 From<String>
+impl From<String> for UidHashString {
+    fn from(s: String) -> Self {
+        // 假设 UidHashString 是基于 BoundedString 或类似包装类型
+        // 根据实际的 UidHashString 定义调整实现
+        UidHashString::try_from(s).unwrap_or_else(|_| {
+            // 或者提供一个默认值或处理错误的方式
+            panic!("Failed to convert String to UidHashString")
+        })
+    }
+}
+
+// 同时实现 From<&str>
+impl From<&str> for UidHashString {
+    fn from(s: &str) -> Self {
+        UidHashString::try_from(s).unwrap_or_else(|_| {
+            panic!("Failed to convert &str to UidHashString")
+        })
     }
 }
 
@@ -562,8 +593,9 @@ mod tests {
 
 
     use std::fmt;
+    use crate::uid_hash::uid_hash_hex;
 
-// 为 BoundedString 实现 Display trait
+    // 为 BoundedString 实现 Display trait
 impl<const N: usize> fmt::Display for BoundedString<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.value)
@@ -616,8 +648,8 @@ impl fmt::Display for UuidString {
             created_time: DateTime::from_timestamp(1728971020, 104453242)
                 .unwrap()
                 .naive_utc(),
-            series_uid_hash: 123456789,
-            study_uid_hash: 323456789,
+            series_uid_hash: UidHashString::from_string(uid_hash_hex("123456789")),
+            study_uid_hash: UidHashString::from_string(uid_hash_hex("323456789")),
             accession_number: "14769824".try_into().unwrap(),
             target_ts: "1.2.840.10008.1.2.1".try_into().unwrap(),
             study_date: "20210130".try_into().unwrap(),
