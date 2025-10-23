@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use dicom_core::chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use crate::string_ext::UidHashValue;
@@ -39,6 +40,6 @@ pub struct SeriesEntity {
     pub series_description: Option<String>,
     pub body_part_examined: Option<String>,
     pub protocol_name: Option<String>,
-    pub created_time: Option<NaiveDateTime>,
-    pub updated_time: Option<NaiveDateTime>,
+    pub created_time: DateTime<Utc>,
+    pub updated_time: DateTime<Utc>,
 }
