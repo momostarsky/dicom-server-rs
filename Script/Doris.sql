@@ -1,0 +1,3 @@
+--- 存储收图记录  dicom_object_meta
+----存储切片信息  dicom_image_meta
+----存储WADO调阅日志 dicom_wado_log

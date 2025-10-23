@@ -383,6 +383,36 @@ pub fn generate_database_connection(app_config: &AppConfig) -> Result<String, St
     Ok(db_conn)
 }
 
+pub fn generate_pg_database_connection(app_config: &AppConfig) -> Result<String, String> {
+    let dbconfig = &app_config.database;
+    let password = dbconfig
+        .password
+        .replace("@", "%40")
+        .replace(":", "%3A")
+        .replace("/", "%2F")
+        .replace("?", "%3F")
+        .replace("&", "%26")
+        .replace("#", "%23")
+        .replace("[", "%5B")
+        .replace("]", "%5D")
+        .replace("{", "%7B")
+        .replace("}", "%7D")
+        .replace("|", "%7C")
+        .replace("<", "%3C")
+        .replace(">", "%3E")
+        .replace("\\", "%5C")
+        .replace("^", "%5E")
+        .replace("`", "%60");
+
+    let db_conn = format!(
+        "postgresql://{}:{}@{}:{}/{}",
+        dbconfig.username, password, dbconfig.host, dbconfig.port, dbconfig.database
+    );
+    println!("postgresql database connection string: {}", db_conn);
+
+    Ok(db_conn)
+}
+
 /// 获取 dicom study 存储路径: storage_root/{tenant_id}/{study_date}/{study_uid}
 /// 注意: 该路径下可能包含多个 series 目录
 pub fn dicom_study_dir(

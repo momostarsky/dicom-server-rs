@@ -196,23 +196,26 @@ async fn main() -> std::io::Result<()> {
     // }
 
 
-    let db_provider = database_factory::create_db_instance().await;
-    if db_provider.is_none() {
-        error!(log, "db_provider is none");
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "db_provider is none",
-        ));
-    }
+    let db_provider =match database_factory::create_db_instance().await{
+        Ok(db_provider) => db_provider,
+        Err(e) => {
+            error!(log, "create_db_instance error: {:?}", e);
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("create_db_instance error: {:?}", e),
+            ));
+        }
+    };
+
     let g_config = config.clone();
     // let db_config = config.database.unwrap();
     let server_config = config.server;
     let local_storage_config = config.local_storage;
     info!(log, "LocalStorage Config is: {:?}", local_storage_config);
-    let db_instance = db_provider.unwrap();
+
     let app_state = AppState {
         log: log.clone(),
-        db: db_instance as Arc<dyn DbProvider + Send + Sync>, // 正确的类型转换
+        db: db_provider as Arc<dyn DbProvider + Send + Sync>, // 正确的类型转换
         config: g_config,
     };
     info!(
