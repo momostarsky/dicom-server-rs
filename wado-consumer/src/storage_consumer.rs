@@ -1,36 +1,24 @@
 use common::dicom_object_meta::{DicomImageMeta, DicomStateMeta, DicomStoreMeta};
 use common::message_sender_kafka::KafkaMessagePublisher;
-use common::utils::group_dicom_state;
+use common::utils::{get_logger, group_dicom_state};
 use common::{server_config};
 use futures::StreamExt;
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message};
 use slog;
-use slog::{Logger, error, info, o};
-use std::sync::{Arc, Mutex, OnceLock};
+use slog::{error, info, o};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use tokio::runtime::Handle;
 
-// 全局logger静态变量，使用线程安全的方式
-static GLOBAL_LOGGER: OnceLock<Logger> = OnceLock::new();
 
-// 设置全局logger
-pub fn set_global_logger(logger: Logger) {
-    let _ = GLOBAL_LOGGER.set(logger);
-}
-
-// 获取全局logger
-fn get_logger() -> &'static Logger {
-    GLOBAL_LOGGER.get().expect("Logger not initialized")
-}
-
-pub async fn start_process(logger: &Logger) {
+pub async fn start_process() {
     // 设置全局logger
-    set_global_logger(logger.clone());
 
-    // 使用全局logger
-    let global_logger = get_logger();
+    let rlogger = get_logger();
+    let global_logger = rlogger.new(o!("wado-consume"=>"start_process"));
+
 
     // 设置日志系统
     info!(global_logger, "start process");
@@ -94,7 +82,8 @@ pub async fn start_process(logger: &Logger) {
     // 启动消息读取任务（在新线程中运行异步代码）
     let reader_thread = thread::spawn(move || {
         handle_for_reader.block_on(async {
-            read_message(consumer, vec_for_reader, last_process_time).await;
+             read_message(consumer, vec_for_reader, last_process_time).await;
+
         });
     });
 
@@ -118,6 +107,10 @@ pub async fn start_process(logger: &Logger) {
         Ok(_) => info!(global_logger, "Writer thread completed successfully"),
         Err(e) => error!(global_logger, "Writer thread panicked: {:?}", e),
     }
+    // 在退出前调用
+
+    // 等待一小段时间让清理完成
+    tokio::time::sleep(Duration::from_millis(100)).await;
 
     // 主线程查看最终结果
     let final_vec = shared_vec.lock().unwrap();
@@ -131,11 +124,12 @@ async fn read_message(
 ) {
     let logger = get_logger();
     let mut message_stream = consumer.stream();
-    info!(logger, "Starting to read messages...");
+    info!(logger, "XXStarting to read messages ...");
 
     while let Some(result) = message_stream.next().await {
         match result {
             Ok(message) => {
+                info!(logger, "Received message: {:?}", message);
                 match message.payload() {
                     Some(payload) => {
                         match serde_json::from_slice::<DicomStoreMeta>(payload) {
@@ -184,6 +178,7 @@ async fn read_message(
             }
         }
     }
+
 }
 
 static MAX_MESSAGES_PER_BATCH: usize = 50;
@@ -293,8 +288,8 @@ async fn publish_dicom_meta(
     state_producer: &KafkaMessagePublisher,
     image_producer: &KafkaMessagePublisher,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let root_logger = common::utils::get_logger();
-    let logger = root_logger.new(o!("wado-storescp"=>"classify_and_publish_dicom_messages"));
+    let root_logger = get_logger();
+    let logger = root_logger.new(o!("wado-consume"=>"publish_dicom_meta"));
     if state_metaes.is_empty() || image_metaes.is_empty() {
         info!(
             logger,

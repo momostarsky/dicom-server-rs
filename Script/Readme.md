@@ -86,7 +86,20 @@ host    all             all             192.168.1.0/24          scram-sha-256
   - dicom_image_queue 用于存储 dicom 图像数据
   - dicom_state_queue 用于存储 dicom 状态数据
   - log_queue   用于存储StoreSCP接收的DICOM对象数据, 方便对后续的收图性能及文件占用空间进行评估.
-  - storage_queue   用于提取DICOM的序列层级信息并写入Pg或是MySQL数据库,方便后续进行检索. 
+  - storage_queue   用于提取DICOM的序列层级信息并写入Pg或是MySQL数据库,方便后续进行检索.
+
+- 创建队列
 ```bash 
-rpk topic create XXX  --partitions 1 --replicas 1
+rpk topic create dicom_image_queue  --partitions 1 --replicas 1
+rpk topic create dicom_state_queue  --partitions 1 --replicas 1
+rpk topic create log_queue          --partitions 1 --replicas 1
+rpk topic create storage_queue      --partitions 1 --replicas 1
+```
+
+- 清空队列
+```bash
+rpk topic trim-prefix dicom_image_queue  -p 0 --offset end --no-confirm
+rpk topic trim-prefix dicom_state_queue  -p 0 --offset end --no-confirm
+rpk topic trim-prefix log_queue          -p 0 --offset end --no-confirm
+rpk topic trim-prefix storage_queue      -p 0 --offset end --no-confirm
 ```

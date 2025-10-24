@@ -7,8 +7,8 @@ use crate::storage_consumer::start_process;
 
 #[tokio::main]
 async fn main() {
-    let logger = setup_logging("kafak-storage-consumer");
+    let _ = setup_logging("wado-consumer");
     tracing::info!("Message processor started");
-    start_process(&logger).await;
+    start_process().await;
     tracing::info!("Message processor stopped");
 }
