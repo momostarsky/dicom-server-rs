@@ -879,34 +879,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "consumer-storage-kafka"
-version = "0.1.0"
-dependencies = [
- "clap",
- "common",
- "config",
- "dicom-core 0.9.0",
- "dicom-dictionary-std 0.9.0",
- "dicom-encoding 0.9.0",
- "dicom-object 0.9.0",
- "dicom-transfer-syntax-registry 0.9.0",
- "dicom-ul 0.9.0",
- "dotenv",
- "futures",
- "rdkafka",
- "serde",
- "serde_json",
- "slog",
- "slog-term",
- "snafu",
- "sqlx",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "urlencoding",
-]
-
-[[package]]
 name = "convert_case"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1252,7 +1224,6 @@ dependencies = [
  "dicom-encoding 0.9.0",
  "dicom-object 0.9.0",
  "dicom-transfer-syntax-registry 0.9.0",
- "gdcm-rs",
  "image",
  "num-traits",
  "rayon",
@@ -1747,20 +1718,6 @@ dependencies = [
  "pin-project-lite",
  "pin-utils",
  "slab",
-]
-
-[[package]]
-name = "gdcm-rs"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dea719b974ad4837aabb2a5fbee4c8fb6b5fbf5d55db4212c50ffb63b8538e2e"
-dependencies = [
- "cc",
- "cmake",
- "libc",
- "snafu",
- "strum",
- "strum_macros",
 ]
 
 [[package]]
@@ -2625,41 +2582,6 @@ dependencies = [
  "libc",
  "pkg-config",
  "vcpkg",
-]
-
-[[package]]
-name = "license-server"
-version = "0.1.0"
-dependencies = [
- "actix-cors",
- "actix-web",
- "axum",
- "chrono",
- "common",
- "der",
- "futures",
- "futures-util",
- "hex",
- "http 0.2.12",
- "http-body-util",
- "lazy_static",
- "mime",
- "openssl",
- "pem",
- "redis",
- "regex",
- "serde",
- "serde_json",
- "serde_qs 0.15.0",
- "slog",
- "slog-async",
- "slog-term",
- "tokio",
- "tokio-util",
- "url",
- "urlencoding",
- "uuid",
- "x509-parser",
 ]
 
 [[package]]
@@ -3984,17 +3906,6 @@ dependencies = [
 
 [[package]]
 name = "serde_qs"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0431a35568651e363364210c91983c1da5eb29404d9f0928b67d4ebcfa7d330c"
-dependencies = [
- "percent-encoding",
- "serde",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "serde_qs"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3faaf9e727533a19351a43cc5a8de957372163c7d35cc48c90b75cdda13c352"
@@ -4467,38 +4378,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
-name = "storescp"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "clap",
- "common",
- "config",
- "dicom-core 0.9.0",
- "dicom-dictionary-std 0.9.0",
- "dicom-encoding 0.9.0",
- "dicom-object 0.9.0",
- "dicom-pixeldata",
- "dicom-transfer-syntax-registry 0.9.0",
- "dicom-ul 0.9.0",
- "dotenv",
- "futures",
- "futures-util",
- "openssl",
- "rdkafka",
- "serde",
- "serde_json",
- "slog",
- "slog-async",
- "slog-term",
- "sqlx",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "stringprep"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4514,25 +4393,6 @@ name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
-
-[[package]]
-name = "strum"
-version = "0.26.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
-
-[[package]]
-name = "strum_macros"
-version = "0.26.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "rustversion",
- "syn 2.0.106",
-]
 
 [[package]]
 name = "subtle"
@@ -5202,6 +5062,69 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
+name = "wado-consumer"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "common",
+ "config",
+ "dicom-core 0.9.0",
+ "dicom-dictionary-std 0.9.0",
+ "dicom-encoding 0.9.0",
+ "dicom-object 0.9.0",
+ "dicom-transfer-syntax-registry 0.9.0",
+ "dicom-ul 0.9.0",
+ "dotenv",
+ "futures",
+ "rdkafka",
+ "serde",
+ "serde_json",
+ "slog",
+ "slog-term",
+ "snafu",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "urlencoding",
+]
+
+[[package]]
+name = "wado-license"
+version = "0.1.0"
+dependencies = [
+ "actix-cors",
+ "actix-web",
+ "axum",
+ "chrono",
+ "common",
+ "der",
+ "futures",
+ "futures-util",
+ "hex",
+ "http 0.2.12",
+ "http-body-util",
+ "lazy_static",
+ "mime",
+ "openssl",
+ "pem",
+ "redis",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_qs",
+ "slog",
+ "slog-async",
+ "slog-term",
+ "tokio",
+ "tokio-util",
+ "url",
+ "urlencoding",
+ "uuid",
+ "x509-parser",
+]
+
+[[package]]
 name = "wado-server"
 version = "0.1.0"
 dependencies = [
@@ -5228,13 +5151,45 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "serde_qs 0.12.0",
+ "serde_qs",
  "slog",
  "slog-async",
  "slog-term",
  "tokio",
  "url",
  "urlencoding",
+ "uuid",
+]
+
+[[package]]
+name = "wado-storescp"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "common",
+ "config",
+ "dicom-core 0.9.0",
+ "dicom-dictionary-std 0.9.0",
+ "dicom-encoding 0.9.0",
+ "dicom-object 0.9.0",
+ "dicom-pixeldata",
+ "dicom-transfer-syntax-registry 0.9.0",
+ "dicom-ul 0.9.0",
+ "dotenv",
+ "futures",
+ "futures-util",
+ "openssl",
+ "rdkafka",
+ "serde",
+ "serde_json",
+ "slog",
+ "slog-async",
+ "slog-term",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 

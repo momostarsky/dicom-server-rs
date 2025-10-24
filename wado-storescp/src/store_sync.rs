@@ -64,7 +64,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         .whatever_context("could not establish association")?;
 
     let rlogger = get_logger();
-    let logger = rlogger.new(o!("storescp"=>"run_store_sync"));
+    let logger = rlogger.new(o!("wado-storescp"=>"run_store_sync"));
     info!(
         logger,
         "New association from {}",

@@ -103,7 +103,7 @@ pub(crate) async fn process_dicom_file(
     client_ae: String,
 ) -> Result<DicomStoreMeta, Whatever> {
     let root_logger = get_logger();
-    let logger = root_logger.new(o!("storescp"=>"process_dicom_file"));
+    let logger = root_logger.new(o!("wado-storescp"=>"process_dicom_file"));
     let obj = InMemDicomObject::read_dataset_with_ts(
         instance_buffer,
         TransferSyntaxRegistry.get(ts).unwrap(),
@@ -293,7 +293,7 @@ pub(crate) async fn classify_and_publish_dicom_messages(
     log_producer: &KafkaMessagePublisher,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let root_logger = get_logger();
-    let logger = root_logger.new(o!("storescp"=>"classify_and_publish_dicom_messages"));
+    let logger = root_logger.new(o!("wado-storescp"=>"classify_and_publish_dicom_messages"));
     if dicom_message_lists.is_empty() {
         info!(logger, "Empty dicom message list, skip");
         return Ok(());

@@ -61,7 +61,7 @@ pub async fn start_process(logger: &Logger) {
         .set("session.timeout.ms", "6000")
         .set("enable.partition.eof", "false")
         .create()
-        .expect("create consumer-storage-kafka failed");
+        .expect("create wado-consumer failed");
 
     let topic = queue_config.topic_main.as_str();
     info!(global_logger, "Subscribing to topic: {}", topic);
@@ -294,7 +294,7 @@ async fn publish_dicom_meta(
     image_producer: &KafkaMessagePublisher,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let root_logger = common::utils::get_logger();
-    let logger = root_logger.new(o!("storescp"=>"classify_and_publish_dicom_messages"));
+    let logger = root_logger.new(o!("wado-storescp"=>"classify_and_publish_dicom_messages"));
     if state_metaes.is_empty() || image_metaes.is_empty() {
         info!(
             logger,

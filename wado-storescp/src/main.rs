@@ -289,7 +289,7 @@ async fn run_async(args: App) -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
     let args = Arc::new(args);
     let rlogger = get_logger();
-    let logger = rlogger.new(o!("storescp"=>"run_async"));
+    let logger = rlogger.new(o!("wado-storescp"=>"run_async"));
     let listen_addr = SocketAddrV4::new(Ipv4Addr::from(0), args.port);
     let listener = tokio::net::TcpListener::bind(listen_addr).await?;
     info!(
@@ -311,7 +311,7 @@ async fn run_async(args: App) -> Result<(), Box<dyn std::error::Error>> {
 
 async fn run_sync(args: App) -> Result<(), Box<dyn std::error::Error>> {
     let rlogger = get_logger();
-    let logger = rlogger.new(o!("storescp"=>"run_sync"));
+    let logger = rlogger.new(o!("wado-storescp"=>"run_sync"));
     let listen_addr = SocketAddrV4::new(Ipv4Addr::from(0), args.port);
     let listener = std::net::TcpListener::bind(listen_addr)?;
     info!(

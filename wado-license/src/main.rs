@@ -44,7 +44,7 @@ async fn main() -> std::io::Result<()> {
 }
 
 fn configure_log() -> Logger {
-    let log = setup_logging("license-server");
+    let log = setup_logging("wado-license");
     info!(log, "License server started");
     log.clone()
 }

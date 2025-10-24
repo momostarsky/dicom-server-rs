@@ -36,7 +36,7 @@ pub async fn run_store_async(
     let peer = scu_stream.peer_addr().unwrap();
 
     let rlogger = get_logger();
-    let logger = rlogger.new(o!("storescp"=>"run_store_async"));
+    let logger = rlogger.new(o!("wado-storescp"=>"run_store_async"));
     info!(
         logger,
         "New association from remote ip: {} and remote port: {}",
