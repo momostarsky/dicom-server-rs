@@ -24,11 +24,11 @@ create table IF NOT EXISTS  dicom_object_meta
     source_ae           varchar(64)   null,
     trace_id            varchar(36)   not null comment '全局唯一追踪ID，作为主键',
     worker_node_id      varchar(64)   not null comment '工作节点 ID'
-    )
-    ENGINE=OLAP
-    DUPLICATE KEY(tenant_id,patient_id,study_uid,series_uid,sop_uid)  -- 逻辑主键，自动去重
-    DISTRIBUTED BY HASH(tenant_id) BUCKETS 1
-    PROPERTIES("replication_num" = "1");
+)
+ENGINE=OLAP
+DUPLICATE KEY(tenant_id,patient_id,study_uid,series_uid,sop_uid)  -- 逻辑主键，自动去重
+DISTRIBUTED BY HASH(tenant_id) BUCKETS 1
+PROPERTIES("replication_num" = "1");
 
 
 DROP TABLE IF  EXISTS dicom_state_meta;
@@ -72,10 +72,10 @@ CREATE TABLE IF NOT EXISTS dicom_state_meta (
     created_time DATETIME NULL,
     updated_time DATETIME NULL
     )
-    ENGINE=OLAP
-    UNIQUE KEY(tenant_id, patient_id, study_uid, series_uid)
-    DISTRIBUTED BY HASH(tenant_id) BUCKETS 1
-    PROPERTIES("replication_num" = "1");
+ENGINE=OLAP
+UNIQUE KEY(tenant_id, patient_id, study_uid, series_uid)
+DISTRIBUTED BY HASH(tenant_id) BUCKETS 1
+PROPERTIES("replication_num" = "1");
 
 
 DROP TABLE IF   EXISTS dicom_image_meta ;
@@ -135,10 +135,10 @@ CREATE TABLE IF NOT EXISTS dicom_image_meta (
     created_time DATETIME COMMENT "创建时间",
     updated_time DATETIME COMMENT "更新时间",
     )
-    ENGINE=OLAP
-    UNIQUE KEY(tenant_id, patient_id, study_uid, series_uid, sop_uid)
-    DISTRIBUTED BY HASH(tenant_id) BUCKETS 1
-    PROPERTIES("replication_num" = "1");
+ENGINE=OLAP
+UNIQUE KEY(tenant_id, patient_id, study_uid, series_uid, sop_uid)
+DISTRIBUTED BY HASH(tenant_id) BUCKETS 1
+PROPERTIES("replication_num" = "1");
 
 --- 下面的脚步最好逐个执行，避免重复创建---------------------
 STOP  ROUTINE LOAD FOR medical_object_load;
@@ -242,7 +242,7 @@ FROM KAFKA (
 
 CREATE ROUTINE LOAD medical_image_load ON dicom_image_meta
 COLUMNS (
-      tenant_id,
+    tenant_id,
     patient_id,
     study_uid,
     series_uid,
