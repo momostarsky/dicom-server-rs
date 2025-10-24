@@ -194,8 +194,6 @@ pub struct DicomImageMeta {
     #[serde(rename = "series_uid_hash")]
     pub series_uid_hash: UidHashString ,
 
-    #[serde(rename = "study_date_origin")]
-    pub study_date_origin: DicomDateString,
 
     #[serde(rename = "instance_number")]
     pub instance_number: Option<i32>,
@@ -488,10 +486,7 @@ pub fn make_image_info(
 
     // 时间戳
     let now = chrono::Local::now().naive_local();
-    let study_date_origin =
-        DicomDateString::try_from(&common_meta.study_date_str).map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert study date origin".to_string())
-        })?;
+
 
     Ok(DicomImageMeta {
         tenant_id: BoundedString::<64>::try_from(tenant_id.to_string()).map_err(|_| {
@@ -511,7 +506,7 @@ pub fn make_image_info(
         })?,
         study_uid_hash,
         series_uid_hash,
-        study_date_origin,
+
 
         instance_number,
 
