@@ -1,6 +1,14 @@
 --- 存储收图记录  dicom_object_meta
 ----存储切片信息  dicom_image_meta
 ----存储WADO调阅日志 dicom_wado_log
+-- DUPLICATE KEY:
+-- 不会自动去重，允许多条具有相同 key 的数据存在
+-- 所有数据行都会被保留
+-- 查询时可能返回多条相同 key 的记录
+-- UNIQUE KEY:
+-- 自动根据 key 去重
+-- 当新数据与已有数据的 key 相同时，会替换旧数据
+-- 保证每个 key 只有一条记录
 drop  table IF   EXISTS  dicom_object_meta;
 create table IF NOT EXISTS  dicom_object_meta
 (
