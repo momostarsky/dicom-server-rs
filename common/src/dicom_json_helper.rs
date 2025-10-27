@@ -12,6 +12,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
+use dicom_object::file::CharacterSetOverride;
 
 pub fn file_exists(p0: &PathBuf) -> bool {
     fs::metadata(p0).is_ok()
@@ -88,6 +89,7 @@ pub fn generate_json_file(file: &PathBuf, json_save_to :&PathBuf ) -> Result<(),
                 let mut local_sop_map = HashMap::new();
                 let obj =
                     OpenFileOptions::new()
+                        .charset_override(CharacterSetOverride::AnyVr)
                         .read_until(tags::PIXEL_DATA)
                         .open_file(&file)
                         .unwrap_or_else(|_| {

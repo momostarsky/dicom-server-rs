@@ -1,5 +1,5 @@
-use crate::string_ext::{UidHashString};
-use chrono::{DateTime, Utc};
+use crate::string_ext::UidHashString;
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use serde::{Deserialize, Serialize};
 
 // study.rs
@@ -14,10 +14,10 @@ pub struct StudyEntity {
     pub patient_sex: Option<String>,
     pub patient_size: Option<f64>,
     pub patient_weight: Option<f64>,
-    pub patient_birth_date: Option<chrono::NaiveDate>,
-    pub patient_birth_time: Option<chrono::NaiveTime>,
-    pub study_date: chrono::NaiveDate,
-    pub study_time: Option<chrono::NaiveTime>,
+    pub patient_birth_date: Option<NaiveDate>,
+    pub patient_birth_time: Option<NaiveTime>,
+    pub study_date: NaiveDate,
+    pub study_time: Option<NaiveTime>,
     pub accession_number: Option<String>,
     pub study_id: Option<String>,
     pub study_description: Option<String>,
@@ -34,11 +34,11 @@ pub struct SeriesEntity {
     pub patient_id: String,
     pub modality: Option<String>,
     pub series_number: Option<i32>,
-    pub series_date: Option<chrono::NaiveDate>,
-    pub series_time:  Option<chrono::NaiveTime>,
+    pub series_date: Option<NaiveDate>,
+    pub series_time:  Option<NaiveTime>,
     pub series_description: Option<String>,
     pub body_part_examined: Option<String>,
     pub protocol_name: Option<String>,
-    pub created_time: DateTime<Utc>,
-    pub updated_time: DateTime<Utc>,
+    pub created_time: NaiveDateTime,
+    pub updated_time: NaiveDateTime,
 }

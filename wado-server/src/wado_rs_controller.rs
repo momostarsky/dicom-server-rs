@@ -12,9 +12,7 @@ use dicom_object::OpenFileOptions;
 use serde_json::{Map, json};
 use slog::{error, info};
 use std::path::PathBuf;
-
-
-
+use dicom_object::collector::CharacterSetOverride;
 
 static ACCEPT_DICOM_JSON_TYPE: &str = "application/dicom+json";
 static ACCEPT_JSON_TYPE: &str = "application/json";
@@ -345,6 +343,7 @@ async fn retrieve_series_metadata(
     for file_path in &files {
         // 读取 DICOM 文件内容
         let sop_json = match OpenFileOptions::new()
+            .charset_override(CharacterSetOverride::AnyVr)
             .read_until(tags::PIXEL_DATA)
             .open_file(file_path)
         {

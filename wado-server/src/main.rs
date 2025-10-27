@@ -138,63 +138,6 @@ async fn main() -> std::io::Result<()> {
             "License Server Validation Failed",
         ));
     }
-    // info!(
-    //     log,
-    //     "Config License Server License Server URL: {:?}", license.url
-    // );
-    // info!(
-    //     log,
-    //     "Config License Server Machine ID: {:?}", license.machine_id
-    // );
-    // info!(
-    //     log,
-    //     "Config License Server Mac Address: {:?}", license.mac_address
-    // );
-    // info!(
-    //     log,
-    //     "Config License Server Client ID: {:?}", license.client_id
-    // );
-    // info!(
-    //     log,
-    //     "Config License Server Client Name : {:?}", license.client_name
-    // );
-    // info!(
-    //     log,
-    //     "Config License Server End Date: {:?}", license.end_date
-    // );
-    // match std::fs::exists(&license.license_key.as_str()) {
-    //     Ok(true) => {
-    //         info!(log, "License Key File Exists");
-    //     }
-    //     Ok(false) => {
-    //         return Err(std::io::Error::new(
-    //             std::io::ErrorKind::Other,
-    //             format!("License Key File Not Exists: {:?}", &license.license_key),
-    //         ));
-    //     }
-    //     _ => {
-    //         return Err(std::io::Error::new(
-    //             std::io::ErrorKind::Other,
-    //             format!("客户端授权证书错误: {:?}", &license.license_key),
-    //         ));
-    //     }
-    // };
-    // //
-    // //  match cert_helper::validate_client_certificate_only(&license.license_key,"./dicom-org-cn.pem") {
-    // match cert_helper::validate_client_certificate_with_ca(&license.license_key,"./dicom-org-cn.pem") {
-    //     Ok(_) => {
-    //         info!(log, "Validate My Certificate Success");
-    //         info!(log, "✅ 证书验证成功");
-    //     }
-    //     Err(e) => {
-    //         error!(log, "Validate My Certificate Error: {:?}", e);
-    //         return Err(std::io::Error::new(
-    //             std::io::ErrorKind::Other,
-    //             format!("Validate My Certificate Error: {:?}", e),
-    //         ));
-    //     }
-    // }
-
 
     let db_provider =match database_factory::create_db_instance(&config.main_database).await{
         Ok(db_provider) => db_provider,
@@ -208,7 +151,6 @@ async fn main() -> std::io::Result<()> {
     };
 
     let g_config = config.clone();
-    // let db_config = config.database.unwrap();
     let server_config = config.server;
     let local_storage_config = config.local_storage;
     info!(log, "LocalStorage Config is: {:?}", local_storage_config);
