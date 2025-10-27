@@ -1,4 +1,4 @@
-use crate::redis_helper::{get_redis_value_with_config, set_redis_value_with_expiry_and_config};
+use crate::redis_helper::{db_study_entity_is_not_exists, db_study_entity_is_not_found, db_study_entity_remove, get_redis_value_with_config, set_redis_value_with_expiry_and_config};
 use crate::{AppState, common_utils};
 use actix_web::http::header::ACCEPT;
 use actix_web::{HttpRequest, HttpResponse, Responder, get, web, web::Path};
@@ -9,10 +9,10 @@ use common::dicom_utils::get_tag_values;
 use common::server_config::{dicom_series_dir, dicom_study_dir, json_metadata_dir};
 use dicom_dictionary_std::tags;
 use dicom_object::OpenFileOptions;
+use dicom_object::collector::CharacterSetOverride;
 use serde_json::{Map, json};
 use slog::{error, info};
 use std::path::PathBuf;
-use dicom_object::collector::CharacterSetOverride;
 
 static ACCEPT_DICOM_JSON_TYPE: &str = "application/dicom+json";
 static ACCEPT_JSON_TYPE: &str = "application/json";
@@ -72,6 +72,7 @@ async fn get_study_info_with_cache(
                     // 将从数据库获取的数据存入Redis缓存
                     match serde_json::to_string(&info) {
                         Ok(study_info_json) => {
+                            db_study_entity_remove::<String>(&app_state.config.redis, &study_uid);
                             set_redis_value_with_expiry_and_config::<String>(
                                 &app_state.config.redis,
                                 &redis_key,
@@ -89,7 +90,13 @@ async fn get_study_info_with_cache(
                     Ok(info)
                 }
                 Ok(None) => {
+                    error!(
+                        log,
+                        "Study not found in database: {},{}", tenant_id, study_uid
+                    );
                     let error_msg = format!("Study not found: {},{}", tenant_id, study_uid);
+                    // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
+                    db_study_entity_is_not_found::<String>(&app_state.config.redis, &study_uid, 30);
                     Err(HttpResponse::NotFound().body(error_msg))
                 }
                 Err(e) => {
@@ -182,6 +189,15 @@ async fn retrieve_study_metadata(
         log,
         "retrieve_study_metadata Tenant ID: {}  and StudyUID:{} ", tenant_id, study_uid
     );
+    // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
+    let is_not_found = db_study_entity_is_not_exists::<String>(&app_state.config.redis, &study_uid);
+
+    if is_not_found.is_some() {
+        return HttpResponse::NotFound().body(format!(
+            "retrieve_study_metadata Study not found in database retry after 30 seconds: {},{}",
+            tenant_id, study_uid
+        ));
+    }
     // let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
 
     // if accept != Some(ACCEPT_DICOM_JSON_TYPE) {
@@ -275,6 +291,14 @@ async fn retrieve_series_metadata(
         return HttpResponse::NotAcceptable().body(format!(
             "retrieve_study_metadata Accept header must be {}",
             ACCEPT_DICOM_JSON_TYPE
+        ));
+    }
+    let is_not_found = db_study_entity_is_not_exists::<String>(&app_state.config.redis, &study_uid);
+
+    if is_not_found.is_some() {
+        return HttpResponse::NotFound().body(format!(
+            "retrieve_series_metadata Study not found in database retry after 30 seconds: {},{}",
+            tenant_id, study_uid
         ));
     }
     // ... existing code ...

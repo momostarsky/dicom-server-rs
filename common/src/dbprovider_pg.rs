@@ -10,7 +10,7 @@ use crate::dicom_object_meta::DicomStateMeta;
 use tracing::error;
 
 use crate::string_ext::{
-    BoundedString, DicomDateString, ExtDicomTime, FixedLengthString, SopUidString, UidHashString,
+    BoundedString, DicomDateString, FixedLengthString, SopUidString, UidHashString,
     UuidString,
 };
 use sqlx::Postgres;
@@ -73,20 +73,7 @@ impl Encode<'_, Postgres> for DicomDateString {
         <&str as Encode<Postgres>>::encode(self.as_str(), buf)
     }
 }
-impl Encode<'_, Postgres> for ExtDicomTime {
-    fn encode_by_ref(
-        &self,
-        buf: &mut <Postgres as Database>::ArgumentBuffer<'_>,
-    ) -> Result<IsNull, BoxDynError> {
-        match &self.value {
-            Some(time) => {
-                let time_str = time.format("%H%M%S%.f").to_string();
-                <&str as Encode<Postgres>>::encode(time_str.as_str(), buf)
-            }
-            None => <&str as Encode<Postgres>>::encode("", buf),
-        }
-    }
-}
+
 
 // 为 FixedLengthString 实现 PostgreSQL 的 Type trait
 impl<const N: usize> sqlx::Type<Postgres> for FixedLengthString<N> {
@@ -123,11 +110,7 @@ impl sqlx::Type<Postgres> for DicomDateString {
 }
 
 // 为 ExtDicomTime 实现 PostgreSQL 的 Type trait
-impl sqlx::Type<Postgres> for ExtDicomTime {
-    fn type_info() -> <Postgres as Database>::TypeInfo {
-        <&str as sqlx::Type<Postgres>>::type_info()
-    }
-}
+
 
 impl FromRow<'_, PgRow> for SeriesEntity {
     fn from_row(row: &'_ PgRow) -> Result<Self, Error> {
@@ -578,7 +561,6 @@ mod tests {
     use crate::string_ext::*;
     use chrono::{NaiveDate, NaiveTime};
     use sqlx::postgres::PgPoolOptions;
-    use std::str::FromStr;
 
     #[tokio::test]
     async fn test_save_state_info() -> Result<(), Box<dyn std::error::Error>> {

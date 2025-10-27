@@ -1,9 +1,7 @@
-use chrono::NaiveTime;
+use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::fmt;
 use std::hash::{Hash, Hasher};
-use seahash::SeaHasher;
 
 #[derive(Debug, Snafu)]
 #[non_exhaustive]
@@ -13,11 +11,6 @@ pub enum BoundedStringError {
     #[snafu(display("String length is: {}  and  expected: {}", len, fixlen))]
     LengthError { fixlen: usize, len: usize },
 }
-
-
-
-
-
 
 type BoundedResult<T, E = BoundedStringError> = Result<T, E>;
 
@@ -287,20 +280,18 @@ impl TryFrom<&String> for UuidString {
     }
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
 pub struct UidHashString(pub(crate) BoundedString<20>);
 
 impl UidHashString {
-
     pub fn make_from(uid: &str) -> Self {
-            let mut hasher = SeaHasher::new();
-            uid.hash(&mut hasher);
-            let hash_value = hasher.finish();
-            // 格式化为20位字符串，前面补X
-            let hash_str = format!("{:020X}", hash_value);
-            Self(BoundedString::new_from_str(&hash_str).unwrap())
+        let mut hasher = SeaHasher::new();
+        uid.hash(&mut hasher);
+        let hash_value = hasher.finish();
+        // 格式化为20位字符串，前面补X
+        let hash_str = format!("{:020X}", hash_value);
+        Self(BoundedString::new_from_str(&hash_str).unwrap())
     }
     pub fn from_bounded_string(bounded: BoundedString<20>) -> Self {
         Self(bounded)
@@ -317,7 +308,6 @@ impl UidHashString {
         self.0.as_ref()
     }
 }
-
 
 impl TryFrom<&String> for UidHashString {
     type Error = BoundedStringError;
@@ -340,148 +330,10 @@ impl From<String> for UidHashString {
 // 同时实现 From<&str>
 impl From<&str> for UidHashString {
     fn from(s: &str) -> Self {
-        UidHashString::try_from(s).unwrap_or_else(|_| {
-            panic!("Failed to convert &str to UidHashString")
-        })
+        UidHashString::try_from(s)
+            .unwrap_or_else(|_| panic!("Failed to convert &str to UidHashString"))
     }
 }
-
-#[derive(Debug, Clone)]
-pub struct ExtDicomTimeInvalidError {
-    message: String,
-}
-
-impl ExtDicomTimeInvalidError {
-    pub fn new(message: &str) -> Self {
-        ExtDicomTimeInvalidError {
-            message: message.to_string(),
-        }
-    }
-}
-
-impl fmt::Display for ExtDicomTimeInvalidError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Invalid DICOM time: {}", self.message)
-    }
-}
-
-impl std::error::Error for ExtDicomTimeInvalidError {}
-
-/// DICOM时间字符串，格式为 HHMMSS.FFFFFF, 长度为 12, 例如 "123456.123456"
-/// 对DICOM. 时间字符串，比如 "123456.123456" 或 "123456"，都可以解析为 ExtDicomTime
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(transparent)]
-pub struct ExtDicomTime {
-    pub(crate) value: Option<NaiveTime>,
-}
-
-impl fmt::Display for ExtDicomTime {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.value {
-            Some(time) => write!(f, "{}", time.format("%H:%M:%S%.f")),
-            None => write!(f, ""),
-        }
-    }
-}
-impl ExtDicomTime {
-    pub fn new(p0: Option<NaiveTime>) -> Self {
-        Self { value: p0 }
-    }
-
-    pub fn as_naive_time(&self) -> Option<&NaiveTime> {
-        self.value.as_ref()
-    }
-
-    pub fn into_naive_time(self) -> Option<NaiveTime> {
-        self.value
-    }
-    pub fn from_str(s: &str) -> Option<Self> {
-        if s.is_empty() {
-            return Some(ExtDicomTime::new(None));
-        }
-
-        // 处理不同格式的DICOM时间字符串
-        let normalized_time = Self::normalize_dicom_time(s)?;
-        match NaiveTime::parse_from_str(&normalized_time, "%H%M%S%.f") {
-            Ok(t) => Some(ExtDicomTime::new(Some(t))),
-            Err(_) => None,
-        }
-    }
-
-    /// 标准化DICOM时间字符串，确保毫秒部分为6位
-    pub fn normalize_dicom_time(s: &str) -> Option<String> {
-        if !s.contains('.') {
-            // 没有毫秒部分，直接返回
-            return Some(s.to_string());
-        }
-
-        let parts: Vec<&str> = s.split('.').collect();
-        if parts.len() != 2 {
-            return None;
-        }
-
-        let time_part = parts[0];
-        let mut fraction_part = parts[1].to_string();
-
-        // 补齐或截断小数部分到6位
-        while fraction_part.len() < 6 {
-            fraction_part.push('0');
-        }
-        fraction_part.truncate(6);
-
-        Some(format!("{}.{}", time_part, fraction_part))
-    }
-}
-impl TryFrom<&str> for ExtDicomTime {
-    type Error = ExtDicomTimeInvalidError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        ExtDicomTime::from_str(value).ok_or_else(|| ExtDicomTimeInvalidError::new("Invalid format"))
-    }
-}
-
-impl TryFrom<&String> for ExtDicomTime {
-    type Error = ExtDicomTimeInvalidError;
-
-    fn try_from(value: &String) -> Result<Self, Self::Error> {
-        ExtDicomTime::from_str(value).ok_or_else(|| ExtDicomTimeInvalidError::new("Invalid format"))
-    }
-}
-
-impl TryFrom<String> for ExtDicomTime {
-    type Error = ExtDicomTimeInvalidError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        ExtDicomTime::from_str(&value)
-            .ok_or_else(|| ExtDicomTimeInvalidError::new("Invalid format"))
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ExtDicomDateInvalidError {
-    message: String,
-}
-
-impl ExtDicomDateInvalidError {
-    pub fn new(message: &str) -> Self {
-        ExtDicomDateInvalidError {
-            message: message.to_string(),
-        }
-    }
-}
-
-impl fmt::Display for ExtDicomDateInvalidError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Invalid DICOM date: {}", self.message)
-    }
-}
-
-impl std::error::Error for ExtDicomDateInvalidError {}
-
-
-
-
-
 
 #[cfg(test)]
 mod tests {
@@ -609,45 +461,42 @@ mod tests {
         );
     }
 
-
-
     use std::fmt;
 
-
     // 为 BoundedString 实现 Display trait
-impl<const N: usize> fmt::Display for BoundedString<N> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.value)
+    impl<const N: usize> fmt::Display for BoundedString<N> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.value)
+        }
     }
-}
 
-// 为 FixedLengthString 实现 Display trait
-impl<const N: usize> fmt::Display for FixedLengthString<N> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.value)
+    // 为 FixedLengthString 实现 Display trait
+    impl<const N: usize> fmt::Display for FixedLengthString<N> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.value)
+        }
     }
-}
 
-// 为 SopUidString 实现 Display trait
-impl fmt::Display for SopUidString {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0.as_str())
+    // 为 SopUidString 实现 Display trait
+    impl fmt::Display for SopUidString {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.0.as_str())
+        }
     }
-}
 
-// 为 DicomDateString 实现 Display trait
-impl fmt::Display for DicomDateString {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0.as_str())
+    // 为 DicomDateString 实现 Display trait
+    impl fmt::Display for DicomDateString {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.0.as_str())
+        }
     }
-}
 
-// 为 UuidString 实现 Display trait
-impl fmt::Display for UuidString {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0.as_str())
+    // 为 UuidString 实现 Display trait
+    impl fmt::Display for UuidString {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.0.as_str())
+        }
     }
-}
 
     #[test]
     fn test_dicom_store_meta_json_fmt() {
@@ -688,3 +537,4 @@ impl fmt::Display for UuidString {
         println!("Serialized JSON: {}", json);
     }
 }
+

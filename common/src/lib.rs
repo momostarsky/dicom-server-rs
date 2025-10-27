@@ -21,6 +21,7 @@ pub mod server_config;
 pub mod string_ext;
 pub mod utils;
 mod dbprovider_pg;
+mod encrypt_helper;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DicomMessage {

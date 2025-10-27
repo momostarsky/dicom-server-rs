@@ -1,4 +1,4 @@
-use crate::string_ext::{BoundedString, DicomDateString, ExtDicomTime, SopUidString, UidHashString, UuidString};
+use crate::string_ext::{BoundedString, DicomDateString, SopUidString, UidHashString, UuidString};
 use crate::{dicom_utils};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use dicom_dictionary_std::tags;
@@ -202,7 +202,7 @@ pub struct DicomImageMeta {
     pub content_date: Option<DicomDateString>,
 
     #[serde(rename = "content_time")]
-    pub content_time: Option<ExtDicomTime>,
+    pub content_time: Option<NaiveTime>,
 
     #[serde(rename = "image_type")]
     pub image_type: Option<BoundedString<128>>,
@@ -280,10 +280,10 @@ pub struct DicomImageMeta {
     pub space_size: Option<u32>,
 
     #[serde(rename = "created_time")]
-    pub created_time: Option<NaiveDateTime>,
+    pub created_time: Option<chrono::NaiveDateTime>,
 
     #[serde(rename = "updated_time")]
-    pub updated_time: Option<NaiveDateTime>,
+    pub updated_time: Option<chrono::NaiveDateTime>,
 }
 
 impl DicomStateMeta {
@@ -379,12 +379,13 @@ pub fn make_image_info(
             DicomParseError::InvalidDateFormat("Failed to convert content date".to_string())
         })?;
 
+
     let content_time = dicom_utils::get_text_value(dicom_obj, tags::CONTENT_TIME)
         .filter(|v| !v.is_empty())
-        .map(|v| ExtDicomTime::try_from(v))
+        .map(|v| NaiveTime::parse_from_str(v.as_str(), "%H%M%S.%f"))
         .transpose()
         .map_err(|_| {
-            DicomParseError::InvalidTimeFormat("Failed to convert content time".to_string())
+            DicomParseError::InvalidTimeFormat("Failed to convert study time".to_string())
         })?;
 
     let image_type = dicom_utils::get_text_value(dicom_obj, tags::IMAGE_TYPE)
@@ -829,7 +830,7 @@ pub fn make_state_info(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::string_ext::ExtDicomTimeInvalidError;
+
     use dicom_object::collector::CharacterSetOverride;
     use rstest::rstest;
     use std::fs;
@@ -1175,84 +1176,8 @@ mod tests {
     //     }
     // }
 
-    #[test]
-    fn test_from_str_valid_formats() {
-        // 测试完整的 HHMMSS.ffffff 格式
-        let time1 = ExtDicomTime::from_str("123456.123456");
-        assert!(time1.is_some());
-        let time1 = time1.unwrap();
-        assert!(time1.as_naive_time().is_some());
 
-        // 测试 HHMMSS 格式
-        let time2 = ExtDicomTime::from_str("123456");
-        assert!(time2.is_some());
-        let time2 = time2.unwrap();
-        assert!(time2.as_naive_time().is_some());
 
-        // 测试空字符串
-        let time3 = ExtDicomTime::from_str("");
-        assert!(time3.is_some());
-        let time3 = time3.unwrap();
-        assert!(time3.as_naive_time().is_none());
-    }
 
-    #[test]
-    fn test_normalize_dicom_time() {
-        // 测试毫秒部分补齐
-        let normalized1 = ExtDicomTime::normalize_dicom_time("123456.123").unwrap();
-        assert_eq!(normalized1, "123456.123000");
 
-        // 测试毫秒部分截断
-        let normalized2 = ExtDicomTime::normalize_dicom_time("123456.1234567").unwrap();
-        assert_eq!(normalized2, "123456.123456");
-
-        // 测试无毫秒部分
-        let normalized3 = ExtDicomTime::normalize_dicom_time("123456").unwrap();
-        assert_eq!(normalized3, "123456");
-    }
-
-    #[test]
-    fn test_try_from_str() {
-        // 测试有效的字符串
-        let time_result: Result<ExtDicomTime, ExtDicomTimeInvalidError> =
-            "123456.123456".try_into();
-        assert!(time_result.is_ok());
-
-        // 测试无效的字符串
-        let time_result: Result<ExtDicomTime, ExtDicomTimeInvalidError> = "invalid".try_into();
-        assert!(time_result.is_err());
-    }
-
-    #[test]
-    fn test_try_from_string() {
-        // 测试有效的String
-        let time_result: Result<ExtDicomTime, ExtDicomTimeInvalidError> =
-            "123456.123456".to_string().try_into();
-        assert!(time_result.is_ok());
-
-        // 测试无效的String
-        let time_result: Result<ExtDicomTime, ExtDicomTimeInvalidError> =
-            "invalid".to_string().try_into();
-        assert!(time_result.is_err());
-    }
-
-    #[test]
-    fn test_display() {
-        // 测试有值的时间显示
-        let dicom_time = ExtDicomTime::from_str("123456.123456").unwrap();
-        let display_str = format!("{}", dicom_time);
-        assert_eq!(display_str, "12:34:56.123456");
-
-        // 测试无值的时间显示
-        let dicom_time_none = ExtDicomTime::new(None);
-        let display_str_none = format!("{}", dicom_time_none);
-        assert_eq!(display_str_none, "");
-    }
-
-    #[test]
-    fn test_error_display() {
-        let error = ExtDicomTimeInvalidError::new("test error");
-        let error_str = format!("{}", error);
-        assert_eq!(error_str, "Invalid DICOM time: test error");
-    }
 }
