@@ -85,7 +85,8 @@ pub struct LicenseServerConfig {
 pub struct AppConfig {
     pub redis: RedisConfig,
     pub kafka: KafkaConfig,
-    pub database: DatabaseConfig,
+    pub main_database: DatabaseConfig,
+    pub secondary_database: DatabaseConfig,
     pub server: ServerConfig,
     pub local_storage: LocalStorageConfig,
     pub dicom_store_scp: DicomStoreScpConfig,
@@ -143,12 +144,21 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
 
             // 打印配置信息（只在首次加载时打印）
             println!("redis:url {:?}", app_config.redis.url);
-            println!("database:dbtype {:?}", app_config.database.dbtype);
-            println!("database:host {:?}", app_config.database.host);
-            println!("database:port {:?}", app_config.database.port);
-            println!("database:username {:?}", app_config.database.username);
-            println!("database:password {:?}", app_config.database.password);
-            println!("database:database {:?}", app_config.database.database);
+            println!("main_database:dbtype {:?}", app_config.main_database.dbtype);
+            println!("main_database:host {:?}", app_config.main_database.host);
+            println!("main_database:port {:?}", app_config.main_database.port);
+            println!("main_database:username {:?}", app_config.main_database.username);
+            println!("main_database:password {:?}", app_config.main_database.password);
+            println!("main_database:database {:?}", app_config.main_database.database);
+
+            println!("secondary_database:dbtype {:?}", app_config.secondary_database.dbtype);
+            println!("secondary_database:host {:?}", app_config.secondary_database.host);
+            println!("secondary_database:port {:?}", app_config.secondary_database.port);
+            println!("secondary_database:username {:?}", app_config.secondary_database.username);
+            println!("secondary_database:password {:?}", app_config.secondary_database.password);
+            println!("secondary_database:database {:?}", app_config.secondary_database.database);
+
+
             println!("server:port {:?}", app_config.server.port);
             println!("server:host {:?}", app_config.server.host);
             println!("server:log_level {:?}", app_config.server.allow_origin);
@@ -354,8 +364,8 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
         }
     }
 }
-pub fn generate_database_connection(app_config: &AppConfig) -> Result<String, String> {
-    let dbconfig = &app_config.database;
+pub fn generate_database_connection(dbconfig: &DatabaseConfig) -> Result<String, String> {
+ 
     let password = dbconfig
         .password
         .replace("@", "%40")
@@ -384,8 +394,8 @@ pub fn generate_database_connection(app_config: &AppConfig) -> Result<String, St
     Ok(db_conn)
 }
 
-pub fn generate_pg_database_connection(app_config: &AppConfig) -> Result<String, String> {
-    let dbconfig = &app_config.database;
+pub fn generate_pg_database_connection(dbconfig: &DatabaseConfig) -> Result<String, String> {
+
     let password = dbconfig
         .password
         .replace("@", "%40")

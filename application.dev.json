@@ -2,7 +2,15 @@
   "redis": {
     "url": "redis://192.168.1.14:6379/"
   },
-  "database": {
+  "main_database": {
+    "dbtype": "postgresql",
+    "host": "192.168.1.14",
+    "port": 5432,
+    "username": "root",
+    "password": "jp#123",
+    "database": "postgres"
+  },
+  "secondary_database": {
     "dbtype": "DORIS",
     "host": "192.168.1.14",
     "port": 9030,

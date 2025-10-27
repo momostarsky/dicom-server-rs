@@ -1,78 +1,92 @@
 use async_trait::async_trait;
-use sqlx::{Database, Encode, Error, FromRow, PgPool, Row};
 use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::postgres::PgRow;
+use sqlx::{Database, Encode, Error, FromRow, PgPool, Row};
 
-use tracing::error;
 use crate::database_entities::{SeriesEntity, StudyEntity};
 use crate::database_provider::{DbError, DbProvider};
 use crate::dicom_object_meta::DicomStateMeta;
+use tracing::error;
 
-
+use crate::string_ext::{
+    BoundedString, DicomDateString, ExtDicomTime, FixedLengthString, SopUidString, UidHashString,
+    UuidString,
+};
 use sqlx::Postgres;
-use crate::string_ext::{BoundedString, DicomDateString, ExtDicomTime, FixedLengthString, SopUidString, UidHashString, UuidString};
-
 
 impl sqlx::Type<Postgres> for UidHashString {
     fn type_info() -> <Postgres as Database>::TypeInfo {
         <&str as sqlx::Type<Postgres>>::type_info()
     }
 }
-impl Encode<'_, Postgres> for  UidHashString {
-    fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> Result<IsNull, BoxDynError> {
+impl Encode<'_, Postgres> for UidHashString {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Postgres as Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, BoxDynError> {
         <&str as Encode<Postgres>>::encode(self.as_str(), buf)
     }
 }
-
-
-
 
 // 为 BoundedString 实现 PostgreSQL 的 Encode trait
 impl<const N: usize> Encode<'_, Postgres> for BoundedString<N> {
-    fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> Result<IsNull, BoxDynError> {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Postgres as Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, BoxDynError> {
         <&str as Encode<Postgres>>::encode(self.as_str(), buf)
     }
 }
-
-
 
 impl<const N: usize> Encode<'_, Postgres> for FixedLengthString<N> {
-    fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> Result<IsNull, BoxDynError> {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Postgres as Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, BoxDynError> {
         <&str as Encode<Postgres>>::encode(self.as_str(), buf)
     }
 }
 
-
 impl Encode<'_, Postgres> for SopUidString {
-    fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> Result<IsNull, BoxDynError> {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Postgres as Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, BoxDynError> {
         <&str as Encode<Postgres>>::encode(self.as_str(), buf)
     }
 }
 
 impl Encode<'_, Postgres> for UuidString {
-    fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> Result<IsNull, BoxDynError> {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Postgres as Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, BoxDynError> {
         <&str as Encode<Postgres>>::encode(self.as_str(), buf)
     }
 }
 impl Encode<'_, Postgres> for DicomDateString {
-    fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> Result<IsNull, BoxDynError> {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Postgres as Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, BoxDynError> {
         <&str as Encode<Postgres>>::encode(self.as_str(), buf)
     }
 }
 impl Encode<'_, Postgres> for ExtDicomTime {
-    fn encode_by_ref(&self, buf: &mut <Postgres as Database>::ArgumentBuffer<'_>) -> Result<IsNull, BoxDynError> {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Postgres as Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, BoxDynError> {
         match &self.value {
             Some(time) => {
                 let time_str = time.format("%H%M%S%.f").to_string();
                 <&str as Encode<Postgres>>::encode(time_str.as_str(), buf)
             }
-            None => <&str as Encode<Postgres>>::encode("", buf)
+            None => <&str as Encode<Postgres>>::encode("", buf),
         }
     }
 }
-
-
 
 // 为 FixedLengthString 实现 PostgreSQL 的 Type trait
 impl<const N: usize> sqlx::Type<Postgres> for FixedLengthString<N> {
@@ -81,13 +95,11 @@ impl<const N: usize> sqlx::Type<Postgres> for FixedLengthString<N> {
     }
 }
 
-
-impl<const N: usize> sqlx::Type<Postgres> for  BoundedString<N>  {
+impl<const N: usize> sqlx::Type<Postgres> for BoundedString<N> {
     fn type_info() -> <Postgres as Database>::TypeInfo {
         <&str as sqlx::Type<Postgres>>::type_info()
     }
 }
-
 
 // 为 SopUidString 实现 PostgreSQL 的 Type trait
 impl sqlx::Type<Postgres> for SopUidString {
@@ -119,21 +131,21 @@ impl sqlx::Type<Postgres> for ExtDicomTime {
 
 impl FromRow<'_, PgRow> for SeriesEntity {
     fn from_row(row: &'_ PgRow) -> Result<Self, Error> {
-       Ok(SeriesEntity{
-           tenant_id: row.get("tenant_id"),
-           series_instance_uid: row.get("series_uid"),
-           study_instance_uid: row.get("study_uid"),
-           patient_id: row.get("patient_id"),
-           modality:row.get("modality"),
-           series_number: row.get("series_number"),
-           series_date:  row.get("series_date"),
-           series_time:  row.get("series_time"),
-           series_description:  row.get("series_description"),
-           body_part_examined:  row.get("body_part_examined"),
-           protocol_name:  row.get("protocol_name"),
-           created_time:  row.get("created_time"),
-           updated_time:  row.get("updated_time"),
-       })
+        Ok(SeriesEntity {
+            tenant_id: row.get("tenant_id"),
+            series_instance_uid: row.get("series_uid"),
+            study_instance_uid: row.get("study_uid"),
+            patient_id: row.get("patient_id"),
+            modality: row.get("modality"),
+            series_number: row.get("series_number"),
+            series_date: row.get("series_date"),
+            series_time: row.get("series_time"),
+            series_description: row.get("series_description"),
+            body_part_examined: row.get("body_part_examined"),
+            protocol_name: row.get("protocol_name"),
+            created_time: row.get("created_time"),
+            updated_time: row.get("updated_time"),
+        })
     }
 }
 
@@ -149,7 +161,7 @@ impl FromRow<'_, PgRow> for StudyEntity {
             patient_weight: row.get("patient_weight"),
             patient_birth_date: row.get("patient_birth_date"),
             study_instance_uid: row.get("study_uid"),
-            study_uid_hash: UidHashString::from_string(row.get::<String,_>("study_uid_hash")),
+            study_uid_hash: UidHashString::from_string(row.get::<String, _>("study_uid_hash")),
             study_date: row.get("study_date"),
             study_time: row.get("study_time"),
             accession_number: row.get("accession_number"),
@@ -161,8 +173,8 @@ impl FromRow<'_, PgRow> for StudyEntity {
     }
 }
 
-pub struct  PgDbProvider {
-   pub pool: PgPool,
+pub struct PgDbProvider {
+    pub pool: PgPool,
 }
 
 impl PgDbProvider {
@@ -203,7 +215,6 @@ impl PgDbProvider {
                 patient_birth_time,
                 study_date_origin
             FROM dicom_state_meta   WHERE tenant_id = $1 AND study_uid = $2"#;
-
 
     const INSERT_OR_UPDATE_STATE_META_QUERY: &'static str = r#"
         INSERT INTO dicom_state_meta (
@@ -272,7 +283,11 @@ impl PgDbProvider {
 }
 #[async_trait]
 impl DbProvider for PgDbProvider {
-    async fn get_study_info(&self, tenant_id: &str, study_uid: &str) -> Result<Option<StudyEntity>, DbError> {
+    async fn get_study_info(
+        &self,
+        tenant_id: &str,
+        study_uid: &str,
+    ) -> Result<Option<StudyEntity>, DbError> {
         let pool = self.pool.clone();
         match sqlx::query_as(Self::GET_STUDY_INFO_QUERY)
             .bind(tenant_id)
@@ -288,7 +303,11 @@ impl DbProvider for PgDbProvider {
         }
     }
 
-    async fn get_series_info(&self, tenant_id: &str, series_uid: &str) -> Result<Option<SeriesEntity>, DbError> {
+    async fn get_series_info(
+        &self,
+        tenant_id: &str,
+        series_uid: &str,
+    ) -> Result<Option<SeriesEntity>, DbError> {
         let pool = self.pool.clone();
         match sqlx::query_as(Self::GET_SERIES_INFO_QUERY)
             .bind(tenant_id)
@@ -304,68 +323,11 @@ impl DbProvider for PgDbProvider {
         }
     }
 
-
     async fn save_state_info(&self, state_meta: &DicomStateMeta) -> Result<(), DbError> {
         let pool = self.pool.clone();
-        match sqlx::query::<Postgres>(Self::INSERT_OR_UPDATE_STATE_META_QUERY)
-                        .bind(state_meta.tenant_id.as_str())
-                        .bind(state_meta.patient_id.as_str())
-                        .bind(state_meta.study_uid.as_str())
-                        .bind(state_meta.series_uid.as_str())
-                        .bind(state_meta.study_uid_hash.as_str())
-                        .bind(state_meta.series_uid_hash.as_str())
-                        .bind(state_meta.study_date_origin.as_str())
-                        .bind(state_meta.accession_number.as_str())
-                        .bind(state_meta.modality.as_ref().unwrap().as_str())
-                        .bind(state_meta.series_number.unwrap())
-                        .bind(state_meta.series_date)
-                        .bind(state_meta.series_time.as_ref().unwrap())
-                        .bind(state_meta.series_description.as_ref().unwrap().as_str())
-                        .bind(state_meta.body_part_examined.as_ref().unwrap().as_str())
-                        .bind(state_meta.protocol_name.as_ref().unwrap().as_str())
-                        .bind(state_meta.study_date)
-                        .bind(state_meta.study_time.as_ref().unwrap() )
-                        .bind(state_meta.study_id.as_ref().unwrap().as_str())
-                        .bind(state_meta.study_description.as_ref().unwrap().as_str())
-                        .bind(state_meta.patient_age.as_ref().unwrap().as_str())
-                        .bind(state_meta.patient_size)
-                        .bind(state_meta.patient_weight)
-                        .bind(state_meta.patient_sex.as_ref().unwrap().as_str())
-                        .bind(state_meta.patient_name.as_ref().unwrap().as_str())
-                        .bind(state_meta.patient_birth_date)
-                        .bind(state_meta.patient_birth_time.as_ref().unwrap())
-                        .bind(state_meta.created_time)
-                        .bind(state_meta.updated_time)
-                      .execute(&pool)
-                      .await
-        {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                error!("Failed to save dicom state meta: {}", e);
-                Err(DbError::DatabaseError(e))
-            }
-        }
 
-    }
-
-   async fn save_state_list(&self, state_meta_list: &[DicomStateMeta]) -> Result<(), DbError> {
-    if state_meta_list.is_empty() {
-        return Ok(());
-    }
-
-    let pool = self.pool.clone();
-
-    // 使用事务来确保所有数据要么全部保存成功，要么全部失败
-    let mut tx = match pool.begin().await {
-        Ok(tx) => tx,
-        Err(e) => {
-            error!("Failed to begin transaction: {}", e);
-            return Err(DbError::DatabaseError(e));
-        }
-    };
-
-    for state_meta in state_meta_list {
-        match sqlx::query::<Postgres>(Self::INSERT_OR_UPDATE_STATE_META_QUERY)
+        // 构建基础查询
+        let query = sqlx::query::<Postgres>(Self::INSERT_OR_UPDATE_STATE_META_QUERY)
             .bind(state_meta.tenant_id.as_str())
             .bind(state_meta.patient_id.as_str())
             .bind(state_meta.study_uid.as_str())
@@ -373,70 +335,259 @@ impl DbProvider for PgDbProvider {
             .bind(state_meta.study_uid_hash.as_str())
             .bind(state_meta.series_uid_hash.as_str())
             .bind(state_meta.study_date_origin.as_str())
-            .bind(state_meta.accession_number.as_str())
-            .bind(state_meta.modality.as_ref().unwrap().as_str())
-            .bind(state_meta.series_number.unwrap())
-            .bind(state_meta.series_date)
-            .bind(state_meta.series_time.as_ref().unwrap() )
-            .bind(state_meta.series_description.as_ref().unwrap().as_str())
-            .bind(state_meta.body_part_examined.as_ref().unwrap().as_str())
-            .bind(state_meta.protocol_name.as_ref().unwrap().as_str())
-            .bind(state_meta.study_date)
-            .bind(state_meta.study_time.as_ref().unwrap() )
-            .bind(state_meta.study_id.as_ref().unwrap().as_str())
-            .bind(state_meta.study_description.as_ref().unwrap().as_str())
-            .bind(state_meta.patient_age.as_ref().unwrap().as_str())
+            .bind(state_meta.accession_number.as_str());
+
+        // 安全处理 Option 字段
+        let query = match &state_meta.modality {
+            Some(modality) => query.bind(modality.as_str()),
+            None => query.bind(None::<&str>),
+        };
+
+        let query = query.bind(state_meta.series_number.unwrap_or(0));
+
+        let query = query.bind(state_meta.series_date);
+
+        let query = match &state_meta.series_time {
+            Some(time) => {
+
+                query.bind(time)
+            }
+            None => query.bind(None::<chrono::NaiveTime>),
+        };
+
+        let query = match &state_meta.series_description {
+            Some(desc) => query.bind(desc.as_str()),
+            None => query.bind(None::<&str>),
+        };
+
+        let query = match &state_meta.body_part_examined {
+            Some(body_part) => query.bind(body_part.as_str()),
+            None => query.bind(None::<&str>),
+        };
+
+        let query = match &state_meta.protocol_name {
+            Some(protocol) => query.bind(protocol.as_str()),
+            None => query.bind(None::<&str>),
+        };
+
+        let query = query.bind(state_meta.study_date);
+
+        let query = match &state_meta.study_time {
+            Some(time) => {
+                query.bind(time)
+            }
+            None => query.bind(None::<chrono::NaiveTime>),
+        };
+
+        let query = match &state_meta.study_id {
+            Some(id) => query.bind(id.as_str()),
+            None => query.bind(None::<&str>),
+        };
+
+        let query = match &state_meta.study_description {
+            Some(desc) => query.bind(desc.as_str()),
+            None => query.bind(None::<&str>),
+        };
+
+        let query = match &state_meta.patient_age {
+            Some(age) => query.bind(age.as_str()),
+            None => query.bind(None::<&str>),
+        };
+
+        let query = query
             .bind(state_meta.patient_size)
-            .bind(state_meta.patient_weight)
-            .bind(state_meta.patient_sex.as_ref().unwrap().as_str())
-            .bind(state_meta.patient_name.as_ref().unwrap().as_str())
-            .bind(state_meta.patient_birth_date)
-            .bind(state_meta.patient_birth_time.as_ref().unwrap())
+            .bind(state_meta.patient_weight);
+
+        let query = match &state_meta.patient_sex {
+            Some(sex) => query.bind(sex.as_str()),
+            None => query.bind(None::<&str>),
+        };
+
+        let query = match &state_meta.patient_name {
+            Some(name) => query.bind(name.as_str()),
+            None => query.bind(None::<&str>),
+        };
+
+        let query = query.bind(state_meta.patient_birth_date);
+
+        let query = match &state_meta.patient_birth_time {
+            Some(time) => {
+
+                query.bind(time)
+            }
+            None => query.bind(None::<chrono::NaiveTime>),
+        };
+
+        match query
             .bind(state_meta.created_time)
             .bind(state_meta.updated_time)
-            .execute(&mut *tx)
+            .execute(&pool)
             .await
         {
-            Ok(_) => continue,
+            Ok(_) => Ok(()),
             Err(e) => {
                 error!("Failed to save dicom state meta: {}", e);
-                // 回滚事务
-                if let Err(rollback_err) = tx.rollback().await {
-                    error!("Failed to rollback transaction: {}", rollback_err);
-                }
-                return Err(DbError::DatabaseError(e));
+                Err(DbError::DatabaseError(e))
             }
         }
     }
 
-    // 提交事务
-    match tx.commit().await {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            error!("Failed to commit transaction: {}", e);
-            Err(DbError::DatabaseError(e))
+    async fn save_state_list(&self, state_meta_list: &[DicomStateMeta]) -> Result<(), DbError> {
+        if state_meta_list.is_empty() {
+            return Ok(());
+        }
+
+        let pool = self.pool.clone();
+
+        // 使用事务来确保所有数据要么全部保存成功，要么全部失败
+        let mut tx = match pool.begin().await {
+            Ok(tx) => tx,
+            Err(e) => {
+                error!("Failed to begin transaction: {}", e);
+                return Err(DbError::DatabaseError(e));
+            }
+        };
+
+        for state_meta in state_meta_list {
+            // 构建基础查询
+            let query = sqlx::query::<Postgres>(Self::INSERT_OR_UPDATE_STATE_META_QUERY)
+                .bind(state_meta.tenant_id.as_str())
+                .bind(state_meta.patient_id.as_str())
+                .bind(state_meta.study_uid.as_str())
+                .bind(state_meta.series_uid.as_str())
+                .bind(state_meta.study_uid_hash.as_str())
+                .bind(state_meta.series_uid_hash.as_str())
+                .bind(state_meta.study_date_origin.as_str())
+                .bind(state_meta.accession_number.as_str());
+
+            // 安全处理 Option 字段
+            let query = match &state_meta.modality {
+                Some(modality) => query.bind(modality.as_str()),
+                None => query.bind(None::<&str>),
+            };
+
+            let query = query.bind(state_meta.series_number.unwrap_or(0));
+
+            let query = query.bind(state_meta.series_date);
+
+            let query = match &state_meta.series_time {
+                Some(time) => {
+
+                    query.bind(time)
+                }
+                None => query.bind(None::<chrono::NaiveTime>),
+            };
+
+            let query = match &state_meta.series_description {
+                Some(desc) => query.bind(desc.as_str()),
+                None => query.bind(None::<&str>),
+            };
+
+            let query = match &state_meta.body_part_examined {
+                Some(body_part) => query.bind(body_part.as_str()),
+                None => query.bind(None::<&str>),
+            };
+
+            let query = match &state_meta.protocol_name {
+                Some(protocol) => query.bind(protocol.as_str()),
+                None => query.bind(None::<&str>),
+            };
+
+            let query = query.bind(state_meta.study_date);
+
+            let query = match &state_meta.study_time {
+                Some(time) => {
+                    query.bind(time)
+                }
+                None => query.bind(None::<chrono::NaiveTime>),
+            };
+
+            let query = match &state_meta.study_id {
+                Some(id) => query.bind(id.as_str()),
+                None => query.bind(None::<&str>),
+            };
+
+            let query = match &state_meta.study_description {
+                Some(desc) => query.bind(desc.as_str()),
+                None => query.bind(None::<&str>),
+            };
+
+            let query = match &state_meta.patient_age {
+                Some(age) => query.bind(age.as_str()),
+                None => query.bind(None::<&str>),
+            };
+
+            let query = query
+                .bind(state_meta.patient_size)
+                .bind(state_meta.patient_weight);
+
+            let query = match &state_meta.patient_sex {
+                Some(sex) => query.bind(sex.as_str()),
+                None => query.bind(None::<&str>),
+            };
+
+            let query = match &state_meta.patient_name {
+                Some(name) => query.bind(name.as_str()),
+                None => query.bind(None::<&str>),
+            };
+
+            let query = query.bind(state_meta.patient_birth_date);
+
+            let query = match &state_meta.patient_birth_time {
+                Some(time) => {
+
+                    query.bind(time)
+                }
+                None => query.bind(None::<chrono::NaiveTime>),
+            };
+
+            match query
+                .bind(state_meta.created_time)
+                .bind(state_meta.updated_time)
+                .execute(&mut *tx)
+                .await
+            {
+                Ok(_) => continue,
+                Err(e) => {
+                    error!("Failed to save dicom state meta: {}", e);
+                    // 回滚事务
+                    if let Err(rollback_err) = tx.rollback().await {
+                        error!("Failed to rollback transaction: {}", rollback_err);
+                    }
+                    return Err(DbError::DatabaseError(e));
+                }
+            }
+        }
+
+        // 提交事务
+        match tx.commit().await {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                error!("Failed to commit transaction: {}", e);
+                Err(DbError::DatabaseError(e))
+            }
         }
     }
-}
 
+    // 在 impl PgDbProvider 中添加辅助方法
 }
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
     use super::*;
     use crate::string_ext::*;
     use chrono::{NaiveDate, NaiveTime};
     use sqlx::postgres::PgPoolOptions;
-
+    use std::str::FromStr;
 
     #[tokio::test]
     async fn test_save_state_info() -> Result<(), Box<dyn std::error::Error>> {
         // 连接到 PostgreSQL 数据库
-        let pool =match  PgPoolOptions::new()
+        let pool = match PgPoolOptions::new()
             .max_connections(5)
             .connect("postgresql://root:jp%23123@192.168.1.14:5432/postgres")
-            .await{
+            .await
+        {
             Ok(pool) => pool,
             Err(err) => panic!("Error connecting to PostgreSQL: {}", err),
         };
@@ -455,19 +606,19 @@ mod tests {
         let modality = Some(BoundedString::<16>::try_from("CT".to_string())?);
         let series_number = Some(1);
         let series_date = Some(NaiveDate::from_ymd_opt(2023, 12, 1).unwrap());
-        let series_time = Some(NaiveTime::parse_from_str("120000","%H%M%S" )?);
+        let series_time = Some(NaiveTime::parse_from_str("120000", "%H%M%S")?);
         let series_description = Some(BoundedString::<256>::try_from("Test Series".to_string())?);
         let body_part_examined = Some(BoundedString::<64>::try_from("CHEST".to_string())?);
         let protocol_name = Some(BoundedString::<64>::try_from("CHEST CT".to_string())?);
         let study_date = NaiveDate::from_ymd_opt(2023, 12, 1).unwrap();
-        let study_time = Some(NaiveTime::parse_from_str("120000","%H%M%S" )?);
+        let study_time = Some(NaiveTime::parse_from_str("120000", "%H%M%S")?);
         let study_id = Some(BoundedString::<16>::try_from("STUDY123".to_string())?);
         let study_description = Some(BoundedString::<64>::try_from("Test Study".to_string())?);
         let patient_age = Some(BoundedString::<16>::try_from("045Y".to_string())?);
         let patient_sex = Some(BoundedString::<1>::try_from("M".to_string())?);
         let patient_name = Some(BoundedString::<64>::try_from("TEST^PATIENT".to_string())?);
         let patient_birth_date = Some(NaiveDate::from_ymd_opt(1978, 1, 1).unwrap());
-        let patient_birth_time = Some(NaiveTime::parse_from_str("080000","%H%M%S" )?);
+        let patient_birth_time = Some(NaiveTime::parse_from_str("080000", "%H%M%S")?);
         let created_time = Some(chrono::Local::now().naive_local());
         let updated_time = Some(chrono::Local::now().naive_local());
 
@@ -513,7 +664,11 @@ mod tests {
         let result = db_provider.save_state_info(&state_meta).await;
 
         // 验证保存成功
-        assert!(result.is_ok(), "Failed to save DicomStateMeta: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to save DicomStateMeta: {:?}",
+            result.err()
+        );
 
         // 验证数据是否正确保存到数据库
         let saved_series = db_provider

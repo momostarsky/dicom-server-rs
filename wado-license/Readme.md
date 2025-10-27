@@ -5,7 +5,7 @@ openssl genrsa -out x-dicom-private.key 4096
 # 2. 生成证书请求（包含完整企业信息）
 
 openssl req -new -key x-dicom-private.key -out x-dicom-request.csr -subj "
-/C=CN/ST=Zhejiang/L=Hangzhou/O=Jianpei.LTD/CN=x-dicom-encrypt.jianpeicn.com"
+/C=CN/ST=Zhejiang/L=Hangzhou/O=startsky.technology/CN=x-dicom-encrypt.jianpeicn.com"
 
 # 3. 生成自签名证书
 

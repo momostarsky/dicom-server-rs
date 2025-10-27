@@ -1,7 +1,7 @@
 use common::dicom_object_meta::{DicomImageMeta, DicomStateMeta, DicomStoreMeta};
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::utils::{get_logger, group_dicom_state};
-use common::{server_config};
+use common::{database_factory, server_config};
 use futures::StreamExt;
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message};
@@ -267,6 +267,19 @@ async fn persist_message_loop(
             error!(logger, "Failed to publish dicom meta: {}", e);
             continue;
         }
+        let db = match database_factory::create_db_instance(&app_config.main_database).await {
+            Ok(db_provider) => db_provider,
+            Err(e) => {
+                error!(logger, "Failed to create database: {}", e);
+                continue;
+            }
+        };
+                // 插入状态消息
+        if let Err(e) = db.save_state_list(&state_metas).await {
+            error!(logger, "Failed to save_state_list: {}", e);
+            continue;
+        }
+
 
         // 更新最后处理时间
         {

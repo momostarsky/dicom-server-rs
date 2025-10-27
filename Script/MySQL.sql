@@ -38,4 +38,4 @@ updated_time TIMESTAMP(6),
 PRIMARY KEY (tenant_id, study_uid, series_uid)
 );
 -- 同一个StudyUID 只能有一个AccessionNumber
-create unique index index_state_unique on dicom_state_meta(tenant_id, study_uid, accession_number);
+create unique index index_state_unique on dicom_state_meta(tenant_id, study_uid, series_uid, accession_number);

@@ -196,7 +196,7 @@ async fn main() -> std::io::Result<()> {
     // }
 
 
-    let db_provider =match database_factory::create_db_instance().await{
+    let db_provider =match database_factory::create_db_instance(&config.main_database).await{
         Ok(db_provider) => db_provider,
         Err(e) => {
             error!(log, "create_db_instance error: {:?}", e);

@@ -7,6 +7,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::Executor;
 use std::str::FromStr;
 use std::sync::Arc;
+use crate::server_config::DatabaseConfig;
 
 // 定义自定义错误类型
 #[derive(Debug)]
@@ -29,11 +30,10 @@ impl std::fmt::Display for DatabaseError {
 impl std::error::Error for DatabaseError {}
 
 // 根据配置文件生成数据库实例，返回 Result 而不是直接退出
-pub async fn create_db_instance() -> Result<Arc<dyn DbProvider>, DatabaseError> {
-    let config = server_config::load_config()
-        .map_err(|e| DatabaseError::ConfigError(format!("Failed to load config: {:?}", e)))?;
+pub async fn create_db_instance(dbconfig: &DatabaseConfig) -> Result<Arc<dyn DbProvider>, DatabaseError> {
+  
 
-    let db_type = config.database.dbtype.to_lowercase();
+    let db_type = dbconfig.dbtype.to_lowercase();
     if !(db_type == "mysql" || db_type == "doris" || db_type == "postgresql") {
         return Err(DatabaseError::UnsupportedDatabase(
             "only mysql, doris or postgresql is supported".to_string()
@@ -42,7 +42,7 @@ pub async fn create_db_instance() -> Result<Arc<dyn DbProvider>, DatabaseError> 
 
     match db_type.as_str() {
         "mysql" => {
-            let conn_url = server_config::generate_database_connection(&config)
+            let conn_url = server_config::generate_database_connection(&dbconfig)
                 .map_err(|_| DatabaseError::ConfigError("database connection string is not right".to_string()))?;
 
             let pool = MySqlPoolOptions::new()
@@ -63,7 +63,7 @@ pub async fn create_db_instance() -> Result<Arc<dyn DbProvider>, DatabaseError> 
             Ok(Arc::new(db_provider))
         }
         "postgresql" => {
-            let conn_url = server_config::generate_pg_database_connection(&config)
+            let conn_url = server_config::generate_pg_database_connection(&dbconfig)
                 .map_err(|_| DatabaseError::ConfigError("database connection string is not right".to_string()))?;
 
             let pool = PgPoolOptions::new()
@@ -84,7 +84,7 @@ pub async fn create_db_instance() -> Result<Arc<dyn DbProvider>, DatabaseError> 
             Ok(Arc::new(db_provider))
         }
         "doris" => {
-            let conn_url = server_config::generate_database_connection(&config)
+            let conn_url = server_config::generate_database_connection(&dbconfig)
                 .map_err(|_| DatabaseError::ConfigError("database connection string is not right".to_string()))?;
 
             let connect_options = MySqlConnectOptions::from_str(&conn_url)
