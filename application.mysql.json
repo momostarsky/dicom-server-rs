@@ -6,8 +6,8 @@
     "dbtype": "mysql",
     "host": "192.168.1.14",
     "port": 3306,
-    "username": "dicomstore",
-    "password": "hzjp#123",
+    "username": "root",
+    "password": "jp#123",
     "database": "dicomdb"
   },
   "secondary_database": {

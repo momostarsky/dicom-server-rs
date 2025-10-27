@@ -3,13 +3,13 @@ use crate::database_provider::{DbError, DbProvider};
 use async_trait::async_trait;
 
 
-use sqlx::mysql::MySqlRow;
-use sqlx::{Database, Encode, FromRow, MySql, MySqlPool, Row};
-use sqlx::encode::IsNull;
-use sqlx::error::BoxDynError;
-use tracing::{error, info};
 use crate::dicom_object_meta::DicomStateMeta;
 use crate::string_ext::{BoundedString, UidHashString};
+use sqlx::encode::IsNull;
+use sqlx::error::BoxDynError;
+use sqlx::mysql::MySqlRow;
+use sqlx::{Database, Encode, FromRow, MySql, MySqlPool, Row};
+use tracing::{error, info};
 
 impl sqlx::Type<MySql> for UidHashString {
     fn type_info() -> <MySql as Database>::TypeInfo {
@@ -240,7 +240,7 @@ impl DbProvider for MySqlProvider {
 
     async fn save_state_info(&self, state_meta: &DicomStateMeta) -> Result<(), DbError> {
         let pool = self.pool.clone();
-        match sqlx::query::<MySql>(Self::INSERT_OR_UPDATE_STATE_META_QUERY)
+        let query = sqlx::query::<MySql>(Self::INSERT_OR_UPDATE_STATE_META_QUERY)
             .bind(state_meta.tenant_id.as_str())
             .bind(state_meta.patient_id.as_str())
             .bind(state_meta.study_uid.as_str())
@@ -248,25 +248,90 @@ impl DbProvider for MySqlProvider {
             .bind(state_meta.study_uid_hash.as_str())
             .bind(state_meta.series_uid_hash.as_str())
             .bind(state_meta.study_date_origin.as_str())
-            .bind(state_meta.accession_number.as_str())
-            .bind(state_meta.modality.as_ref().unwrap().as_str())
-            .bind(state_meta.series_number.unwrap())
-            .bind(state_meta.series_date)
-            .bind(state_meta.series_time.as_ref().unwrap() )
-            .bind(state_meta.series_description.as_ref().unwrap().as_str())
-            .bind(state_meta.body_part_examined.as_ref().unwrap().as_str())
-            .bind(state_meta.protocol_name.as_ref().unwrap().as_str())
-            .bind(state_meta.study_date)
-            .bind(state_meta.study_time.as_ref().unwrap() )
-            .bind(state_meta.study_id.as_ref().unwrap().as_str())
-            .bind(state_meta.study_description.as_ref().unwrap().as_str())
-            .bind(state_meta.patient_age.as_ref().unwrap().as_str())
+            .bind(state_meta.accession_number.as_str());
+
+        // 安全处理 Option 字段
+        let query = match &state_meta.modality {
+            Some(modality) => query.bind(modality.as_str()),
+            None => query.bind(None::<&str>),
+        };
+
+        let query = query.bind(state_meta.series_number.unwrap_or(0));
+
+        let query = query.bind(state_meta.series_date);
+
+        let query = match &state_meta.series_time {
+            Some(time) => {
+
+                query.bind(time)
+            }
+            None => query.bind(None::<chrono::NaiveTime>),
+        };
+
+        let query = match &state_meta.series_description {
+            Some(desc) => query.bind(desc.as_str()),
+            None => query.bind(None::<&str>),
+        };
+
+        let query = match &state_meta.body_part_examined {
+            Some(body_part) => query.bind(body_part.as_str()),
+            None => query.bind(None::<&str>),
+        };
+
+        let query = match &state_meta.protocol_name {
+            Some(protocol) => query.bind(protocol.as_str()),
+            None => query.bind(None::<&str>),
+        };
+
+        let query = query.bind(state_meta.study_date);
+
+        let query = match &state_meta.study_time {
+            Some(time) => {
+                query.bind(time)
+            }
+            None => query.bind(None::<chrono::NaiveTime>),
+        };
+
+        let query = match &state_meta.study_id {
+            Some(id) => query.bind(id.as_str()),
+            None => query.bind(None::<&str>),
+        };
+
+        let query = match &state_meta.study_description {
+            Some(desc) => query.bind(desc.as_str()),
+            None => query.bind(None::<&str>),
+        };
+
+        let query = match &state_meta.patient_age {
+            Some(age) => query.bind(age.as_str()),
+            None => query.bind(None::<&str>),
+        };
+
+        let query = query
             .bind(state_meta.patient_size)
-            .bind(state_meta.patient_weight)
-            .bind(state_meta.patient_sex.as_ref().unwrap().as_str())
-            .bind(state_meta.patient_name.as_ref().unwrap().as_str())
-            .bind(state_meta.patient_birth_date)
-            .bind(state_meta.patient_birth_time.as_ref().unwrap() )
+            .bind(state_meta.patient_weight);
+
+        let query = match &state_meta.patient_sex {
+            Some(sex) => query.bind(sex.as_str()),
+            None => query.bind(None::<&str>),
+        };
+
+        let query = match &state_meta.patient_name {
+            Some(name) => query.bind(name.as_str()),
+            None => query.bind(None::<&str>),
+        };
+
+        let query = query.bind(state_meta.patient_birth_date);
+
+        let query = match &state_meta.patient_birth_time {
+            Some(time) => {
+
+                query.bind(time)
+            }
+            None => query.bind(None::<chrono::NaiveTime>),
+        };
+
+        match query
             .bind(state_meta.created_time)
             .bind(state_meta.updated_time)
             .execute(&pool)
@@ -297,7 +362,8 @@ impl DbProvider for MySqlProvider {
         };
 
         for state_meta in state_meta_list {
-            match sqlx::query::<MySql>(Self::INSERT_OR_UPDATE_STATE_META_QUERY)
+            // 构建基础查询
+            let query = sqlx::query::<MySql>(Self::INSERT_OR_UPDATE_STATE_META_QUERY)
                 .bind(state_meta.tenant_id.as_str())
                 .bind(state_meta.patient_id.as_str())
                 .bind(state_meta.study_uid.as_str())
@@ -305,25 +371,90 @@ impl DbProvider for MySqlProvider {
                 .bind(state_meta.study_uid_hash.as_str())
                 .bind(state_meta.series_uid_hash.as_str())
                 .bind(state_meta.study_date_origin.as_str())
-                .bind(state_meta.accession_number.as_str())
-                .bind(state_meta.modality.as_ref().unwrap().as_str())
-                .bind(state_meta.series_number.unwrap())
-                .bind(state_meta.series_date)
-                .bind(state_meta.series_time.as_ref().unwrap() )
-                .bind(state_meta.series_description.as_ref().unwrap().as_str())
-                .bind(state_meta.body_part_examined.as_ref().unwrap().as_str())
-                .bind(state_meta.protocol_name.as_ref().unwrap().as_str())
-                .bind(state_meta.study_date)
-                .bind(state_meta.study_time.as_ref().unwrap() )
-                .bind(state_meta.study_id.as_ref().unwrap().as_str())
-                .bind(state_meta.study_description.as_ref().unwrap().as_str())
-                .bind(state_meta.patient_age.as_ref().unwrap().as_str())
+                .bind(state_meta.accession_number.as_str());
+
+            // 安全处理 Option 字段
+            let query = match &state_meta.modality {
+                Some(modality) => query.bind(modality.as_str()),
+                None => query.bind(None::<&str>),
+            };
+
+            let query = query.bind(state_meta.series_number.unwrap_or(0));
+
+            let query = query.bind(state_meta.series_date);
+
+            let query = match &state_meta.series_time {
+                Some(time) => {
+
+                    query.bind(time)
+                }
+                None => query.bind(None::<chrono::NaiveTime>),
+            };
+
+            let query = match &state_meta.series_description {
+                Some(desc) => query.bind(desc.as_str()),
+                None => query.bind(None::<&str>),
+            };
+
+            let query = match &state_meta.body_part_examined {
+                Some(body_part) => query.bind(body_part.as_str()),
+                None => query.bind(None::<&str>),
+            };
+
+            let query = match &state_meta.protocol_name {
+                Some(protocol) => query.bind(protocol.as_str()),
+                None => query.bind(None::<&str>),
+            };
+
+            let query = query.bind(state_meta.study_date);
+
+            let query = match &state_meta.study_time {
+                Some(time) => {
+                    query.bind(time)
+                }
+                None => query.bind(None::<chrono::NaiveTime>),
+            };
+
+            let query = match &state_meta.study_id {
+                Some(id) => query.bind(id.as_str()),
+                None => query.bind(None::<&str>),
+            };
+
+            let query = match &state_meta.study_description {
+                Some(desc) => query.bind(desc.as_str()),
+                None => query.bind(None::<&str>),
+            };
+
+            let query = match &state_meta.patient_age {
+                Some(age) => query.bind(age.as_str()),
+                None => query.bind(None::<&str>),
+            };
+
+            let query = query
                 .bind(state_meta.patient_size)
-                .bind(state_meta.patient_weight)
-                .bind(state_meta.patient_sex.as_ref().unwrap().as_str())
-                .bind(state_meta.patient_name.as_ref().unwrap().as_str())
-                .bind(state_meta.patient_birth_date)
-                .bind(state_meta.patient_birth_time.as_ref().unwrap())
+                .bind(state_meta.patient_weight);
+
+            let query = match &state_meta.patient_sex {
+                Some(sex) => query.bind(sex.as_str()),
+                None => query.bind(None::<&str>),
+            };
+
+            let query = match &state_meta.patient_name {
+                Some(name) => query.bind(name.as_str()),
+                None => query.bind(None::<&str>),
+            };
+
+            let query = query.bind(state_meta.patient_birth_date);
+
+            let query = match &state_meta.patient_birth_time {
+                Some(time) => {
+
+                    query.bind(time)
+                }
+                None => query.bind(None::<chrono::NaiveTime>),
+            };
+
+            match query
                 .bind(state_meta.created_time)
                 .bind(state_meta.updated_time)
                 .execute(&mut *tx)
@@ -353,7 +484,6 @@ impl DbProvider for MySqlProvider {
 }
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
     use super::*;
     use crate::string_ext::*;
     use chrono::{NaiveDate, NaiveTime};
