@@ -1,12 +1,19 @@
 ### 单机版本部署说明.
 
-整体系统可以运行在单机环境.也可以部署在多台机器上.
+整体系统可以运行在单机环境.***也可以部署在多台机器上***.
 wado-storescp,wado-consumer, wado-server 三个服务均可以通过NGINX做TCP代理或是LVS_DR做负载均衡.
 ****  集群部署的时候建议采用NAS作为共享文件存储 ****
 **** 后续为增加 wado-archive 服务,用于归档存储DICOM文件, 支持:阿里云OSS, 华为云OBS, 天翼云SW3 协议 ****
 
+#### 集群或是单机部署时候的替代软件
+- MySQL  OceanBase 社区版本或是企业版本
+- PgSQL  openGauss LTS 版本
+- Doris  无需替代
+- RedPanda Kafka集群或是 RedPanda企业版
+- Redis  腾讯Tendis中间件
+
 ####  支持的操作系统
-- Ubuntu 22.04 LTS
+- Ubuntu 22.04.5  LTS
 ####  Redis
 ```docker-compose.yml
 redis:
@@ -83,10 +90,16 @@ host    all             all             192.168.1.0/24          scram-sha-256
 - Redpanda    参考官方文档.
 - Kafka       参考官方文档.
 - 创建4个消息队列实例. 
-  - dicom_image_queue 用于存储 dicom 图像数据
-  - dicom_state_queue 用于存储 dicom 状态数据
-  - log_queue   用于存储StoreSCP接收的DICOM对象数据, 方便对后续的收图性能及文件占用空间进行评估.
+
+  - log_queue   用于存储StoreSCP接收的DICOM对象信息, 方便对后续的收图性能及文件占用空间进行评估. 
+  此队列的数据写入Doris dicom_object_meta 表
+    
   - storage_queue   用于提取DICOM的序列层级信息并写入Pg或是MySQL数据库,方便后续进行检索.
+  
+      ** wado-consumer 消费此队列数据,别发布到另外两个队列.**
+  
+      - dicom_image_queue 用于存储 dicom 图像数据  写入DORIS dicom_image_meta 表
+      - dicom_state_queue 用于存储 dicom 状态数据  写入DORIS dicom_state_meta 表
 
 - 创建队列
 ```bash 
