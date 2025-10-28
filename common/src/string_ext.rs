@@ -1,7 +1,8 @@
+use chrono::NaiveTime;
 use serde::{Deserialize, Serialize};
-use std::hash::Hash;
-
 use snafu::Snafu;
+use std::fmt;
+use std::hash::Hash;
 
 #[derive(Debug, Snafu)]
 #[non_exhaustive]
@@ -11,7 +12,6 @@ pub enum BoundedStringError {
     #[snafu(display("String length is: {}  and  expected: {}", len, fixlen))]
     LengthError { fixlen: usize, len: usize },
 }
-
 
 type BoundedResult<T, E = BoundedStringError> = Result<T, E>;
 
@@ -25,14 +25,20 @@ pub struct BoundedString<const N: usize> {
 impl<const N: usize> BoundedString<N> {
     pub fn new(s: String) -> BoundedResult<BoundedString<N>> {
         if s.len() > N {
-            Err(BoundedStringError::TooLong { max: N, len: s.len() })
+            Err(BoundedStringError::TooLong {
+                max: N,
+                len: s.len(),
+            })
         } else {
             Ok(Self { value: s })
         }
     }
     pub fn new_from_str(s: &str) -> BoundedResult<BoundedString<N>> {
         if s.len() > N {
-            Err(BoundedStringError::TooLong { max: N, len: s.len() })
+            Err(BoundedStringError::TooLong {
+                max: N,
+                len: s.len(),
+            })
         } else {
             Ok(Self {
                 value: s.to_string(),
@@ -41,7 +47,10 @@ impl<const N: usize> BoundedString<N> {
     }
     pub fn new_from_string(s: &String) -> BoundedResult<BoundedString<N>> {
         if s.len() > N {
-            Err(BoundedStringError::TooLong { max: N, len: s.len() })
+            Err(BoundedStringError::TooLong {
+                max: N,
+                len: s.len(),
+            })
         } else {
             Ok(Self { value: s.clone() })
         }
@@ -94,7 +103,10 @@ pub struct FixedLengthString<const N: usize> {
 impl<const N: usize> FixedLengthString<N> {
     pub fn new(s: String) -> BoundedResult<FixedLengthString<N>> {
         if s.len() != N {
-            Err(BoundedStringError::LengthError { fixlen: N, len: s.len() })
+            Err(BoundedStringError::LengthError {
+                fixlen: N,
+                len: s.len(),
+            })
         } else {
             Ok(Self { value: s })
         }
@@ -102,7 +114,10 @@ impl<const N: usize> FixedLengthString<N> {
 
     pub fn new_from_str(s: &str) -> BoundedResult<FixedLengthString<N>> {
         if s.len() != N {
-            Err(BoundedStringError::LengthError { fixlen: N, len: s.len() })
+            Err(BoundedStringError::LengthError {
+                fixlen: N,
+                len: s.len(),
+            })
         } else {
             Ok(Self {
                 value: s.to_string(),
@@ -112,7 +127,10 @@ impl<const N: usize> FixedLengthString<N> {
 
     pub fn new_from_string(s: &String) -> BoundedResult<FixedLengthString<N>> {
         if s.len() != N {
-            Err(BoundedStringError::LengthError { fixlen: N, len: s.len() })
+            Err(BoundedStringError::LengthError {
+                fixlen: N,
+                len: s.len(),
+            })
         } else {
             Ok(Self { value: s.clone() })
         }
@@ -258,27 +276,203 @@ impl TryFrom<&String> for UuidString {
     }
 }
 
-/// 重点：自定义 context 构造
-// pub trait BoundedStringWhateverContext<T, E> {
-//     fn with_whatever_context<F>(self, f: F) -> Result<T, Whatever>
-//     where
-//         F: FnOnce(&E) -> String,
-//         E: std::error::Error + 'static;
-// }
-//
-// use snafu::whatever;
-// impl<T, E> BoundedStringWhateverContext<T, E> for Result<T, E>
-// where
-//     E: std::error::Error + 'static,
-// {
-//     fn with_whatever_context<F>(self, f: F) -> Result<T, Whatever>
-//     where
-//         F: FnOnce(&E) -> String,
-//     {
-//         self.map_err(|e| whatever!("{}", f(&e)))
-//     }
-// }
+#[derive(Debug, Clone)]
+pub struct ExtDicomTimeInvalidError {
+    message: String,
+}
 
+impl ExtDicomTimeInvalidError {
+    pub fn new(message: &str) -> Self {
+        ExtDicomTimeInvalidError {
+            message: message.to_string(),
+        }
+    }
+}
+
+impl fmt::Display for ExtDicomTimeInvalidError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Invalid DICOM time: {}", self.message)
+    }
+}
+
+impl std::error::Error for ExtDicomTimeInvalidError {}
+
+/// DICOM时间字符串，格式为 HHMMSS.FFFFFF, 长度为 12, 例如 "123456.123456"
+/// 对DICOM. 时间字符串，比如 "123456.123456" 或 "123456"，都可以解析为 ExtDicomTime
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(transparent)]
+pub struct ExtDicomTime {
+    value: Option<NaiveTime>,
+}
+
+impl fmt::Display for ExtDicomTime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.value {
+            Some(time) => write!(f, "{}", time.format("%H:%M:%S%.f")),
+            None => write!(f, ""),
+        }
+    }
+}
+impl ExtDicomTime {
+    pub fn new(p0: Option<NaiveTime>) -> Self {
+        Self { value: p0 }
+    }
+
+    pub fn as_naive_time(&self) -> Option<&NaiveTime> {
+        self.value.as_ref()
+    }
+
+    pub fn into_naive_time(self) -> Option<NaiveTime> {
+        self.value
+    }
+    pub fn from_str(s: &str) -> Option<Self> {
+        if s.is_empty() {
+            return Some(ExtDicomTime::new(None));
+        }
+
+        // 处理不同格式的DICOM时间字符串
+        let normalized_time = Self::normalize_dicom_time(s)?;
+        match NaiveTime::parse_from_str(&normalized_time, "%H%M%S%.f") {
+            Ok(t) => Some(ExtDicomTime::new(Some(t))),
+            Err(_) => None,
+        }
+    }
+
+    /// 标准化DICOM时间字符串，确保毫秒部分为6位
+    pub fn normalize_dicom_time(s: &str) -> Option<String> {
+        if !s.contains('.') {
+            // 没有毫秒部分，直接返回
+            return Some(s.to_string());
+        }
+
+        let parts: Vec<&str> = s.split('.').collect();
+        if parts.len() != 2 {
+            return None;
+        }
+
+        let time_part = parts[0];
+        let mut fraction_part = parts[1].to_string();
+
+        // 补齐或截断小数部分到6位
+        while fraction_part.len() < 6 {
+            fraction_part.push('0');
+        }
+        fraction_part.truncate(6);
+
+        Some(format!("{}.{}", time_part, fraction_part))
+    }
+}
+impl TryFrom<&str> for ExtDicomTime {
+    type Error = ExtDicomTimeInvalidError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        ExtDicomTime::from_str(value).ok_or_else(|| ExtDicomTimeInvalidError::new("Invalid format"))
+    }
+}
+
+impl TryFrom<&String> for ExtDicomTime {
+    type Error = ExtDicomTimeInvalidError;
+
+    fn try_from(value: &String) -> Result<Self, Self::Error> {
+        ExtDicomTime::from_str(value).ok_or_else(|| ExtDicomTimeInvalidError::new("Invalid format"))
+    }
+}
+
+impl TryFrom<String> for ExtDicomTime {
+    type Error = ExtDicomTimeInvalidError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        ExtDicomTime::from_str(&value)
+            .ok_or_else(|| ExtDicomTimeInvalidError::new("Invalid format"))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ExtDicomDateInvalidError {
+    message: String,
+}
+
+impl ExtDicomDateInvalidError {
+    pub fn new(message: &str) -> Self {
+        ExtDicomDateInvalidError {
+            message: message.to_string(),
+        }
+    }
+}
+
+impl fmt::Display for ExtDicomDateInvalidError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Invalid DICOM date: {}", self.message)
+    }
+}
+
+impl std::error::Error for ExtDicomDateInvalidError {}
+
+/// DICOM日期字符串，格式为 YYYYMMDD, 长度为 8, 例如 "20231005"
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(transparent)]
+pub struct ExtDicomDate {
+    value: Option<chrono::NaiveDate>,
+}
+
+impl fmt::Display for ExtDicomDate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.value {
+            Some(date) => write!(f, "{}", date.format("%Y%m%d")),
+            None => write!(f, ""),
+        }
+    }
+}
+
+impl ExtDicomDate {
+    pub fn new(value: Option<chrono::NaiveDate>) -> Self {
+        Self { value }
+    }
+
+    pub fn as_naive_date(&self) -> Option<&chrono::NaiveDate> {
+        self.value.as_ref()
+    }
+
+    pub fn into_naive_date(self) -> Option<chrono::NaiveDate> {
+        self.value
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        if s.is_empty() {
+            return Some(ExtDicomDate::new(None));
+        }
+
+        match chrono::NaiveDate::parse_from_str(s, "%Y%m%d") {
+            Ok(date) => Some(ExtDicomDate::new(Some(date))),
+            Err(_) => None,
+        }
+    }
+}
+
+impl TryFrom<&str> for ExtDicomDate {
+    type Error = ExtDicomDateInvalidError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        ExtDicomDate::from_str(value).ok_or_else(|| ExtDicomDateInvalidError::new("Invalid format"))
+    }
+}
+
+impl TryFrom<&String> for ExtDicomDate {
+    type Error = ExtDicomDateInvalidError;
+
+    fn try_from(value: &String) -> Result<Self, Self::Error> {
+        ExtDicomDate::from_str(value).ok_or_else(|| ExtDicomDateInvalidError::new("Invalid format"))
+    }
+}
+
+impl TryFrom<String> for ExtDicomDate {
+    type Error = ExtDicomDateInvalidError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        ExtDicomDate::from_str(&value)
+            .ok_or_else(|| ExtDicomDateInvalidError::new("Invalid format"))
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -286,8 +480,77 @@ mod tests {
 
     use dicom_encoding::snafu::ResultExt;
     use snafu::Whatever;
-    use crate::uid_hash::uid_to_u64;
+    #[test]
+    fn test_dicom_date_from_str() {
+        // 测试有效的日期格式
+        let date = ExtDicomDate::from_str("20231005");
+        assert!(date.is_some());
+        let date = date.unwrap();
+        assert!(date.value.is_some());
 
+        // 测试空字符串
+        let date = ExtDicomDate::from_str("");
+        assert!(date.is_some());
+        let date = date.unwrap();
+        assert!(date.value.is_none());
+    }
+
+    #[test]
+    fn test_dicom_date_invalid_format() {
+        // 测试无效的日期格式
+        let date = ExtDicomDate::from_str("2023-10-05"); // 不符合DICOM格式
+        assert!(date.is_none());
+
+        let date = ExtDicomDate::from_str("231005"); // 缺少年份
+        assert!(date.is_none());
+    }
+
+    #[test]
+    fn test_dicom_date_try_from_str() {
+        // 测试 TryFrom<&str>
+        let date_result: Result<ExtDicomDate, ExtDicomDateInvalidError> = "20231005".try_into();
+        assert!(date_result.is_ok());
+
+        // 测试无效格式
+        let date_result: Result<ExtDicomDate, ExtDicomDateInvalidError> = "invalid".try_into();
+        assert!(date_result.is_err());
+    }
+
+    #[test]
+    fn test_dicom_date_try_from_string() {
+        // 测试 TryFrom<String>
+        let date_result: Result<ExtDicomDate, ExtDicomDateInvalidError> = "20231005".to_string().try_into();
+        assert!(date_result.is_ok());
+
+        // 测试无效格式
+        let date_result: Result<ExtDicomDate, ExtDicomDateInvalidError> = "invalid".to_string().try_into();
+        assert!(date_result.is_err());
+    }
+
+    #[test]
+    fn test_dicom_date_display() {
+        // 测试有值的日期显示
+        let dicom_date = ExtDicomDate::from_str("20231005").unwrap();
+        let display_str = format!("{}", dicom_date);
+        assert_eq!(display_str, "20231005");
+
+        // 测试无值的日期显示
+        let dicom_date_none = ExtDicomDate::new(None);
+        let display_str_none = format!("{}", dicom_date_none);
+        assert_eq!(display_str_none, "");
+    }
+
+    #[test]
+    fn test_dicom_date_accessors() {
+        // 测试访问器方法
+        let dicom_date = ExtDicomDate::from_str("20231005").unwrap();
+        let naive_date = dicom_date.as_naive_date();
+        assert!(naive_date.is_some());
+
+        let dicom_date_none = ExtDicomDate::new(None);
+        let naive_date_none = dicom_date_none.as_naive_date();
+        assert!(naive_date_none.is_none());
+    }
     #[test]
     fn test_bounded_string_valid_length() {
         // 测试正常长度的字符串
@@ -372,17 +635,18 @@ mod tests {
 
     fn test_bounded_string_watch_context_handling() {
         let s = "this string is definitely too long for the limit".to_string();
-        let result: Result<BoundedString<10>, _> =
-            BoundedString::new(s.clone()).with_whatever_context(|err| {
-                format!("Failed to create BoundedString: {}", err)
-            });
+        let result: Result<BoundedString<10>, _> = BoundedString::new(s.clone())
+            .with_whatever_context(|err| format!("Failed to create BoundedString: {}", err));
 
         assert!(result.is_err());
         let err: Whatever = result.unwrap_err();
         println!("Serialized JSON: {}", err.to_string());
         assert_eq!(
             err.to_string(),
-            format!("Failed to create BoundedString: String too long: {} > 10", s.len())
+            format!(
+                "Failed to create BoundedString: String too long: {} > 10",
+                s.len()
+            )
         );
     }
 
@@ -390,14 +654,18 @@ mod tests {
 
     fn test_bounded_string_watch_context_handling2() {
         let s = "this string is definitely too long for the limit".to_string();
-        let result: Result<BoundedString<10>, BoundedStringError> =  BoundedString::new(s.clone());
+        let result: Result<BoundedString<10>, BoundedStringError> = BoundedString::new(s.clone());
 
         assert!(result.is_err());
         let err: BoundedStringError = result.unwrap_err();
         println!("Serialized JSON: {}", err.to_string());
         assert_eq!(
             err.to_string(),
-            BoundedStringError::TooLong { max: 10, len: s.len() }.to_string()
+            BoundedStringError::TooLong {
+                max: 10,
+                len: s.len()
+            }
+            .to_string()
         );
     }
     #[test]
