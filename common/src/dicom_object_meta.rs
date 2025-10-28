@@ -1,5 +1,5 @@
+use crate::dicom_utils;
 use crate::string_ext::{BoundedString, DicomDateString, SopUidString, UidHashString, UuidString};
-use crate::{dicom_utils};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
@@ -13,9 +13,6 @@ pub enum TransferStatus {
     Success,
     Failed,
 }
-
-
-
 
 /// DicomStoreMeta 用于DICOM-CStoreSCP服务记录收图日志.
 /// 包含了所有必要的元数据字段.每一个DicomStoreMeta实例标识接收一个DICOM文件.并成功写入磁盘.
@@ -148,7 +145,6 @@ pub struct DicomStateMeta {
     #[serde(rename = "study_description")]
     pub study_description: Option<BoundedString<64>>,
 
-
     #[serde(rename = "modality")]
     pub modality: Option<BoundedString<16>>,
     #[serde(rename = "series_number")]
@@ -189,11 +185,10 @@ pub struct DicomImageMeta {
     pub sop_uid: SopUidString,
 
     #[serde(rename = "study_uid_hash")]
-    pub study_uid_hash: UidHashString ,
+    pub study_uid_hash: UidHashString,
 
     #[serde(rename = "series_uid_hash")]
-    pub series_uid_hash: UidHashString ,
-
+    pub series_uid_hash: UidHashString,
 
     #[serde(rename = "instance_number")]
     pub instance_number: Option<i32>,
@@ -302,7 +297,7 @@ struct DicomCommonMeta {
     study_uid: String,
     series_uid: String,
     sop_uid: String,
-    study_date:NaiveDate,
+    study_date: NaiveDate,
     study_date_str: String,
 }
 
@@ -378,7 +373,6 @@ pub fn make_image_info(
         .map_err(|_| {
             DicomParseError::InvalidDateFormat("Failed to convert content date".to_string())
         })?;
-
 
     let content_time = dicom_utils::get_text_value(dicom_obj, tags::CONTENT_TIME)
         .filter(|v| !v.is_empty())
@@ -481,13 +475,10 @@ pub fn make_image_info(
 
     // 计算哈希值
     let study_uid_hash = UidHashString::make_from(&common_meta.study_uid.as_str());
-    let series_uid_hash =  UidHashString::make_from( &common_meta.series_uid.as_str() ) ;
-
-
+    let series_uid_hash = UidHashString::make_from(&common_meta.series_uid.as_str());
 
     // 时间戳
     let now = chrono::Local::now().naive_local();
-
 
     Ok(DicomImageMeta {
         tenant_id: BoundedString::<64>::try_from(tenant_id.to_string()).map_err(|_| {
@@ -507,7 +498,6 @@ pub fn make_image_info(
         })?,
         study_uid_hash,
         series_uid_hash,
-
 
         instance_number,
 
@@ -638,7 +628,7 @@ pub fn make_state_info(
         .map_err(|_| {
             DicomParseError::ConversionError("Failed to convert occupation".to_string())
         })?;
-    let study_date =common_meta.study_date;
+    let study_date = common_meta.study_date;
     // 检查相关信息
     let study_time = dicom_utils::get_text_value(dicom_obj, tags::STUDY_TIME)
         .filter(|v| !v.is_empty())
@@ -1092,9 +1082,24 @@ mod tests {
     //     println!("All DICOM files processed successfully");
     // }
 
+    // use std::fs;
+    // use std::path::Path;
+
     // 递归收集目录及其子目录中的所有.dcm文件
-
-
+    // fn collect_dicom_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
+    //     if let Ok(entries) = fs::read_dir(dir) {
+    //         for entry in entries.flatten() {
+    //             let path = entry.path();
+    //             if path.is_dir() {
+    //                 // 递归遍历子目录
+    //                 crate::utils::collect_dicom_files(&path, files);
+    //             } else if path.extension().map_or(false, |ext| ext.eq_ignore_ascii_case( "dcm") ) {
+    //                 // 添加.dcm文件到列表
+    //                 files.push(path);
+    //             }
+    //         }
+    //     }
+    // }
     // #[test]
     // fn test_make_state_info_with_sample_files() {
     //     let dicom_dir = "/media/dhz/DCP/DicomTestDataSet";
@@ -1162,9 +1167,4 @@ mod tests {
     //         println!("Successfully processed {} DICOM files ({} sampled)", dicom_files.len(), max_files);
     //     }
     // }
-
-
-
-
-
 }
