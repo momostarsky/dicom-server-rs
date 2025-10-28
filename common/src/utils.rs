@@ -13,7 +13,7 @@ use slog::{Drain, Logger, error, info, o};
 use std::collections::HashSet;
 use std::fs;
 use std::fs::OpenOptions;
-
+use std::path::Path;
 use std::sync::OnceLock;
 
 pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
@@ -34,7 +34,20 @@ pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std
     collect_dicom_files(p0, &mut dicom_files)?;
     Ok(dicom_files)
 }
-
+pub fn collect_dicom_file(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                // 递归遍历子目录
+                collect_dicom_file(&path, files);
+            } else if path.extension().map_or(false, |ext| ext.eq_ignore_ascii_case( "dcm") ) {
+                // 添加.dcm文件到列表
+                files.push(path);
+            }
+        }
+    }
+}
 // 辅助函数：递归收集DICOM文件
 pub fn collect_dicom_files(
     dir_path: &str,

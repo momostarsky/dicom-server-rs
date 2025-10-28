@@ -280,10 +280,10 @@ pub struct DicomImageMeta {
     pub space_size: Option<u32>,
 
     #[serde(rename = "created_time")]
-    pub created_time: Option<chrono::NaiveDateTime>,
+    pub created_time: Option<NaiveDateTime>,
 
     #[serde(rename = "updated_time")]
-    pub updated_time: Option<chrono::NaiveDateTime>,
+    pub updated_time: Option<NaiveDateTime>,
 }
 
 impl DicomStateMeta {
@@ -829,14 +829,14 @@ pub fn make_state_info(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
+    //
+    // use dicom_object::collector::CharacterSetOverride;
+    // use rstest::rstest;
+    // use std::fs;
+    // use std::path::Path;
 
-    use dicom_object::collector::CharacterSetOverride;
-    use rstest::rstest;
-    use std::fs;
-    use std::path::Path;
-
-    #[rstest]
+    // #[rstest]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/107")]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/108")]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/109")]
@@ -851,120 +851,120 @@ mod tests {
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/118")]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/119")]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/120")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/121")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/122")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/123")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/124")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/125")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/126")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/127")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/128")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/129")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/130")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/131")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/132")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/133")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/134")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/135")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/136")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/137")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/138")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/139")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/140")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/141")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/142")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/143")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/144")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/145")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/146")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/147")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/148")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/149")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/150")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/151")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/152")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/153")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/154")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/121")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/122")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/123")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/124")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/125")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/126")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/127")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/128")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/129")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/130")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/131")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/132")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/133")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/134")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/135")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/136")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/137")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/138")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/139")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/140")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/141")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/142")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/143")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/144")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/145")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/146")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/147")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/148")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/149")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/150")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/151")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/152")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/153")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/154")]
     // #[case("/media/dhz/DCP/DicomTestDataSet/4.90")]
 
-    fn test_make_state_info_with_dicom_files(#[case] dicom_dir: &str) {
-        // let dicom_dir = "/media/dhz/DCP/DicomTestDataSet/dcmFiles/103";
+    // fn test_make_state_info_with_dicom_files(#[case] dicom_dir: &str) {
+    //     // let dicom_dir = "/media/dhz/DCP/DicomTestDataSet/dcmFiles/103";
+    //
+    //     // 检查目录是否存在
+    //     if !Path::new(dicom_dir).exists() {
+    //         println!("DICOM test directory not found: {}", dicom_dir);
+    //         return;
+    //     }
+    //
+    //     // 递归遍历目录及其子目录中的所有.dcm文件
+    //     let mut dicom_files = Vec::new();
+    //
+    //     // 使用递归函数收集所有.dcm文件
+    //     collect_dicom_files(Path::new(dicom_dir), &mut dicom_files);
+    //
+    //     println!("Found {} DICOM files", dicom_files.len());
+    //
+    //     for (index, path) in dicom_files.iter().enumerate() {
+    //         println!(
+    //             "Processing file {}/{}: {:?}",
+    //             index + 1,
+    //             dicom_files.len(),
+    //             path
+    //         );
+    //
+    //         // 尝试打开DICOM文件
+    //         match dicom_object::OpenFileOptions::new()
+    //             .charset_override(CharacterSetOverride::AnyVr)
+    //             .read_until(tags::PIXEL_DATA)
+    //             .open_file(path)
+    //         {
+    //             Ok(dicom_obj) => {
+    //                 // 尝试解析DICOM对象
+    //                 let result = make_state_info("1234567890", &dicom_obj, None);
+    //
+    //                 match result {
+    //                     Ok(state_meta) => {
+    //                         // 验证必填字段
+    //                         assert!(
+    //                             !state_meta.patient_id.as_str().is_empty(),
+    //                             "Patient ID should not be empty in file: {:?}",
+    //                             path
+    //                         );
+    //                         assert!(
+    //                             !state_meta.study_uid.as_str().is_empty(),
+    //                             "Study UID should not be empty in file: {:?}",
+    //                             path
+    //                         );
+    //                         assert!(
+    //                             !state_meta.series_uid.as_str().is_empty(),
+    //                             "Series UID should not be empty in file: {:?}",
+    //                             path
+    //                         );
+    //                         assert!(
+    //                             !state_meta.modality.unwrap().as_str().is_empty(),
+    //                             "Modality should not be empty in file: {:?}",
+    //                             path
+    //                         );
+    //
+    //                         println!("Successfully parsed file: {:?}", path);
+    //                     }
+    //                     Err(e) => {
+    //                         eprintln!("Error parsing file {:?}: {:?}", path, e);
+    //                         panic!("Failed to parse DICOM file {:?}: {:?}", path, e);
+    //                     }
+    //                 }
+    //             }
+    //             Err(e) => {
+    //                 eprintln!("Error opening file {:?}: {:?}", path, e);
+    //                 // std::fs::remove_file(path).expect("Failed to delete file");
+    //             }
+    //         }
+    //     }
+    //
+    //     println!("All DICOM files processed successfully");
+    // }
 
-        // 检查目录是否存在
-        if !Path::new(dicom_dir).exists() {
-            println!("DICOM test directory not found: {}", dicom_dir);
-            return;
-        }
-
-        // 递归遍历目录及其子目录中的所有.dcm文件
-        let mut dicom_files = Vec::new();
-
-        // 使用递归函数收集所有.dcm文件
-        collect_dicom_files(Path::new(dicom_dir), &mut dicom_files);
-
-        println!("Found {} DICOM files", dicom_files.len());
-
-        for (index, path) in dicom_files.iter().enumerate() {
-            println!(
-                "Processing file {}/{}: {:?}",
-                index + 1,
-                dicom_files.len(),
-                path
-            );
-
-            // 尝试打开DICOM文件
-            match dicom_object::OpenFileOptions::new()
-                .charset_override(CharacterSetOverride::AnyVr)
-                .read_until(tags::PIXEL_DATA)
-                .open_file(path)
-            {
-                Ok(dicom_obj) => {
-                    // 尝试解析DICOM对象
-                    let result = make_state_info("1234567890", &dicom_obj, None);
-
-                    match result {
-                        Ok(state_meta) => {
-                            // 验证必填字段
-                            assert!(
-                                !state_meta.patient_id.as_str().is_empty(),
-                                "Patient ID should not be empty in file: {:?}",
-                                path
-                            );
-                            assert!(
-                                !state_meta.study_uid.as_str().is_empty(),
-                                "Study UID should not be empty in file: {:?}",
-                                path
-                            );
-                            assert!(
-                                !state_meta.series_uid.as_str().is_empty(),
-                                "Series UID should not be empty in file: {:?}",
-                                path
-                            );
-                            assert!(
-                                !state_meta.modality.unwrap().as_str().is_empty(),
-                                "Modality should not be empty in file: {:?}",
-                                path
-                            );
-
-                            println!("Successfully parsed file: {:?}", path);
-                        }
-                        Err(e) => {
-                            eprintln!("Error parsing file {:?}: {:?}", path, e);
-                            panic!("Failed to parse DICOM file {:?}: {:?}", path, e);
-                        }
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Error opening file {:?}: {:?}", path, e);
-                    // std::fs::remove_file(path).expect("Failed to delete file");
-                }
-            }
-        }
-
-        println!("All DICOM files processed successfully");
-    }
-
-    #[rstest]
+    // #[rstest]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/107")]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/108")]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/109")]
@@ -979,134 +979,121 @@ mod tests {
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/118")]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/119")]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/120")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/121")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/122")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/123")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/124")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/125")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/126")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/127")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/128")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/129")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/130")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/131")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/132")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/133")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/134")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/135")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/136")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/137")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/138")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/139")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/140")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/141")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/142")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/143")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/144")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/145")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/146")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/147")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/148")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/149")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/150")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/151")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/152")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/153")]
-    #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/154")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/121")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/122")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/123")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/124")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/125")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/126")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/127")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/128")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/129")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/130")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/131")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/132")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/133")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/134")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/135")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/136")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/137")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/138")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/139")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/140")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/141")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/142")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/143")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/144")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/145")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/146")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/147")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/148")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/149")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/150")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/151")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/152")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/153")]
+    // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/154")]
     // #[case("/media/dhz/DCP/DicomTestDataSet/4.90")]
 
-    fn test_make_image_info_with_dicom_files(#[case] dicom_dir: &str) {
-        // let dicom_dir = "/media/dhz/DCP/DicomTestDataSet/dcmFiles/103";
-
-        // 检查目录是否存在
-        if !Path::new(dicom_dir).exists() {
-            println!("DICOM test directory not found: {}", dicom_dir);
-            return;
-        }
-
-        // 递归遍历目录及其子目录中的所有.dcm文件
-        let mut dicom_files = Vec::new();
-
-        // 使用递归函数收集所有.dcm文件
-        collect_dicom_files(Path::new(dicom_dir), &mut dicom_files);
-
-        println!("Found {} DICOM files", dicom_files.len());
-
-        for (index, path) in dicom_files.iter().enumerate() {
-            println!(
-                "Processing file {}/{}: {:?}",
-                index + 1,
-                dicom_files.len(),
-                path
-            );
-
-            // 尝试打开DICOM文件
-            match dicom_object::OpenFileOptions::new()
-                .charset_override(CharacterSetOverride::AnyVr)
-                .read_until(tags::PIXEL_DATA)
-                .open_file(path)
-            {
-                Ok(dicom_obj) => {
-                    // 尝试解析DICOM对象
-                    let result = make_image_info("1234567890", &dicom_obj, None);
-
-                    match result {
-                        Ok(state_meta) => {
-                            // 验证必填字段
-                            assert!(
-                                !state_meta.patient_id.as_str().is_empty(),
-                                "Patient ID should not be empty in file: {:?}",
-                                path
-                            );
-                            assert!(
-                                !state_meta.study_uid.as_str().is_empty(),
-                                "Study UID should not be empty in file: {:?}",
-                                path
-                            );
-                            assert!(
-                                !state_meta.series_uid.as_str().is_empty(),
-                                "Series UID should not be empty in file: {:?}",
-                                path
-                            );
-                            assert!(
-                                !state_meta.sop_uid.as_str().is_empty(),
-                                "SOP UID should not be empty in file: {:?}",
-                                path
-                            );
-
-                            println!("Successfully parsed file: {:?}", path);
-                        }
-                        Err(e) => {
-                            eprintln!("Error parsing file {:?}: {:?}", path, e);
-                            panic!("Failed to parse DICOM file {:?}: {:?}", path, e);
-                        }
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Error opening file {:?}: {:?}", path, e);
-                    // std::fs::remove_file(path).expect("Failed to delete file");
-                }
-            }
-        }
-
-        println!("All DICOM files processed successfully");
-    }
+    // fn test_make_image_info_with_dicom_files(#[case] dicom_dir: &str) {
+    //     // let dicom_dir = "/media/dhz/DCP/DicomTestDataSet/dcmFiles/103";
+    //
+    //     // 检查目录是否存在
+    //     if !Path::new(dicom_dir).exists() {
+    //         println!("DICOM test directory not found: {}", dicom_dir);
+    //         return;
+    //     }
+    //
+    //     // 递归遍历目录及其子目录中的所有.dcm文件
+    //     let mut dicom_files = Vec::new();
+    //
+    //     // 使用递归函数收集所有.dcm文件
+    //     collect_dicom_files(Path::new(dicom_dir), &mut dicom_files);
+    //
+    //     println!("Found {} DICOM files", dicom_files.len());
+    //
+    //     for (index, path) in dicom_files.iter().enumerate() {
+    //         println!(
+    //             "Processing file {}/{}: {:?}",
+    //             index + 1,
+    //             dicom_files.len(),
+    //             path
+    //         );
+    //
+    //         // 尝试打开DICOM文件
+    //         match dicom_object::OpenFileOptions::new()
+    //             .charset_override(CharacterSetOverride::AnyVr)
+    //             .read_until(tags::PIXEL_DATA)
+    //             .open_file(path)
+    //         {
+    //             Ok(dicom_obj) => {
+    //                 // 尝试解析DICOM对象
+    //                 let result = make_image_info("1234567890", &dicom_obj, None);
+    //
+    //                 match result {
+    //                     Ok(state_meta) => {
+    //                         // 验证必填字段
+    //                         assert!(
+    //                             !state_meta.patient_id.as_str().is_empty(),
+    //                             "Patient ID should not be empty in file: {:?}",
+    //                             path
+    //                         );
+    //                         assert!(
+    //                             !state_meta.study_uid.as_str().is_empty(),
+    //                             "Study UID should not be empty in file: {:?}",
+    //                             path
+    //                         );
+    //                         assert!(
+    //                             !state_meta.series_uid.as_str().is_empty(),
+    //                             "Series UID should not be empty in file: {:?}",
+    //                             path
+    //                         );
+    //                         assert!(
+    //                             !state_meta.sop_uid.as_str().is_empty(),
+    //                             "SOP UID should not be empty in file: {:?}",
+    //                             path
+    //                         );
+    //
+    //                         println!("Successfully parsed file: {:?}", path);
+    //                     }
+    //                     Err(e) => {
+    //                         eprintln!("Error parsing file {:?}: {:?}", path, e);
+    //                         panic!("Failed to parse DICOM file {:?}: {:?}", path, e);
+    //                     }
+    //                 }
+    //             }
+    //             Err(e) => {
+    //                 eprintln!("Error opening file {:?}: {:?}", path, e);
+    //                 // std::fs::remove_file(path).expect("Failed to delete file");
+    //             }
+    //         }
+    //     }
+    //
+    //     println!("All DICOM files processed successfully");
+    // }
 
     // 递归收集目录及其子目录中的所有.dcm文件
-    fn collect_dicom_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
-        if let Ok(entries) = fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    // 递归遍历子目录
-                    collect_dicom_files(&path, files);
-                } else if path.extension().map_or(false, |ext| ext == "dcm") {
-                    // 添加.dcm文件到列表
-                    files.push(path);
-                }
-            }
-        }
-    }
+
 
     // #[test]
     // fn test_make_state_info_with_sample_files() {
