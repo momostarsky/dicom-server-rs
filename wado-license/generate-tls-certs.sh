@@ -257,3 +257,17 @@ echo "📌 使用说明："
 echo "   - 在客户端/前端：使用 encrypt-public.pem 对敏感数据加密后传输"
 echo "   - 在服务端（wado-license）：使用 encrypt-private.key 解密数据"
 echo "   - 注意：RSA 不适合直接加密大文件，建议结合 AES（混合加密）"
+echo ""
+echo ""
+echo ""
+echo "  注意：你之前生成的 encrypt-private.key / encrypt-public.pem 更适合加密，但 License 验证推荐用签名（sign/verify），而非加密/解密 "
+echo ""
+echo ""
+echo ""
+echo "📌 生成用于 License 签名的密钥对（与 TLS 证书分离）："
+echo "   - license-sign-private.pem：仅服务端持有，用于签发 License"
+echo "   - license-sign-public.pem：可打包进客户端或公开分发，用于验证"
+echo "   - license-sign-public.der: license-sign-public.pem 转为 DER 格式嵌入客户端 在 Rust 中用 include_bytes! 嵌入"
+openssl genrsa -out  license-sign-private.pem 4096
+openssl rsa -in license-sign-private.pem -pubout -out  license-sign-public.pem
+openssl rsa -in license-sign-public.pem  -pubin -outform DER -out license-sign-public.der
