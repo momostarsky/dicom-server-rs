@@ -1,17 +1,11 @@
 [package]
-name = "wado-server"
+name = "wado-license"
 version = "0.1.0"
 edition = "2024"
-
+[profile.release]
+lto = true
+opt-level = "s"
 [dependencies]
-
-dicom-core = { workspace = true }
-dicom-ul = { workspace = true }
-dicom-object = { workspace = true }
-dicom-encoding = { workspace = true }
-dicom-dictionary-std = { workspace = true }
-dicom-transfer-syntax-registry = { workspace = true }
-dicom-pixeldata = { workspace = true }
 actix-web = { workspace = true }
 actix-cors = { workspace = true }
 slog = { workspace = true }
@@ -21,6 +15,7 @@ serde = { workspace = true }
 serde_qs = { workspace = true }
 serde_json = { workspace = true }
 urlencoding = { workspace = true }
+common = { path = "../common" }
 futures-util = { workspace = true }
 axum = { workspace = true }
 tokio = { workspace = true }
@@ -32,7 +27,11 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 redis = { workspace = true }
 url = { workspace = true }
-gdcm_conv = { workspace = true }
-reqwest = { workspace = true }
 openssl = { workspace = true }
-common = { path = "../common" }
+x509-parser = { workspace = true }
+der = { workspace = true }
+pem = { workspace = true }
+hex = { workspace = true }
+regex = { workspace = true }
+lazy_static = { workspace = true }
+tokio-util = { workspace = true }

@@ -14,18 +14,6 @@ pub fn get_redis_connection_with_config(config: &RedisConfig) -> redis::Connecti
     connect_with_config(config)
 }
 
-// 通过配置设置Redis值
-pub(crate) fn set_redis_value_with_config<RV: redis::FromRedisValue>(
-    config: &RedisConfig,
-    key: &str,
-    value: &str,
-) {
-    let mut redis_conn = get_redis_connection_with_config(config);
-    redis_conn
-        .set::<&str, &str, RV>(key, value)
-        .expect("Failed to set value");
-}
-
 // 通过配置设置带过期时间的Redis值
 pub(crate) fn set_redis_value_with_expiry_and_config<RV: redis::FromRedisValue>(
     config: &RedisConfig,
@@ -46,4 +34,30 @@ pub(crate) fn get_redis_value_with_config<RV: redis::FromRedisValue>(
 ) -> Option<RV> {
     let mut redis_conn = get_redis_connection_with_config(config);
     redis_conn.get(key).ok()
+}
+
+pub(crate) fn db_study_entity_is_not_found<RV: redis::FromRedisValue>(
+    config: &RedisConfig,
+    study_uid: &str,
+    expiry_seconds: u64,
+) {
+    let mut redis_conn = get_redis_connection_with_config(config);
+    let key_for_not_found = format!("db:study:{}", study_uid);
+    let _ = redis_conn.set_ex::<&str, &str, RV>(&key_for_not_found, "1", expiry_seconds);
+}
+pub(crate) fn db_study_entity_remove<RV: redis::FromRedisValue>(
+    config: &RedisConfig,
+    study_uid: &str,
+) {
+    let mut redis_conn = get_redis_connection_with_config(config);
+    let key_for_not_found = format!("db:study:{}", study_uid);
+    let _ = redis_conn.del::<&str, RV>(&key_for_not_found);
+}
+pub(crate) fn db_study_entity_is_not_exists<RV: redis::FromRedisValue>(
+    config: &RedisConfig,
+    study_uid: &str,
+) -> Option<RV> {
+    let mut redis_conn = get_redis_connection_with_config(config);
+    let key_for_not_found = format!("db:study:{}", study_uid);
+    redis_conn.get(&key_for_not_found).ok()
 }

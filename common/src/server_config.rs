@@ -1,4 +1,4 @@
-use crate::uid_hash::uid_to_u64;
+
 use config::{Config, ConfigError, Environment, File};
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
@@ -6,6 +6,7 @@ use dotenv::dotenv;
 use serde::Deserialize;
 use std::env;
 use std::sync::Once;
+use crate::string_ext::UidHashString;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct RedisConfig {
@@ -84,7 +85,8 @@ pub struct LicenseServerConfig {
 pub struct AppConfig {
     pub redis: RedisConfig,
     pub kafka: KafkaConfig,
-    pub database: DatabaseConfig,
+    pub main_database: DatabaseConfig,
+    pub secondary_database: DatabaseConfig,
     pub server: ServerConfig,
     pub local_storage: LocalStorageConfig,
     pub dicom_store_scp: DicomStoreScpConfig,
@@ -142,12 +144,21 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
 
             // 打印配置信息（只在首次加载时打印）
             println!("redis:url {:?}", app_config.redis.url);
-            println!("database:dbtype {:?}", app_config.database.dbtype);
-            println!("database:host {:?}", app_config.database.host);
-            println!("database:port {:?}", app_config.database.port);
-            println!("database:username {:?}", app_config.database.username);
-            println!("database:password {:?}", app_config.database.password);
-            println!("database:database {:?}", app_config.database.database);
+            println!("main_database:dbtype {:?}", app_config.main_database.dbtype);
+            println!("main_database:host {:?}", app_config.main_database.host);
+            println!("main_database:port {:?}", app_config.main_database.port);
+            println!("main_database:username {:?}", app_config.main_database.username);
+            println!("main_database:password {:?}", app_config.main_database.password);
+            println!("main_database:database {:?}", app_config.main_database.database);
+
+            println!("secondary_database:dbtype {:?}", app_config.secondary_database.dbtype);
+            println!("secondary_database:host {:?}", app_config.secondary_database.host);
+            println!("secondary_database:port {:?}", app_config.secondary_database.port);
+            println!("secondary_database:username {:?}", app_config.secondary_database.username);
+            println!("secondary_database:password {:?}", app_config.secondary_database.password);
+            println!("secondary_database:database {:?}", app_config.secondary_database.database);
+
+
             println!("server:port {:?}", app_config.server.port);
             println!("server:host {:?}", app_config.server.host);
             println!("server:log_level {:?}", app_config.server.allow_origin);
@@ -353,8 +364,8 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
         }
     }
 }
-pub fn generate_database_connection(app_config: &AppConfig) -> Result<String, String> {
-    let dbconfig = &app_config.database;
+pub fn generate_database_connection(dbconfig: &DatabaseConfig) -> Result<String, String> {
+ 
     let password = dbconfig
         .password
         .replace("@", "%40")
@@ -383,6 +394,36 @@ pub fn generate_database_connection(app_config: &AppConfig) -> Result<String, St
     Ok(db_conn)
 }
 
+pub fn generate_pg_database_connection(dbconfig: &DatabaseConfig) -> Result<String, String> {
+
+    let password = dbconfig
+        .password
+        .replace("@", "%40")
+        .replace(":", "%3A")
+        .replace("/", "%2F")
+        .replace("?", "%3F")
+        .replace("&", "%26")
+        .replace("#", "%23")
+        .replace("[", "%5B")
+        .replace("]", "%5D")
+        .replace("{", "%7B")
+        .replace("}", "%7D")
+        .replace("|", "%7C")
+        .replace("<", "%3C")
+        .replace(">", "%3E")
+        .replace("\\", "%5C")
+        .replace("^", "%5E")
+        .replace("`", "%60");
+
+    let db_conn = format!(
+        "postgresql://{}:{}@{}:{}/{}",
+        dbconfig.username, password, dbconfig.host, dbconfig.port, dbconfig.database
+    );
+    println!("postgresql database connection string: {}", db_conn);
+
+    Ok(db_conn)
+}
+
 /// 获取 dicom study 存储路径: storage_root/{tenant_id}/{study_date}/{study_uid}
 /// 注意: 该路径下可能包含多个 series 目录
 pub fn dicom_study_dir(
@@ -390,9 +431,9 @@ pub fn dicom_study_dir(
     study_date: &str,
     study_uid: &str,
     create_not_exists: bool,
-) -> Result<(String, String), String> {
+) -> Result<(UidHashString, String), String> {
     let app_config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
-    let study_uid_hash = uid_to_u64(study_uid);
+    let study_uid_hash = UidHashString::make_from(study_uid);
     let dicom_store_path = &app_config.local_storage.dicm_store_path;
     let study_dir = format!(
         "{}/{}/{}/{}",
@@ -402,7 +443,7 @@ pub fn dicom_study_dir(
         std::fs::create_dir_all(&study_dir)
             .map_err(|e| format!("Failed to create directory '{}': {}", study_dir, e))?;
     }
-    Ok((study_uid_hash.to_string(), study_dir))
+    Ok((study_uid_hash , study_dir))
 }
 
 pub fn json_metadata_dir(
@@ -427,8 +468,8 @@ pub fn dicom_series_dir(
     study_uid: &str,
     series_uid: &str,
     create_not_exists: bool,
-) -> Result<(String, String, String), String> {
-    let (study_uid_hash, series_uid_hash) = (uid_to_u64(study_uid), uid_to_u64(series_uid));
+) -> Result<(UidHashString, UidHashString, String), String> {
+    let (study_uid_hash, series_uid_hash) = (UidHashString::make_from(study_uid), UidHashString::make_from(series_uid));
     let app_config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
     let dicom_store_path = &app_config.local_storage.dicm_store_path;
     let series_dir = format!(
@@ -440,8 +481,8 @@ pub fn dicom_series_dir(
             .map_err(|e| format!("Failed to create directory '{}': {}", series_dir, e))?;
     }
     Ok((
-        study_uid_hash.to_string(),
-        series_uid_hash.to_string(),
+        study_uid_hash.into(),
+        series_uid_hash.into(),
         series_dir,
     ))
 }

@@ -1,0 +1,30 @@
+[package]
+name = "wado-consumer"
+version = "0.1.0"
+edition = "2024"
+description = "A DICOM consumer that parse DICOM file tags and save into database."
+
+[dependencies]
+clap =  { workspace = true }
+dicom-core =  { workspace = true }
+dicom-ul = { workspace = true }
+dicom-object =  { workspace = true }
+dicom-encoding = { workspace = true }
+dicom-dictionary-std = { workspace = true }
+dicom-transfer-syntax-registry = { workspace = true }
+snafu = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tokio = { workspace = true }
+rdkafka =  { workspace = true }
+serde = { workspace = true }
+sqlx =  { workspace = true }
+common = { path = "../common" }
+serde_json =  { workspace = true }
+
+config = { workspace = true }
+dotenv =  { workspace = true }
+futures = { workspace = true }
+urlencoding =  { workspace = true }
+slog =  { workspace = true }
+slog-term = { workspace = true }

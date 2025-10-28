@@ -1,8 +1,7 @@
-use chrono::NaiveTime;
+use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::fmt;
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Snafu)]
 #[non_exhaustive]
@@ -19,7 +18,7 @@ type BoundedResult<T, E = BoundedStringError> = Result<T, E>;
 #[serde(transparent)]
 #[derive(Default)]
 pub struct BoundedString<const N: usize> {
-    value: String,
+    pub value: String,
 }
 
 impl<const N: usize> BoundedString<N> {
@@ -56,6 +55,11 @@ impl<const N: usize> BoundedString<N> {
         }
     }
     pub fn as_str(&self) -> &str {
+        &self.value
+    }
+
+    // 使用 deref 方式访问
+    pub fn as_ref(&self) -> &String {
         &self.value
     }
 }
@@ -97,7 +101,7 @@ impl<const N: usize> TryFrom<&String> for BoundedString<N> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct FixedLengthString<const N: usize> {
-    value: String,
+    pub(crate) value: String,
 }
 
 impl<const N: usize> FixedLengthString<N> {
@@ -276,281 +280,69 @@ impl TryFrom<&String> for UuidString {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ExtDicomTimeInvalidError {
-    message: String,
-}
-
-impl ExtDicomTimeInvalidError {
-    pub fn new(message: &str) -> Self {
-        ExtDicomTimeInvalidError {
-            message: message.to_string(),
-        }
-    }
-}
-
-impl fmt::Display for ExtDicomTimeInvalidError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Invalid DICOM time: {}", self.message)
-    }
-}
-
-impl std::error::Error for ExtDicomTimeInvalidError {}
-
-/// DICOM时间字符串，格式为 HHMMSS.FFFFFF, 长度为 12, 例如 "123456.123456"
-/// 对DICOM. 时间字符串，比如 "123456.123456" 或 "123456"，都可以解析为 ExtDicomTime
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
-pub struct ExtDicomTime {
-    value: Option<NaiveTime>,
-}
+pub struct UidHashString(pub(crate) BoundedString<20>);
 
-impl fmt::Display for ExtDicomTime {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.value {
-            Some(time) => write!(f, "{}", time.format("%H:%M:%S%.f")),
-            None => write!(f, ""),
-        }
+impl UidHashString {
+    pub fn make_from(uid: &str) -> Self {
+        let mut hasher = SeaHasher::new();
+        uid.hash(&mut hasher);
+        let hash_value = hasher.finish();
+        // 格式化为20位字符串，前面补X
+        let hash_str = format!("{:020X}", hash_value);
+        Self(BoundedString::new_from_str(&hash_str).unwrap())
     }
-}
-impl ExtDicomTime {
-    pub fn new(p0: Option<NaiveTime>) -> Self {
-        Self { value: p0 }
+    pub fn from_bounded_string(bounded: BoundedString<20>) -> Self {
+        Self(bounded)
     }
-
-    pub fn as_naive_time(&self) -> Option<&NaiveTime> {
-        self.value.as_ref()
+    pub fn from_string(s: String) -> Self {
+        Self(BoundedString::new_from_string(&s).unwrap())
     }
 
-    pub fn into_naive_time(self) -> Option<NaiveTime> {
-        self.value
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
     }
-    pub fn from_str(s: &str) -> Option<Self> {
-        if s.is_empty() {
-            return Some(ExtDicomTime::new(None));
-        }
-
-        // 处理不同格式的DICOM时间字符串
-        let normalized_time = Self::normalize_dicom_time(s)?;
-        match NaiveTime::parse_from_str(&normalized_time, "%H%M%S%.f") {
-            Ok(t) => Some(ExtDicomTime::new(Some(t))),
-            Err(_) => None,
-        }
-    }
-
-    /// 标准化DICOM时间字符串，确保毫秒部分为6位
-    pub fn normalize_dicom_time(s: &str) -> Option<String> {
-        if !s.contains('.') {
-            // 没有毫秒部分，直接返回
-            return Some(s.to_string());
-        }
-
-        let parts: Vec<&str> = s.split('.').collect();
-        if parts.len() != 2 {
-            return None;
-        }
-
-        let time_part = parts[0];
-        let mut fraction_part = parts[1].to_string();
-
-        // 补齐或截断小数部分到6位
-        while fraction_part.len() < 6 {
-            fraction_part.push('0');
-        }
-        fraction_part.truncate(6);
-
-        Some(format!("{}.{}", time_part, fraction_part))
-    }
-}
-impl TryFrom<&str> for ExtDicomTime {
-    type Error = ExtDicomTimeInvalidError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        ExtDicomTime::from_str(value).ok_or_else(|| ExtDicomTimeInvalidError::new("Invalid format"))
+    // 使用 deref 方式访问
+    pub fn as_ref(&self) -> &String {
+        self.0.as_ref()
     }
 }
 
-impl TryFrom<&String> for ExtDicomTime {
-    type Error = ExtDicomTimeInvalidError;
-
-    fn try_from(value: &String) -> Result<Self, Self::Error> {
-        ExtDicomTime::from_str(value).ok_or_else(|| ExtDicomTimeInvalidError::new("Invalid format"))
+impl TryFrom<&String> for UidHashString {
+    type Error = BoundedStringError;
+    fn try_from(s: &String) -> BoundedResult<Self> {
+        BoundedString::new_from_string(s).map(|fixed| Self(fixed))
+    }
+}
+// 为 UidHashString 实现 From<String>
+impl From<String> for UidHashString {
+    fn from(s: String) -> Self {
+        // 假设 UidHashString 是基于 BoundedString 或类似包装类型
+        // 根据实际的 UidHashString 定义调整实现
+        UidHashString::try_from(s).unwrap_or_else(|_| {
+            // 或者提供一个默认值或处理错误的方式
+            panic!("Failed to convert String to UidHashString")
+        })
     }
 }
 
-impl TryFrom<String> for ExtDicomTime {
-    type Error = ExtDicomTimeInvalidError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        ExtDicomTime::from_str(&value)
-            .ok_or_else(|| ExtDicomTimeInvalidError::new("Invalid format"))
+// 同时实现 From<&str>
+impl From<&str> for UidHashString {
+    fn from(s: &str) -> Self {
+        UidHashString::try_from(s)
+            .unwrap_or_else(|_| panic!("Failed to convert &str to UidHashString"))
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ExtDicomDateInvalidError {
-    message: String,
-}
-
-impl ExtDicomDateInvalidError {
-    pub fn new(message: &str) -> Self {
-        ExtDicomDateInvalidError {
-            message: message.to_string(),
-        }
-    }
-}
-
-impl fmt::Display for ExtDicomDateInvalidError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Invalid DICOM date: {}", self.message)
-    }
-}
-
-impl std::error::Error for ExtDicomDateInvalidError {}
-
-/// DICOM日期字符串，格式为 YYYYMMDD, 长度为 8, 例如 "20231005"
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(transparent)]
-pub struct ExtDicomDate {
-    value: Option<chrono::NaiveDate>,
-}
-
-impl fmt::Display for ExtDicomDate {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.value {
-            Some(date) => write!(f, "{}", date.format("%Y%m%d")),
-            None => write!(f, ""),
-        }
-    }
-}
-
-impl ExtDicomDate {
-    pub fn new(value: Option<chrono::NaiveDate>) -> Self {
-        Self { value }
-    }
-
-    pub fn as_naive_date(&self) -> Option<&chrono::NaiveDate> {
-        self.value.as_ref()
-    }
-
-    pub fn into_naive_date(self) -> Option<chrono::NaiveDate> {
-        self.value
-    }
-
-    pub fn from_str(s: &str) -> Option<Self> {
-        if s.is_empty() {
-            return Some(ExtDicomDate::new(None));
-        }
-
-        match chrono::NaiveDate::parse_from_str(s, "%Y%m%d") {
-            Ok(date) => Some(ExtDicomDate::new(Some(date))),
-            Err(_) => None,
-        }
-    }
-}
-
-impl TryFrom<&str> for ExtDicomDate {
-    type Error = ExtDicomDateInvalidError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        ExtDicomDate::from_str(value).ok_or_else(|| ExtDicomDateInvalidError::new("Invalid format"))
-    }
-}
-
-impl TryFrom<&String> for ExtDicomDate {
-    type Error = ExtDicomDateInvalidError;
-
-    fn try_from(value: &String) -> Result<Self, Self::Error> {
-        ExtDicomDate::from_str(value).ok_or_else(|| ExtDicomDateInvalidError::new("Invalid format"))
-    }
-}
-
-impl TryFrom<String> for ExtDicomDate {
-    type Error = ExtDicomDateInvalidError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        ExtDicomDate::from_str(&value)
-            .ok_or_else(|| ExtDicomDateInvalidError::new("Invalid format"))
-    }
-}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::DateTime;
+    use chrono::{DateTime, NaiveDate};
 
     use dicom_encoding::snafu::ResultExt;
     use snafu::Whatever;
-    #[test]
-    fn test_dicom_date_from_str() {
-        // 测试有效的日期格式
-        let date = ExtDicomDate::from_str("20231005");
-        assert!(date.is_some());
-        let date = date.unwrap();
-        assert!(date.value.is_some());
 
-        // 测试空字符串
-        let date = ExtDicomDate::from_str("");
-        assert!(date.is_some());
-        let date = date.unwrap();
-        assert!(date.value.is_none());
-    }
-
-    #[test]
-    fn test_dicom_date_invalid_format() {
-        // 测试无效的日期格式
-        let date = ExtDicomDate::from_str("2023-10-05"); // 不符合DICOM格式
-        assert!(date.is_none());
-
-        let date = ExtDicomDate::from_str("231005"); // 缺少年份
-        assert!(date.is_none());
-    }
-
-    #[test]
-    fn test_dicom_date_try_from_str() {
-        // 测试 TryFrom<&str>
-        let date_result: Result<ExtDicomDate, ExtDicomDateInvalidError> = "20231005".try_into();
-        assert!(date_result.is_ok());
-
-        // 测试无效格式
-        let date_result: Result<ExtDicomDate, ExtDicomDateInvalidError> = "invalid".try_into();
-        assert!(date_result.is_err());
-    }
-
-    #[test]
-    fn test_dicom_date_try_from_string() {
-        // 测试 TryFrom<String>
-        let date_result: Result<ExtDicomDate, ExtDicomDateInvalidError> = "20231005".to_string().try_into();
-        assert!(date_result.is_ok());
-
-        // 测试无效格式
-        let date_result: Result<ExtDicomDate, ExtDicomDateInvalidError> = "invalid".to_string().try_into();
-        assert!(date_result.is_err());
-    }
-
-    #[test]
-    fn test_dicom_date_display() {
-        // 测试有值的日期显示
-        let dicom_date = ExtDicomDate::from_str("20231005").unwrap();
-        let display_str = format!("{}", dicom_date);
-        assert_eq!(display_str, "20231005");
-
-        // 测试无值的日期显示
-        let dicom_date_none = ExtDicomDate::new(None);
-        let display_str_none = format!("{}", dicom_date_none);
-        assert_eq!(display_str_none, "");
-    }
-
-    #[test]
-    fn test_dicom_date_accessors() {
-        // 测试访问器方法
-        let dicom_date = ExtDicomDate::from_str("20231005").unwrap();
-        let naive_date = dicom_date.as_naive_date();
-        assert!(naive_date.is_some());
-
-        let dicom_date_none = ExtDicomDate::new(None);
-        let naive_date_none = dicom_date_none.as_naive_date();
-        assert!(naive_date_none.is_none());
-    }
     #[test]
     fn test_bounded_string_valid_length() {
         // 测试正常长度的字符串
@@ -668,6 +460,44 @@ mod tests {
             .to_string()
         );
     }
+
+    use std::fmt;
+
+    // 为 BoundedString 实现 Display trait
+    impl<const N: usize> fmt::Display for BoundedString<N> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.value)
+        }
+    }
+
+    // 为 FixedLengthString 实现 Display trait
+    impl<const N: usize> fmt::Display for FixedLengthString<N> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.value)
+        }
+    }
+
+    // 为 SopUidString 实现 Display trait
+    impl fmt::Display for SopUidString {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.0.as_str())
+        }
+    }
+
+    // 为 DicomDateString 实现 Display trait
+    impl fmt::Display for DicomDateString {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.0.as_str())
+        }
+    }
+
+    // 为 UuidString 实现 Display trait
+    impl fmt::Display for UuidString {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.0.as_str())
+        }
+    }
+
     #[test]
     fn test_dicom_store_meta_json_fmt() {
         use crate::dicom_object_meta::DicomStoreMeta;
@@ -686,11 +516,11 @@ mod tests {
             created_time: DateTime::from_timestamp(1728971020, 104453242)
                 .unwrap()
                 .naive_utc(),
-            series_uid_hash: BoundedString::<20>::new("102145856875".to_string()).unwrap(),
-            study_uid_hash: BoundedString::<20>::new("2021013010174".to_string()).unwrap(),
+            series_uid_hash: UidHashString::make_from("123456789"),
+            study_uid_hash: UidHashString::make_from("323456789"),
             accession_number: "14769824".try_into().unwrap(),
             target_ts: "1.2.840.10008.1.2.1".try_into().unwrap(),
-            study_date: "20210130".try_into().unwrap(),
+            study_date: NaiveDate::from_ymd_opt(2021, 1, 30).unwrap(),
             transfer_status: crate::dicom_object_meta::TransferStatus::NoNeedTransfer,
             source_ip: "127.0.0.1".try_into().unwrap(),
             source_ae: "STORE-SCU".try_into().unwrap(),
@@ -707,3 +537,4 @@ mod tests {
         println!("Serialized JSON: {}", json);
     }
 }
+

@@ -4,52 +4,61 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-md5 = "0.8.0"
-snafu = "0.8.9"
-uuid = { version = "1.8.1", features = ["v7", "fast-rng"] }
+md5 = { workspace = true }
+const-crc32 = { workspace = true }
+snafu = { workspace = true }
+uuid = { workspace = true }
 serde_json = "1.0.145"
-serde = { version = "1.0.225", features = ["derive"] }
-config = "0.15.16"  # 配置文件解析
-dotenv = "0.15.0"
-clap = { version = "4.5.47", features = ["derive"] }
-dicom-core = {  version = "0.9.0"  }
-dicom-ul = { version = "0.9.0", features = ["async"] }
-dicom-object = {  version = "0.9.0" }
-dicom-encoding = {  version = "0.9.0" }
-dicom-pixeldata = {  version = "0.9.0" , features = ["native",  "jpeg","rle", "image","jpegxl", "openjp2", "rayon","deflate"] }
-dicom-dictionary-std = { version = "0.9.0" }
-dicom-transfer-syntax-registry = {  version = "0.9.0" }
-seahash = "4.1.0"
-async-trait = "0.1.89"
-sqlx = { version = "0.8.6", features = ["mysql", "chrono",
+serde = { workspace = true, features = ["derive"] }
+config = { workspace = true }  # 配置文件解析
+dotenv = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+dicom-core = { workspace = true }
+dicom-ul = { workspace = true, features = ["async"] }
+dicom-object = {workspace = true }
+dicom-encoding = { workspace = true }
+dicom-pixeldata = { workspace = true, features = ["native", "jpeg", "rle", "image", "jpegxl", "openjp2", "rayon", "deflate"] }
+dicom-dictionary-std = { workspace = true }
+dicom-transfer-syntax-registry = { workspace = true }
+seahash = { workspace = true }
+async-trait = { workspace = true }
+sqlx = { workspace = true, features = ["mysql", "chrono",
     "runtime-tokio-rustls",
     "mysql",
+    "postgres",
     "macros",
     "runtime-tokio-native-tls"] }
-tracing = "0.1.41"
-tokio = { version = "1.47.1", features = ["full"] }
-urlencoding = "2.1.3"
-url = "2.5.7"
-slog = "2.8.1"
-slog-term = "2.9.2"
-slog-async = "2.8.0"
-slog-stdlog = "4.1.1"
-slog-scope = "4.4.0"
-rdkafka = "0.34.0"
-futures = "0.3.31"
-futures-util = "0.3.31"
-chrono = { version = "0.4.42", features = ["serde"] }
-rayon = "1.11.0"
-thiserror = "2.0.16"
-encoding_rs = "0.8.35"
-gdcm_conv = "0.1.7"
-rstest = { version = "0.26.1"  }
-openssl = { version = "0.10.73", features = ["v102", "vendored"] }  # 自带 OpenSSL，无需额外安装
-x509-parser = "0.13.2"  # 请检查最新版本
-der = "0.7.10"
-pem = "1.1.1"
-hex = "0.4.3"        # x509-parser 可能依赖它
-regex = "1.11.2"
-lazy_static = "1.5.0"
-tempfile = "3.22.0"
-reqwest = { version = "0.11.27", features = ["json"] }
+tracing = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+urlencoding =  { workspace = true }
+url =  { workspace = true }
+slog =  { workspace = true }
+slog-term =  { workspace = true }
+slog-async =  { workspace = true }
+slog-stdlog =  { workspace = true }
+slog-scope =  { workspace = true }
+rdkafka =  { workspace = true }
+futures =  { workspace = true }
+futures-util =  { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+rayon =  { workspace = true }
+thiserror = { workspace = true }
+encoding_rs =  { workspace = true }
+gdcm_conv = { workspace = true }
+rstest = { workspace = true }
+openssl = { workspace = true, features = ["v102", "vendored"] }  # 自带 OpenSSL，无需额外安装
+x509-parser = { workspace = true }  # 请检查最新版本
+der =  { workspace = true }
+pem =  { workspace = true }
+hex =  { workspace = true } # x509-parser 可能依赖它
+regex = { workspace = true }
+lazy_static =  { workspace = true }
+tempfile =  { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+
+aes-gcm = { workspace = true }
+rand = { workspace = true }
+base64 = { workspace = true }
+cipher = "0.4.4"
+salsa20 = "0.10.2"
+generic-array = "0.14.7"

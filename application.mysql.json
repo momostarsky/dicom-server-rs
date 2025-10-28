@@ -3,12 +3,12 @@
     "url": "redis://192.168.1.14:6379/"
   },
   "main_database": {
-    "dbtype": "postgresql",
+    "dbtype": "mysql",
     "host": "192.168.1.14",
-    "port": 5432,
+    "port": 3306,
     "username": "root",
     "password": "jp#123",
-    "database": "postgres"
+    "database": "dicomdb"
   },
   "secondary_database": {
     "dbtype": "DORIS",

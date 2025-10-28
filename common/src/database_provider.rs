@@ -1,6 +1,7 @@
-use crate::database_entities::{ImageEntity, PatientEntity, SeriesEntity, StudyEntity};
+use crate::database_entities::{SeriesEntity, StudyEntity};
 use async_trait::async_trait;
 use thiserror::Error;
+use crate::dicom_object_meta::DicomStateMeta;
 
 #[derive(Error, Debug)]
 pub enum DbError {
@@ -19,108 +20,24 @@ pub enum DbError {
 
 #[async_trait]
 pub trait DbProvider: Send + Sync {
-
-
-    async fn echo(&self) -> Result<String, DbError>;
-
-    async fn save_patient_info(
-        &self,
-        tenant_id: &str,
-        patient_lists: &[PatientEntity],
-    ) -> Result<(), DbError>;
-    async fn save_study_info(
-        &self,
-        tenant_id: &str,
-        study_lists: &[StudyEntity],
-    ) -> Result<(), DbError>;
-    async fn save_series_info(
-        &self,
-        tenant_id: &str,
-        series_lists: &[SeriesEntity],
-    ) -> Result<(), DbError>;
-
-    async fn save_instance_info(
-        &self,
-        tenant_id: &str,
-        dicom_obj: &[ImageEntity],
-    ) -> Result<(), DbError>;
-    // 根据DICOM对象的Study Instance UID、Series Instance UID、SOP Instance UID删除DICOM信息
-    // 返回值：Some(true) 表示成功删除，Some(false) 表示未删除，None 表示删除失败
-    async fn delete_study_info(&self, tenant_id: &str, study_uid: &str) -> Result<bool, DbError>;
-
-    // 根据DICOM对象的Study Instance UID、Series Instance UID删除DICOM信息
-    // 返回值：Some(true) 表示成功删除，Some(false) 表示未删除，None 表示删除失败
-    async fn delete_series_info(
+    async fn get_study_info(
         &self,
         tenant_id: &str,
         study_uid: &str,
+    ) -> Result<Option<StudyEntity>, DbError>;
+    async fn get_series_info(
+        &self,
+        tenant_id: &str,
         series_uid: &str,
-    ) -> Result<bool, DbError>;
-    // 根据DICOM对象的Study Instance UID、Series Instance UID、SOP Instance UID删除DICOM信息
-    // 返回值：Some(true) 表示成功删除，Some(false) 表示未删除，None 表示删除失败
-    async fn delete_instance_info(
-        &self,
-        tenant_id: &str,
-        study_uid: &str,
-        series_uid: &str,
-        instance_uid: &str,
-    ) -> Result<bool, DbError>;
+    ) -> Result<Option<SeriesEntity>, DbError>;
 
-    // 判断DICOM对象是否存在
-    // 返回值：Some(true) 表示存在，Some(false) 表示不存在，None 表示查询失败
-    async fn patient_exists(&self, tenant_id: &str, patient_id: &str) ->Result<bool, DbError>;
-    // 判断DICOM对象是否存在
-    // 参数：
-    //   - tenant_id: 租户ID
-    //   - patient_id: 患者ID
-    //   - study_uid: Study Instance UID
-    // 返回值：Some(true) 表示存在，Some(false) 表示不存在，None 表示查询失败
-    async fn patient_study_exists(
+    async fn save_state_info(
         &self,
-        tenant_id: &str,
-        patient_id: &str,
-        study_uid: &str,
-    ) -> Result<bool, DbError>;
-    // 判断DICOM对象是否存在
-    // 参数：
-    //   - tenant_id: 租户ID
-    //   - patient_id: 患者ID
-    //   - study_uid: Study Instance UID
-    //   - series_uid: Series Instance UID
-    // 返回值：Some(true) 表示存在，Some(false) 表示不存在，None 表示查询失败
-    async fn patient_series_exists(
-        &self,
-        tenant_id: &str,
-        patient_id: &str,
-        study_uid: &str,
-        series_uid: &str,
-    ) -> Result<bool, DbError>;
-    // 判断DICOM对象是否存在
-    // 参数：
-    //   - tenant_id: 租户ID
-    //   - patient_id: 患者ID
-    //   - study_uid: Study Instance UID
-    //   - instance_uid: SOP Instance UID
-    // 返回值：Some(true) 表示存在，Some(false) 表示不存在，None 表示查询失败
-    async fn patient_instance_exists(
-        &self,
-        tenant_id: &str,
-        patient_id: &str,
-        study_uid: &str,
-        series_uid: &str,
-        instance_uid: &str,
-    ) -> Result<bool, DbError>;
-
-    async fn persist_to_database(
-        &self,
-        tenant_id: &str,
-        patient_list: &[PatientEntity],
-        study_list: &[StudyEntity],
-        series_list: &[SeriesEntity],
-        images_list: &[ImageEntity],
+        state_meta: &DicomStateMeta,
     ) -> Result<(), DbError>;
 
-
-    async fn get_study_info(&self, tenant_id: &str, study_uid: &str) -> Result<Option<StudyEntity>, DbError>;
-    async fn get_series_info(&self, tenant_id: &str, series_uid: &str) -> Result<Option<SeriesEntity>, DbError>;
+    async fn save_state_list(
+        &self,
+        state_meta: &[DicomStateMeta],
+    ) -> Result<(), DbError>;
 }

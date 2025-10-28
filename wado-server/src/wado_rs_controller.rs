@@ -1,4 +1,4 @@
-use crate::redis_helper::{get_redis_value_with_config, set_redis_value_with_expiry_and_config};
+use crate::redis_helper::{db_study_entity_is_not_exists, db_study_entity_is_not_found, db_study_entity_remove, get_redis_value_with_config, set_redis_value_with_expiry_and_config};
 use crate::{AppState, common_utils};
 use actix_web::http::header::ACCEPT;
 use actix_web::{HttpRequest, HttpResponse, Responder, get, web, web::Path};
@@ -9,33 +9,16 @@ use common::dicom_utils::get_tag_values;
 use common::server_config::{dicom_series_dir, dicom_study_dir, json_metadata_dir};
 use dicom_dictionary_std::tags;
 use dicom_object::OpenFileOptions;
-use serde::Deserialize;
+use dicom_object::collector::CharacterSetOverride;
 use serde_json::{Map, json};
 use slog::{error, info};
 use std::path::PathBuf;
 
-#[derive(Deserialize, Debug)]
-struct StudyQueryParams {
-    #[serde(rename = "charset")]
-    #[warn(dead_code)]
-    charset: Option<String>,
-    #[serde(rename = "anonymize")]
-    anonymize: Option<bool>,
-    #[serde(rename = "includeField")]
-    include_field: Option<Vec<String>>,
-    #[serde(rename = "excludeField")]
-    exclude_field: Option<Vec<String>>,
-}
-static WADO_CHARSET: &str = "charset";
-static WADO_ANONYMIZE: &str = "anonymize";
-static WADO_INCLUDE_FIELD: &str = "includeField";
-static WADO_EXCLUDE_FIELD: &str = "excludeField";
-
 static ACCEPT_DICOM_JSON_TYPE: &str = "application/dicom+json";
 static ACCEPT_JSON_TYPE: &str = "application/json";
-static ACCEPT_DICOM_TYPE: &str = "application/dicom";
+//static ACCEPT_DICOM_TYPE: &str = "application/dicom";
 static ACCEPT_OCTET_STREAM: &str = "application/octet-stream";
-static MULIPART_ACCEPT_OCTET_STREAM: &str = "multipart/related; type=application/octet-stream";
+//static MULIPART_ACCEPT_OCTET_STREAM: &str = "multipart/related; type=application/octet-stream";
 
 // 检查Accept头部是否包含指定的MIME类型（不区分大小写）
 fn is_accept_type_supported(accept_header: &str, expected_type: &str) -> bool {
@@ -89,6 +72,7 @@ async fn get_study_info_with_cache(
                     // 将从数据库获取的数据存入Redis缓存
                     match serde_json::to_string(&info) {
                         Ok(study_info_json) => {
+                            db_study_entity_remove::<String>(&app_state.config.redis, &study_uid);
                             set_redis_value_with_expiry_and_config::<String>(
                                 &app_state.config.redis,
                                 &redis_key,
@@ -106,7 +90,13 @@ async fn get_study_info_with_cache(
                     Ok(info)
                 }
                 Ok(None) => {
+                    error!(
+                        log,
+                        "Study not found in database: {},{}", tenant_id, study_uid
+                    );
                     let error_msg = format!("Study not found: {},{}", tenant_id, study_uid);
+                    // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
+                    db_study_entity_is_not_found::<String>(&app_state.config.redis, &study_uid, 30);
                     Err(HttpResponse::NotFound().body(error_msg))
                 }
                 Err(e) => {
@@ -199,6 +189,15 @@ async fn retrieve_study_metadata(
         log,
         "retrieve_study_metadata Tenant ID: {}  and StudyUID:{} ", tenant_id, study_uid
     );
+    // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
+    let is_not_found = db_study_entity_is_not_exists::<String>(&app_state.config.redis, &study_uid);
+
+    if is_not_found.is_some() {
+        return HttpResponse::NotFound().body(format!(
+            "retrieve_study_metadata Study not found in database retry after 30 seconds: {},{}",
+            tenant_id, study_uid
+        ));
+    }
     // let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
 
     // if accept != Some(ACCEPT_DICOM_JSON_TYPE) {
@@ -294,6 +293,14 @@ async fn retrieve_series_metadata(
             ACCEPT_DICOM_JSON_TYPE
         ));
     }
+    let is_not_found = db_study_entity_is_not_exists::<String>(&app_state.config.redis, &study_uid);
+
+    if is_not_found.is_some() {
+        return HttpResponse::NotFound().body(format!(
+            "retrieve_series_metadata Study not found in database retry after 30 seconds: {},{}",
+            tenant_id, study_uid
+        ));
+    }
     // ... existing code ...
     let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state).await {
         Ok(info) => info,
@@ -360,6 +367,7 @@ async fn retrieve_series_metadata(
     for file_path in &files {
         // 读取 DICOM 文件内容
         let sop_json = match OpenFileOptions::new()
+            .charset_override(CharacterSetOverride::AnyVr)
             .read_until(tags::PIXEL_DATA)
             .open_file(file_path)
         {

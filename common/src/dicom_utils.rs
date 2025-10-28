@@ -68,14 +68,14 @@ pub fn get_datetime_value_dicom(dicom_obj: &InMemDicomObject, tag: Tag) -> Optio
     })
 }
 
-pub fn parse_dicom_date_from_sql(s: &str) -> Option<NaiveDate> {
+pub fn parse_dicom_date_from_str(s: &str) -> Option<NaiveDate> {
     match NaiveDate::parse_from_str(&s[..], "%Y-%m-%d") {
         Ok(date) => Some(date),
         Err(_) => None,
     }
 }
 
-pub  fn parse_dicom_time_from_sql(s: &str) -> Option<NaiveTime> {
+pub  fn parse_dicom_time_from_str(s: &str) -> Option<NaiveTime> {
     match NaiveTime::parse_from_str(&s[..], "%H:%M:%S%.f") {
         Ok(date) => Some(date),
         Err(_) => None,
