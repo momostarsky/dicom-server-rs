@@ -17,7 +17,7 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let path = std::path::Path::new(p0);
+    let path = Path::new(p0);
 
     if path.is_file() {
         // 如果是单个文件，直接检查是否为DICOM文件
