@@ -43,7 +43,7 @@ openssl req -x509 -new -nodes \
   -sha256 \
   -days 3650 \
   -out ca.crt \
-  -subj "/C=CN/ST=Beijing/L=Beijing/O=DicomOrg/CN=$CA_NAME"
+  -subj "/C=CN/ST=Zhejiang/L=Hangzhou/O=DicomOrg/CN=$CA_NAME"
 
 echo "✅ CA 证书已生成: ca.crt"
 
@@ -70,8 +70,8 @@ prompt             = no
 
 [ req_distinguished_name ]
 C  = CN
-ST = Beijing
-L  = Beijing
+ST = Zhejiang
+L  = Hangzhou
 O  = DicomOrg
 CN = $DOMAIN
 
@@ -150,3 +150,110 @@ echo "   - 将 ca.crt 导入操作系统或浏览器的「受信任根证书颁�
 echo "   - Caddy 配置示例："
 echo "        tls /path/to/server.crt /path/to/server.key"
 echo ""
+
+# =============================================================================
+# 8. 生成用于应用层加解密的 RSA 公私钥对（非 TLS 用途）
+#    - 公钥 (encrypt-public.pem)：用于加密数据（可公开）
+#    - 私钥 (encrypt-private.key)：用于解密数据（必须保密！）
+#    用途示例：License 文件加密、配置加密、API 安全传输等
+# =============================================================================
+echo "🔐 正在生成用于加解密的 RSA 公私钥对..."
+
+# 生成私钥（4096 位，更高安全性）
+openssl genrsa -out encrypt-private.key 4096
+
+# 从私钥提取公钥（PEM 格式，标准公钥）
+openssl rsa -in encrypt-private.key -pubout -out encrypt-public.pem
+
+# 设置私钥权限（仅所有者可读写）
+chmod 600 encrypt-private.key
+chmod 644 encrypt-public.pem
+
+echo "✅ 加解密密钥对已生成:"
+echo "   - 私钥（解密用）: encrypt-private.key"
+echo "   - 公钥（加密用）: encrypt-public.pem"
+
+# =============================================================================
+# 9. （可选）演示：如何用这对密钥加解密一段文本
+# =============================================================================
+echo ""
+echo "🧪 示例：使用公钥加密、私钥解密一段文本（test.txt）..."
+
+echo "This is a secret message for wado-license." > test.txt
+
+# 使用公钥加密（注意：RSA 只能加密小于密钥长度的数据，通常用于加密对称密钥）
+openssl rsautl -encrypt -inkey encrypt-public.pem -pubin -in test.txt -out test.txt.enc
+
+# 使用私钥解密
+openssl rsautl -decrypt -inkey encrypt-private.key -in test.txt.enc -out test.txt.dec
+
+# 验证是否一致
+if cmp -s test.txt test.txt.dec; then
+    echo "✅ 加解密成功：原始文件与解密文件一致！"
+else
+    echo "❌ 加解密失败！"
+fi
+
+# 清理测试文件（可选）
+rm -f test.txt test.txt.enc test.txt.dec
+
+# =============================================================================
+# 10. （更新版）使用 pkeyutl 进行 RSA 公钥加密 / 私钥解密（兼容 OpenSSL 3.0+）
+# =============================================================================
+echo ""
+echo "🧪 示例：使用 pkeyutl（OpenSSL 3.0+ 推荐）进行加解密..."
+
+echo "This is a secret message for wado-license." > test.txt
+
+# 🔒 使用公钥加密
+openssl pkeyutl -encrypt \
+  -in test.txt \
+  -inkey encrypt-public.pem -pkeyopt rsa_padding_mode:pkcs1\
+  -pubin \
+  -out test.txt.enc
+
+# 🔓 使用私钥解密
+openssl pkeyutl -decrypt \
+  -in test.txt.enc \
+  -inkey encrypt-private.key -pkeyopt rsa_padding_mode:pkcs1\
+  -out test.txt.dec
+
+# 验证是否一致
+if cmp -s test.txt test.txt.dec; then
+    echo "✅ 加解密成功：原始文件与解密文件一致！"
+else
+    echo "❌ 加解密失败！"
+fi
+echo ""
+echo "🧪 示例：oaep SHA256 进行加解密..."
+echo "This is a secret message for wado-license." > plaintext.txt
+# 加密
+openssl pkeyutl -encrypt \
+  -in plaintext.txt \
+  -inkey encrypt-public.pem -pubin \
+  -pkeyopt rsa_padding_mode:oaep \
+  -pkeyopt rsa_oaep_md:sha256 \
+  -out ciphertext.bin
+
+# 解密（需相同参数）
+openssl pkeyutl -decrypt \
+  -in ciphertext.bin \
+  -inkey encrypt-private.key \
+  -pkeyopt rsa_padding_mode:oaep \
+  -pkeyopt rsa_oaep_md:sha256 \
+  -out plaintext.dec
+
+# 验证是否一致
+if cmp -s plaintext.txt plaintext.dec; then
+     echo "✅ 加解密成功：原始文件与解密文件一致！"
+else
+     echo "❌ 加解密失败！"
+fi
+
+# 清理测试文件
+rm -f test.txt test.txt.enc test.txt.dec   plaintext.txt plaintext.dec   ciphertext.bin
+echo ""
+echo "📌 使用说明："
+echo "   - 在客户端/前端：使用 encrypt-public.pem 对敏感数据加密后传输"
+echo "   - 在服务端（wado-license）：使用 encrypt-private.key 解密数据"
+echo "   - 注意：RSA 不适合直接加密大文件，建议结合 AES（混合加密）"
