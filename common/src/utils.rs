@@ -41,7 +41,10 @@ pub fn collect_dicom_file(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
             if path.is_dir() {
                 // 递归遍历子目录
                 collect_dicom_file(&path, files);
-            } else if path.extension().map_or(false, |ext| ext.eq_ignore_ascii_case( "dcm") ) {
+            } else if path
+                .extension()
+                .map_or(false, |ext| ext.eq_ignore_ascii_case("dcm"))
+            {
                 // 添加.dcm文件到列表
                 files.push(path);
             }
@@ -164,21 +167,36 @@ pub async fn group_dicom_state(
             .open_file(String::from(message.file_path.as_str()))
         {
             Ok(dicom_obj) => {
-                let state_meta = make_state_info(message.tenant_id.as_str(), &dicom_obj, study_uid);
+                let state_meta =
+                    match make_state_info(message.tenant_id.as_str(), &dicom_obj, study_uid) {
+                        Ok(state_meta) => state_meta,
+                        Err(err) => {
+                            error!(
+                                logger,
+                                "Failed to extract state meta from file: {} , message: {:?}",
+                                message.file_path.as_str(),
+                                err
+                            );
+                            continue;
+                        }
+                    };
                 let image_entity =
-                    make_image_info(message.tenant_id.as_str(), &dicom_obj,  space_size );
-                if state_meta.is_ok() && image_entity.is_ok() {
-                    state_metas.push(state_meta.unwrap());
+                    match make_image_info(message.tenant_id.as_str(), &dicom_obj, space_size) {
+                        Ok(image_entity) => image_entity,
+                        Err(err) => {
+                            error!(
+                                logger,
+                                "Failed to extract image entity from file: {} , message: {:?}",
+                                message.file_path.as_str(),
+                                err
+                            );
+                            continue;
+                        }
+                    };
 
-                    image_entities.push(image_entity.unwrap());
-                } else {
-                    error!(
-                        logger,
-                        "Failed to extract state or image entity from file: {} , message: {:?}",
-                        message.file_path.as_str(),
-                        message
-                    );
-                }
+                state_metas.push(state_meta);
+
+                image_entities.push(image_entity);
             }
             Err(err) => {
                 error!(

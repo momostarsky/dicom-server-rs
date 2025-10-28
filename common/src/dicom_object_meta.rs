@@ -376,10 +376,10 @@ pub fn make_image_info(
 
     let content_time = dicom_utils::get_text_value(dicom_obj, tags::CONTENT_TIME)
         .filter(|v| !v.is_empty())
-        .map(|v| NaiveTime::parse_from_str(v.as_str(), "%H%M%S.%f"))
+        .map(|v| parse_dicom_time(v.as_str()))
         .transpose()
         .map_err(|_| {
-            DicomParseError::InvalidTimeFormat("Failed to convert study time".to_string())
+            DicomParseError::InvalidTimeFormat("Failed to convert content_time".to_string())
         })?;
 
     let image_type = dicom_utils::get_text_value(dicom_obj, tags::IMAGE_TYPE)
@@ -546,7 +546,22 @@ fn make_crc32(tenante_id: &str, study_uid: Option<&str>) -> u32 {
     }
     const_crc32::crc32(&data)
 }
-
+/// 解析DICOM时间字符串，支持多种格式：
+/// - %H%M%S.%f (带毫秒)
+/// - %H%M%S. (带点但无毫秒)
+/// - %H%M%S (不带毫秒)
+fn parse_dicom_time(time_str: &str) -> Result<NaiveTime, chrono::ParseError> {
+    // 尝试解析带毫秒的格式 (%H%M%S.%f)
+    NaiveTime::parse_from_str(time_str, "%H%M%S.%f")
+        .or_else(|_| {
+            // 尝试解析带点但无毫秒的格式 (%H%M%S.)
+            NaiveTime::parse_from_str(time_str, "%H%M%S.")
+        })
+        .or_else(|_| {
+            // 尝试解析不带毫秒的格式 (%H%M%S)
+            NaiveTime::parse_from_str(time_str, "%H%M%S")
+        })
+}
 pub fn make_state_info(
     tenant_id: &str,
 
@@ -588,7 +603,7 @@ pub fn make_state_info(
 
     let patient_birth_time = dicom_utils::get_text_value(dicom_obj, tags::PATIENT_BIRTH_TIME)
         .filter(|v| !v.is_empty())
-        .map(|v| NaiveTime::parse_from_str(v.as_str(), "%H%M%S.%f"))
+        .map(|v| parse_dicom_time(v.as_str()))
         .transpose()
         .map_err(|_| {
             DicomParseError::InvalidTimeFormat("Failed to convert patient birth time".to_string())
@@ -632,7 +647,7 @@ pub fn make_state_info(
     // 检查相关信息
     let study_time = dicom_utils::get_text_value(dicom_obj, tags::STUDY_TIME)
         .filter(|v| !v.is_empty())
-        .map(|v| NaiveTime::parse_from_str(v.as_str(), "%H%M%S.%f"))
+        .map(|v| parse_dicom_time(v.as_str()))
         .transpose()
         .map_err(|_| {
             DicomParseError::InvalidTimeFormat("Failed to convert study time".to_string())
@@ -689,7 +704,7 @@ pub fn make_state_info(
 
     let series_time = dicom_utils::get_text_value(dicom_obj, tags::SERIES_TIME)
         .filter(|v| !v.is_empty())
-        .map(|v| NaiveTime::parse_from_str(v.as_str(), "%H%M%S.%f"))
+        .map(|v| parse_dicom_time(v.as_str()))
         .transpose()
         .map_err(|_| {
             DicomParseError::InvalidTimeFormat("Failed to convert series time".to_string())
@@ -819,14 +834,32 @@ pub fn make_state_info(
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
-    //
-    // use dicom_object::collector::CharacterSetOverride;
-    // use rstest::rstest;
-    // use std::fs;
-    // use std::path::Path;
+    use super::*;
 
-    // #[rstest]
+    use dicom_object::collector::CharacterSetOverride;
+    use rstest::rstest;
+    use std::fs;
+    use std::path::Path;
+
+    // 递归收集目录及其子目录中的所有.dcm文件
+    fn collect_dicom_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    // 递归遍历子目录
+                    collect_dicom_files(&path, files);
+                } else if path
+                    .extension()
+                    .map_or(false, |ext| ext.eq_ignore_ascii_case("dcm"))
+                {
+                    // 添加.dcm文件到列表
+                    files.push(path);
+                }
+            }
+        }
+    }
+    #[rstest]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/107")]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/108")]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/109")]
@@ -876,83 +909,84 @@ mod tests {
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/153")]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/154")]
     // #[case("/media/dhz/DCP/DicomTestDataSet/4.90")]
+    #[case("/home/dhz/jpdata/CDSS/DicomTest/89269")]
 
-    // fn test_make_state_info_with_dicom_files(#[case] dicom_dir: &str) {
-    //     // let dicom_dir = "/media/dhz/DCP/DicomTestDataSet/dcmFiles/103";
-    //
-    //     // 检查目录是否存在
-    //     if !Path::new(dicom_dir).exists() {
-    //         println!("DICOM test directory not found: {}", dicom_dir);
-    //         return;
-    //     }
-    //
-    //     // 递归遍历目录及其子目录中的所有.dcm文件
-    //     let mut dicom_files = Vec::new();
-    //
-    //     // 使用递归函数收集所有.dcm文件
-    //     collect_dicom_files(Path::new(dicom_dir), &mut dicom_files);
-    //
-    //     println!("Found {} DICOM files", dicom_files.len());
-    //
-    //     for (index, path) in dicom_files.iter().enumerate() {
-    //         println!(
-    //             "Processing file {}/{}: {:?}",
-    //             index + 1,
-    //             dicom_files.len(),
-    //             path
-    //         );
-    //
-    //         // 尝试打开DICOM文件
-    //         match dicom_object::OpenFileOptions::new()
-    //             .charset_override(CharacterSetOverride::AnyVr)
-    //             .read_until(tags::PIXEL_DATA)
-    //             .open_file(path)
-    //         {
-    //             Ok(dicom_obj) => {
-    //                 // 尝试解析DICOM对象
-    //                 let result = make_state_info("1234567890", &dicom_obj, None);
-    //
-    //                 match result {
-    //                     Ok(state_meta) => {
-    //                         // 验证必填字段
-    //                         assert!(
-    //                             !state_meta.patient_id.as_str().is_empty(),
-    //                             "Patient ID should not be empty in file: {:?}",
-    //                             path
-    //                         );
-    //                         assert!(
-    //                             !state_meta.study_uid.as_str().is_empty(),
-    //                             "Study UID should not be empty in file: {:?}",
-    //                             path
-    //                         );
-    //                         assert!(
-    //                             !state_meta.series_uid.as_str().is_empty(),
-    //                             "Series UID should not be empty in file: {:?}",
-    //                             path
-    //                         );
-    //                         assert!(
-    //                             !state_meta.modality.unwrap().as_str().is_empty(),
-    //                             "Modality should not be empty in file: {:?}",
-    //                             path
-    //                         );
-    //
-    //                         println!("Successfully parsed file: {:?}", path);
-    //                     }
-    //                     Err(e) => {
-    //                         eprintln!("Error parsing file {:?}: {:?}", path, e);
-    //                         panic!("Failed to parse DICOM file {:?}: {:?}", path, e);
-    //                     }
-    //                 }
-    //             }
-    //             Err(e) => {
-    //                 eprintln!("Error opening file {:?}: {:?}", path, e);
-    //                 // std::fs::remove_file(path).expect("Failed to delete file");
-    //             }
-    //         }
-    //     }
-    //
-    //     println!("All DICOM files processed successfully");
-    // }
+    fn test_make_state_info_with_dicom_files(#[case] dicom_dir: &str) {
+        // let dicom_dir = "/media/dhz/DCP/DicomTestDataSet/dcmFiles/103";
+
+        // 检查目录是否存在
+        if !Path::new(dicom_dir).exists() {
+            println!("DICOM test directory not found: {}", dicom_dir);
+            return;
+        }
+
+        // 递归遍历目录及其子目录中的所有.dcm文件
+        let mut dicom_files = Vec::new();
+
+        // 使用递归函数收集所有.dcm文件
+        collect_dicom_files(Path::new(dicom_dir), &mut dicom_files);
+
+        println!("Found {} DICOM files", dicom_files.len());
+
+        for (index, path) in dicom_files.iter().enumerate() {
+            println!(
+                "Processing file {}/{}: {:?}",
+                index + 1,
+                dicom_files.len(),
+                path
+            );
+
+            // 尝试打开DICOM文件
+            match dicom_object::OpenFileOptions::new()
+                .charset_override(CharacterSetOverride::AnyVr)
+                .read_until(tags::PIXEL_DATA)
+                .open_file(path)
+            {
+                Ok(dicom_obj) => {
+                    // 尝试解析DICOM对象
+                    let result = make_state_info("1234567890", &dicom_obj, None);
+
+                    match result {
+                        Ok(state_meta) => {
+                            // 验证必填字段
+                            assert!(
+                                !state_meta.patient_id.as_str().is_empty(),
+                                "Patient ID should not be empty in file: {:?}",
+                                path
+                            );
+                            assert!(
+                                !state_meta.study_uid.as_str().is_empty(),
+                                "Study UID should not be empty in file: {:?}",
+                                path
+                            );
+                            assert!(
+                                !state_meta.series_uid.as_str().is_empty(),
+                                "Series UID should not be empty in file: {:?}",
+                                path
+                            );
+                            assert!(
+                                !state_meta.modality.unwrap().as_str().is_empty(),
+                                "Modality should not be empty in file: {:?}",
+                                path
+                            );
+
+                            println!("Successfully parsed file: {:?}", path);
+                        }
+                        Err(e) => {
+                            eprintln!("Error parsing file {:?}: {:?}", path, e);
+                            panic!("Failed to parse DICOM file {:?}: {:?}", path, e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error opening file {:?}: {:?}", path, e);
+                    // std::fs::remove_file(path).expect("Failed to delete file");
+                }
+            }
+        }
+
+        println!("All DICOM files processed successfully");
+    }
 
     // #[rstest]
     // #[case("/media/dhz/DCP/DicomTestDataSet/dcmFiles/107")]
@@ -1082,24 +1116,6 @@ mod tests {
     //     println!("All DICOM files processed successfully");
     // }
 
-    // use std::fs;
-    // use std::path::Path;
-
-    // 递归收集目录及其子目录中的所有.dcm文件
-    // fn collect_dicom_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
-    //     if let Ok(entries) = fs::read_dir(dir) {
-    //         for entry in entries.flatten() {
-    //             let path = entry.path();
-    //             if path.is_dir() {
-    //                 // 递归遍历子目录
-    //                 crate::utils::collect_dicom_files(&path, files);
-    //             } else if path.extension().map_or(false, |ext| ext.eq_ignore_ascii_case( "dcm") ) {
-    //                 // 添加.dcm文件到列表
-    //                 files.push(path);
-    //             }
-    //         }
-    //     }
-    // }
     // #[test]
     // fn test_make_state_info_with_sample_files() {
     //     let dicom_dir = "/media/dhz/DCP/DicomTestDataSet";
