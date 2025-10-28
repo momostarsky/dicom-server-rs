@@ -212,7 +212,6 @@ async fn client_registe_post(
             "Unsupported Content-Type. Supported types: application/x-www-form-urlencoded, application/json"
         );
     };
-
     process_client_registration(req, app_state, params).await
 }
 
