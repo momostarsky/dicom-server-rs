@@ -158,9 +158,9 @@ pub struct DicomStateMeta {
     #[serde(rename = "series_related_instances")]
     pub series_related_instances: Option<i32>,
     #[serde(rename = "created_time")]
-    pub created_time: Option<NaiveDateTime>,
+    pub created_time: NaiveDateTime,
     #[serde(rename = "updated_time")]
-    pub updated_time: Option<NaiveDateTime>,
+    pub updated_time: NaiveDateTime,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -799,8 +799,8 @@ pub fn make_state_info(
 
         series_related_instances,
         // 时间戳
-        created_time: Some(now),
-        updated_time: Some(now),
+        created_time: now,
+        updated_time: now,
     })
 }
 

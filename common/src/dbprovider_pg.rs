@@ -1,4 +1,5 @@
-use async_trait::async_trait;
+use std::option::Option;
+use async_trait::async_trait; 
 use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::postgres::{PgRow, PgTypeInfo};
@@ -21,32 +22,32 @@ impl<const N: usize> sqlx::Type<Postgres> for FixedLengthString<N> {
     }
 }
 
+impl<const N: usize> Encode<'_, Postgres> for FixedLengthString<N> {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Postgres as Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, BoxDynError> {
+        <&str as Encode<Postgres>>::encode(self.as_str(), buf)
+    }
+}
+
 impl<const N: usize> sqlx::Type<Postgres> for BoundedString<N> {
     fn type_info() -> <Postgres as Database>::TypeInfo {
         PgTypeInfo::with_name("VARCHAR")
     }
 }
+
+// 为 BoundedString 实现 PostgreSQL 的 Encode trait
+impl<const N: usize> Encode<'_, Postgres> for BoundedString<N> {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Postgres as Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, BoxDynError> {
+        <&str as Encode<Postgres>>::encode(self.as_str(), buf)
+    }
+}
+
 impl sqlx::Type<Postgres> for UidHashString {
-    fn type_info() -> <Postgres as Database>::TypeInfo {
-        PgTypeInfo::with_name("CHAR")
-    }
-}
-// 为 SopUidString 实现 PostgreSQL 的 Type trait
-impl sqlx::Type<Postgres> for SopUidString {
-    fn type_info() -> <Postgres as Database>::TypeInfo {
-        PgTypeInfo::with_name("VARCHAR")
-    }
-}
-
-// 为 UuidString 实现 PostgreSQL 的 Type trait
-impl sqlx::Type<Postgres> for UuidString {
-    fn type_info() -> <Postgres as Database>::TypeInfo {
-        PgTypeInfo::with_name("VARCHAR")
-    }
-}
-
-// 为 DicomDateString 实现 PostgreSQL 的 Type trait
-impl sqlx::Type<Postgres> for DicomDateString {
     fn type_info() -> <Postgres as Database>::TypeInfo {
         PgTypeInfo::with_name("CHAR")
     }
@@ -61,22 +62,10 @@ impl Encode<'_, Postgres> for UidHashString {
     }
 }
 
-// 为 BoundedString 实现 PostgreSQL 的 Encode trait
-impl<const N: usize> Encode<'_, Postgres> for BoundedString<N> {
-    fn encode_by_ref(
-        &self,
-        buf: &mut <Postgres as Database>::ArgumentBuffer<'_>,
-    ) -> Result<IsNull, BoxDynError> {
-        <&str as Encode<Postgres>>::encode(self.as_str(), buf)
-    }
-}
-
-impl<const N: usize> Encode<'_, Postgres> for FixedLengthString<N> {
-    fn encode_by_ref(
-        &self,
-        buf: &mut <Postgres as Database>::ArgumentBuffer<'_>,
-    ) -> Result<IsNull, BoxDynError> {
-        <&str as Encode<Postgres>>::encode(self.as_str(), buf)
+// 为 SopUidString 实现 PostgreSQL 的 Type trait
+impl sqlx::Type<Postgres> for SopUidString {
+    fn type_info() -> <Postgres as Database>::TypeInfo {
+        PgTypeInfo::with_name("VARCHAR")
     }
 }
 
@@ -88,13 +77,24 @@ impl Encode<'_, Postgres> for SopUidString {
         <&str as Encode<Postgres>>::encode(self.as_str(), buf)
     }
 }
-
+// 为 UuidString 实现 PostgreSQL 的 Type trait
+impl sqlx::Type<Postgres> for UuidString {
+    fn type_info() -> <Postgres as Database>::TypeInfo {
+        PgTypeInfo::with_name("VARCHAR")
+    }
+}
 impl Encode<'_, Postgres> for UuidString {
     fn encode_by_ref(
         &self,
         buf: &mut <Postgres as Database>::ArgumentBuffer<'_>,
     ) -> Result<IsNull, BoxDynError> {
         <&str as Encode<Postgres>>::encode(self.as_str(), buf)
+    }
+}
+// 为 DicomDateString 实现 PostgreSQL 的 Type trait
+impl sqlx::Type<Postgres> for DicomDateString {
+    fn type_info() -> <Postgres as Database>::TypeInfo {
+        PgTypeInfo::with_name("CHAR")
     }
 }
 impl Encode<'_, Postgres> for DicomDateString {
@@ -120,16 +120,15 @@ impl<'r, const N: usize> Decode<'r, Postgres> for BoundedString<N> {
 // // 为 FixedLengthString 实现 PostgreSQL 的 Decode trait
 impl<'r, const N: usize> Decode<'r, Postgres> for FixedLengthString<N> {
     fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let str_val = <&str as Decode<Postgres>>::decode(value)?;
-        Ok(FixedLengthString::<N>::try_from(str_val.to_string())
-            .map_err(|e| Box::new(e) as BoxDynError)?)
+        let str_val = <String as Decode<Postgres>>::decode(value)?;
+        Ok(FixedLengthString::<N>::try_from(str_val).map_err(|e| Box::new(e) as BoxDynError)?)
     }
 }
 //
 // // 为 SopUidString 实现 PostgreSQL 的 Decode trait
 impl<'r> Decode<'r, Postgres> for SopUidString {
     fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let str_val = <&str as Decode<Postgres>>::decode(value)?;
+        let str_val = <String as Decode<Postgres>>::decode(value)?;
         Ok(SopUidString::try_from(str_val).map_err(|e| Box::new(e) as BoxDynError)?)
     }
 }
@@ -137,11 +136,16 @@ impl<'r> Decode<'r, Postgres> for SopUidString {
 //   为 UuidString 实现 PostgreSQL 的 Decode trait
 impl<'r> Decode<'r, Postgres> for UuidString {
     fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let str_val = <&str as Decode<Postgres>>::decode(value)?;
-        Ok(UuidString::try_from(str_val.to_string()).map_err(|e| Box::new(e) as BoxDynError)?)
+        let str_val = <String as Decode<Postgres>>::decode(value)?;
+        Ok(UuidString::try_from(str_val).map_err(|e| Box::new(e) as BoxDynError)?)
     }
 }
-
+impl<'r> Decode<'r, Postgres> for UidHashString {
+    fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
+        let str_val = <&str as Decode<Postgres>>::decode(value)?;
+        Ok(UidHashString::make_from_db(str_val))
+    }
+}
 impl FromRow<'_, PgRow> for SeriesEntity {
     fn from_row(row: &'_ PgRow) -> Result<Self, Error> {
         Ok(SeriesEntity {
@@ -188,19 +192,19 @@ impl FromRow<'_, PgRow> for StudyEntity {
 
 impl FromRow<'_, PgRow> for DicomStateMeta {
     fn from_row(row: &'_ PgRow) -> Result<Self, Error> {
-        let s: String = row.try_get("study_uid_hash")?;
-        let ss: String = row.try_get("series_uid_hash")?;
-        let date_str: String = row.try_get("study_date_origin")?;
-        let study_uid_hash_v = UidHashString::make_from_db(s.as_str());
-        let series_uid_hash_v = UidHashString::make_from_db(ss.as_str());
-        let study_date_origin_v = DicomDateString::make_from_db(date_str.as_str());
+        let s = row.get::<_,&str>("study_uid_hash");
+        let ss = row.get::<_, &str>("series_uid_hash");
+        let date_str = row.get::<_, &str>("study_date_origin");
+        let study_uid_hash_v = UidHashString::make_from_db(s);
+        let series_uid_hash_v = UidHashString::make_from_db(ss);
+        let study_date_origin_v = DicomDateString::make_from_db(date_str);
 
         Ok(DicomStateMeta {
             tenant_id: row.get("tenant_id"),
             patient_id: row.get("patient_id"),
             study_uid: row.get("study_uid"),
             series_uid: row.get("series_uid"),
-            study_uid_hash: study_uid_hash_v,
+            study_uid_hash:  study_uid_hash_v,
             series_uid_hash: series_uid_hash_v,
             study_date_origin: study_date_origin_v,
             patient_name: row.get("patient_name"),
@@ -760,8 +764,8 @@ mod tests {
         let patient_name = Some(BoundedString::<64>::try_from("TEST^PATIENT".to_string())?);
         let patient_birth_date = Some(NaiveDate::from_ymd_opt(1978, 1, 1).unwrap());
         let patient_birth_time = Some(NaiveTime::parse_from_str("080000", "%H%M%S")?);
-        let created_time = Some(chrono::Local::now().naive_local());
-        let updated_time = Some(chrono::Local::now().naive_local());
+        let created_time = chrono::Local::now().naive_local();
+        let updated_time = chrono::Local::now().naive_local();
 
         // 创建 DicomStateMeta 实例
         let state_meta = DicomStateMeta {

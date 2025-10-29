@@ -22,6 +22,10 @@ pub struct BoundedString<const N: usize> {
 }
 
 impl<const N: usize> BoundedString<N> {
+    pub(crate) fn make_from_db(s: String) -> Self {
+        Self { value: s }
+    }
+
     pub fn new(s: String) -> BoundedResult<BoundedString<N>> {
         if s.len() > N {
             Err(BoundedStringError::TooLong {
@@ -187,6 +191,11 @@ pub struct SopUidString(BoundedString<64>);
 impl SopUidString {
     pub fn from_bounded_string(bounded: BoundedString<64>) -> Self {
         Self(bounded)
+    }
+    pub(crate) fn make_from_db(s: String) -> Self {
+        Self {
+            0: BoundedString::make_from_db(s),
+        }
     }
     pub fn as_str(&self) -> &str {
         self.0.as_str()
