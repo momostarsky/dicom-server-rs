@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
+use std::fmt;
 use std::hash::Hash;
 
 #[derive(Debug, Snafu)]
@@ -186,11 +187,18 @@ impl<const N: usize> TryFrom<&String> for FixedLengthString<N> {
 /// DICOM文件中的表示日期的字符串，格式为 YYYYMMDD, 长度为 8, 例如 "20231005"
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
-pub struct DicomDateString(FixedLengthString<8>);
-
+pub struct DicomDateString {
+    pub(crate) value: String,
+}
+// 为 DicomDateString 实现 Display trait
+impl fmt::Display for DicomDateString {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
 impl DicomDateString {
     pub fn as_str(&self) -> &str {
-        self.0.as_str()
+        self.value.as_str()
     }
 
     pub(crate) fn make_from_db(s: &str) -> Self {
@@ -207,10 +215,10 @@ impl DicomDateString {
                 )
                 .as_str(),
             );
-        let fx = FixedLengthString::new_from_str(s)
-            .map(|fixed| Self(fixed))
-            .unwrap();
-        Self { 0: fx.0 }
+
+        Self {
+            value: s.to_string(),
+        }
     }
 }
 impl TryFrom<String> for DicomDateString {
@@ -223,7 +231,7 @@ impl TryFrom<String> for DicomDateString {
                 len: s.len(),
             }
         })?;
-        FixedLengthString::new_from_string(&s).map(|fixed| Self(fixed))
+        Ok(Self { value: s.clone() })
     }
 }
 
@@ -237,7 +245,9 @@ impl TryFrom<&str> for DicomDateString {
                 len: s.len(),
             }
         })?;
-        FixedLengthString::new_from_str(s).map(|fixed| Self(fixed))
+        Ok(Self {
+            value: s.to_string(),
+        })
     }
 }
 
@@ -251,7 +261,7 @@ impl TryFrom<&String> for DicomDateString {
                 len: s.len(),
             }
         })?;
-        FixedLengthString::new_from_string(s).map(|fixed| Self(fixed))
+        Ok(Self { value: s.clone() })
     }
 }
 
@@ -394,15 +404,6 @@ mod tests {
     impl<const N: usize> fmt::Display for FixedLengthString<N> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "{}", self.value)
-        }
-    }
-
-    // 为 SopUidString 实现 Display trait
-
-    // 为 DicomDateString 实现 Display trait
-    impl fmt::Display for DicomDateString {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{}", self.0.as_str())
         }
     }
 
