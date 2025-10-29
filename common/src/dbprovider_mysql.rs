@@ -17,7 +17,7 @@ impl sqlx::Type<MySql> for UidHashString {
 }
 impl sqlx::Type<MySql> for SopUidString {
     fn type_info() -> <MySql as Database>::TypeInfo {
-        <String as sqlx::Type<MySql>>::type_info()
+        <&str as sqlx::Type<MySql>>::type_info()
     }
 }
 impl Encode<'_, MySql> for UidHashString {
@@ -46,7 +46,7 @@ impl<const N: usize> sqlx::Type<MySql> for BoundedString<N> {
 impl<'r, const N: usize> Decode<'r, MySql> for BoundedString<N> {
     fn decode(value: <MySql as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
         // 如果失败，尝试转换为 String
-        let string_val = <String as Decode<MySql>>::decode(value)?;
+        let string_val = <&str as Decode<MySql>>::decode(value)?;
         Ok(BoundedString::<N>::try_from(string_val).map_err(|e| Box::new(e) as BoxDynError)?)
     }
 }

@@ -1,5 +1,5 @@
 use std::option::Option;
-use async_trait::async_trait; 
+use async_trait::async_trait;
 use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::postgres::{PgRow, PgTypeInfo};
@@ -49,7 +49,7 @@ impl<const N: usize> Encode<'_, Postgres> for BoundedString<N> {
 
 impl sqlx::Type<Postgres> for UidHashString {
     fn type_info() -> <Postgres as Database>::TypeInfo {
-        PgTypeInfo::with_name("CHAR")
+        PgTypeInfo::with_name("VARCHAR")
     }
 }
 
@@ -94,7 +94,7 @@ impl Encode<'_, Postgres> for UuidString {
 // 为 DicomDateString 实现 PostgreSQL 的 Type trait
 impl sqlx::Type<Postgres> for DicomDateString {
     fn type_info() -> <Postgres as Database>::TypeInfo {
-        PgTypeInfo::with_name("CHAR")
+        PgTypeInfo::with_name("VARCHAR")
     }
 }
 impl Encode<'_, Postgres> for DicomDateString {
@@ -112,7 +112,7 @@ use sqlx::decode::Decode;
 impl<'r, const N: usize> Decode<'r, Postgres> for BoundedString<N> {
     fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
         // 如果失败，尝试转换为 String
-        let string_val = <String as Decode<Postgres>>::decode(value)?;
+        let string_val = <&str  as Decode<Postgres>>::decode(value)?;
         Ok(BoundedString::<N>::try_from(string_val).map_err(|e| Box::new(e) as BoxDynError)?)
     }
 }
@@ -120,7 +120,7 @@ impl<'r, const N: usize> Decode<'r, Postgres> for BoundedString<N> {
 // // 为 FixedLengthString 实现 PostgreSQL 的 Decode trait
 impl<'r, const N: usize> Decode<'r, Postgres> for FixedLengthString<N> {
     fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let str_val = <String as Decode<Postgres>>::decode(value)?;
+        let str_val = <&str  as Decode<Postgres>>::decode(value)?;
         Ok(FixedLengthString::<N>::try_from(str_val).map_err(|e| Box::new(e) as BoxDynError)?)
     }
 }
@@ -128,7 +128,7 @@ impl<'r, const N: usize> Decode<'r, Postgres> for FixedLengthString<N> {
 // // 为 SopUidString 实现 PostgreSQL 的 Decode trait
 impl<'r> Decode<'r, Postgres> for SopUidString {
     fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let str_val = <String as Decode<Postgres>>::decode(value)?;
+        let str_val = <&str  as Decode<Postgres>>::decode(value)?;
         Ok(SopUidString::try_from(str_val).map_err(|e| Box::new(e) as BoxDynError)?)
     }
 }
@@ -136,7 +136,7 @@ impl<'r> Decode<'r, Postgres> for SopUidString {
 //   为 UuidString 实现 PostgreSQL 的 Decode trait
 impl<'r> Decode<'r, Postgres> for UuidString {
     fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let str_val = <String as Decode<Postgres>>::decode(value)?;
+        let str_val = <&str  as Decode<Postgres>>::decode(value)?;
         Ok(UuidString::try_from(str_val).map_err(|e| Box::new(e) as BoxDynError)?)
     }
 }
@@ -146,6 +146,15 @@ impl<'r> Decode<'r, Postgres> for UidHashString {
         Ok(UidHashString::make_from_db(str_val))
     }
 }
+
+impl<'r> Decode<'r, Postgres> for DicomDateString {
+    fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
+        let str_val = <&str as Decode<Postgres>>::decode(value)?;
+        Ok(DicomDateString::make_from_db(str_val))
+    }
+}
+
+
 impl FromRow<'_, PgRow> for SeriesEntity {
     fn from_row(row: &'_ PgRow) -> Result<Self, Error> {
         Ok(SeriesEntity {
@@ -192,21 +201,21 @@ impl FromRow<'_, PgRow> for StudyEntity {
 
 impl FromRow<'_, PgRow> for DicomStateMeta {
     fn from_row(row: &'_ PgRow) -> Result<Self, Error> {
-        let s = row.get::<_,&str>("study_uid_hash");
-        let ss = row.get::<_, &str>("series_uid_hash");
-        let date_str = row.get::<_, &str>("study_date_origin");
-        let study_uid_hash_v = UidHashString::make_from_db(s);
-        let series_uid_hash_v = UidHashString::make_from_db(ss);
-        let study_date_origin_v = DicomDateString::make_from_db(date_str);
+        // let s = row.get::<_,&str>("study_uid_hash");
+        // let ss = row.get::<_, &str>("series_uid_hash");
+        // let date_str = row.get::<_, &str>("study_date_origin");
+        // let study_uid_hash_v = UidHashString::make_from_db(s);
+        // let series_uid_hash_v = UidHashString::make_from_db(ss);
+        // let study_date_origin_v = DicomDateString::make_from_db(date_str);
 
         Ok(DicomStateMeta {
             tenant_id: row.get("tenant_id"),
             patient_id: row.get("patient_id"),
             study_uid: row.get("study_uid"),
             series_uid: row.get("series_uid"),
-            study_uid_hash:  study_uid_hash_v,
-            series_uid_hash: series_uid_hash_v,
-            study_date_origin: study_date_origin_v,
+            study_uid_hash:  row.get("study_uid_hash"),
+            series_uid_hash: row.get("series_uid_hash"),
+            study_date_origin: row.get("study_date_origin"),
             patient_name: row.get("patient_name"),
             patient_sex: row.get("patient_sex"),
             patient_birth_date: row.get("patient_birth_date"),
