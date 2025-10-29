@@ -433,7 +433,7 @@ pub fn dicom_study_dir(
     create_not_exists: bool,
 ) -> Result<(UidHashString, String), String> {
     let app_config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
-    let study_uid_hash = UidHashString::make_from(study_uid);
+    let study_uid_hash = UidHashString::make_from_db(study_uid);
     let dicom_store_path = &app_config.local_storage.dicm_store_path;
     let study_dir = format!(
         "{}/{}/{}/{}",
@@ -469,7 +469,7 @@ pub fn dicom_series_dir(
     series_uid: &str,
     create_not_exists: bool,
 ) -> Result<(UidHashString, UidHashString, String), String> {
-    let (study_uid_hash, series_uid_hash) = (UidHashString::make_from(study_uid), UidHashString::make_from(series_uid));
+    let (study_uid_hash, series_uid_hash) = (UidHashString::make_from_db(study_uid), UidHashString::make_from_db(series_uid));
     let app_config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
     let dicom_store_path = &app_config.local_storage.dicm_store_path;
     let series_dir = format!(

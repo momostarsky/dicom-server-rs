@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
-use sqlx::postgres::PgRow;
+use sqlx::postgres::{PgRow, PgTypeInfo};
 use sqlx::{Database, Encode, Error, FromRow, PgPool, Row};
 
 use crate::database_entities::{SeriesEntity, StudyEntity};
@@ -10,16 +10,48 @@ use crate::dicom_object_meta::DicomStateMeta;
 use tracing::error;
 
 use crate::string_ext::{
-    BoundedString, DicomDateString, FixedLengthString, SopUidString, UidHashString,
-    UuidString,
+    BoundedString, DicomDateString, FixedLengthString, SopUidString, UidHashString, UuidString,
 };
 use sqlx::Postgres;
 
-impl sqlx::Type<Postgres> for UidHashString {
+// 为 FixedLengthString 实现 PostgreSQL 的 Type trait
+impl<const N: usize> sqlx::Type<Postgres> for FixedLengthString<N> {
     fn type_info() -> <Postgres as Database>::TypeInfo {
-        <&str as sqlx::Type<Postgres>>::type_info()
+        PgTypeInfo::with_name("VARCHAR")
     }
 }
+
+impl<const N: usize> sqlx::Type<Postgres> for BoundedString<N> {
+    fn type_info() -> <Postgres as Database>::TypeInfo {
+        PgTypeInfo::with_name("VARCHAR")
+    }
+}
+impl sqlx::Type<Postgres> for UidHashString {
+    fn type_info() -> <Postgres as Database>::TypeInfo {
+        PgTypeInfo::with_name("CHAR")
+    }
+}
+// 为 SopUidString 实现 PostgreSQL 的 Type trait
+impl sqlx::Type<Postgres> for SopUidString {
+    fn type_info() -> <Postgres as Database>::TypeInfo {
+        PgTypeInfo::with_name("VARCHAR")
+    }
+}
+
+// 为 UuidString 实现 PostgreSQL 的 Type trait
+impl sqlx::Type<Postgres> for UuidString {
+    fn type_info() -> <Postgres as Database>::TypeInfo {
+        PgTypeInfo::with_name("VARCHAR")
+    }
+}
+
+// 为 DicomDateString 实现 PostgreSQL 的 Type trait
+impl sqlx::Type<Postgres> for DicomDateString {
+    fn type_info() -> <Postgres as Database>::TypeInfo {
+        PgTypeInfo::with_name("CHAR")
+    }
+}
+
 impl Encode<'_, Postgres> for UidHashString {
     fn encode_by_ref(
         &self,
@@ -74,43 +106,41 @@ impl Encode<'_, Postgres> for DicomDateString {
     }
 }
 
-
-// 为 FixedLengthString 实现 PostgreSQL 的 Type trait
-impl<const N: usize> sqlx::Type<Postgres> for FixedLengthString<N> {
-    fn type_info() -> <Postgres as Database>::TypeInfo {
-        <&str as sqlx::Type<Postgres>>::type_info()
+use sqlx::decode::Decode;
+//
+// // 为 BoundedString 实现 PostgreSQL 的 Decode trait
+impl<'r, const N: usize> Decode<'r, Postgres> for BoundedString<N> {
+    fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
+        // 如果失败，尝试转换为 String
+        let string_val = <String as Decode<Postgres>>::decode(value)?;
+        Ok(BoundedString::<N>::try_from(string_val).map_err(|e| Box::new(e) as BoxDynError)?)
+    }
+}
+//
+// // 为 FixedLengthString 实现 PostgreSQL 的 Decode trait
+impl<'r, const N: usize> Decode<'r, Postgres> for FixedLengthString<N> {
+    fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
+        let str_val = <&str as Decode<Postgres>>::decode(value)?;
+        Ok(FixedLengthString::<N>::try_from(str_val.to_string())
+            .map_err(|e| Box::new(e) as BoxDynError)?)
+    }
+}
+//
+// // 为 SopUidString 实现 PostgreSQL 的 Decode trait
+impl<'r> Decode<'r, Postgres> for SopUidString {
+    fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
+        let str_val = <&str as Decode<Postgres>>::decode(value)?;
+        Ok(SopUidString::try_from(str_val).map_err(|e| Box::new(e) as BoxDynError)?)
     }
 }
 
-impl<const N: usize> sqlx::Type<Postgres> for BoundedString<N> {
-    fn type_info() -> <Postgres as Database>::TypeInfo {
-        <&str as sqlx::Type<Postgres>>::type_info()
+//   为 UuidString 实现 PostgreSQL 的 Decode trait
+impl<'r> Decode<'r, Postgres> for UuidString {
+    fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
+        let str_val = <&str as Decode<Postgres>>::decode(value)?;
+        Ok(UuidString::try_from(str_val.to_string()).map_err(|e| Box::new(e) as BoxDynError)?)
     }
 }
-
-// 为 SopUidString 实现 PostgreSQL 的 Type trait
-impl sqlx::Type<Postgres> for SopUidString {
-    fn type_info() -> <Postgres as Database>::TypeInfo {
-        <&str as sqlx::Type<Postgres>>::type_info()
-    }
-}
-
-// 为 UuidString 实现 PostgreSQL 的 Type trait
-impl sqlx::Type<Postgres> for UuidString {
-    fn type_info() -> <Postgres as Database>::TypeInfo {
-        <&str as sqlx::Type<Postgres>>::type_info()
-    }
-}
-
-// 为 DicomDateString 实现 PostgreSQL 的 Type trait
-impl sqlx::Type<Postgres> for DicomDateString {
-    fn type_info() -> <Postgres as Database>::TypeInfo {
-        <&str as sqlx::Type<Postgres>>::type_info()
-    }
-}
-
-// 为 ExtDicomTime 实现 PostgreSQL 的 Type trait
-
 
 impl FromRow<'_, PgRow> for SeriesEntity {
     fn from_row(row: &'_ PgRow) -> Result<Self, Error> {
@@ -152,6 +182,49 @@ impl FromRow<'_, PgRow> for StudyEntity {
             study_description: row.get("study_description"),
             patient_birth_time: row.get("patient_birth_time"),
             study_date_origin: row.get("study_date_origin"),
+        })
+    }
+}
+
+impl FromRow<'_, PgRow> for DicomStateMeta {
+    fn from_row(row: &'_ PgRow) -> Result<Self, Error> {
+        let s: String = row.try_get("study_uid_hash")?;
+        let ss: String = row.try_get("series_uid_hash")?;
+        let date_str: String = row.try_get("study_date_origin")?;
+        let study_uid_hash_v = UidHashString::make_from_db(s.as_str());
+        let series_uid_hash_v = UidHashString::make_from_db(ss.as_str());
+        let study_date_origin_v = DicomDateString::make_from_db(date_str.as_str());
+
+        Ok(DicomStateMeta {
+            tenant_id: row.get("tenant_id"),
+            patient_id: row.get("patient_id"),
+            study_uid: row.get("study_uid"),
+            series_uid: row.get("series_uid"),
+            study_uid_hash: study_uid_hash_v,
+            series_uid_hash: series_uid_hash_v,
+            study_date_origin: study_date_origin_v,
+            patient_name: row.get("patient_name"),
+            patient_sex: row.get("patient_sex"),
+            patient_birth_date: row.get("patient_birth_date"),
+            patient_birth_time: row.get("patient_birth_time"),
+            patient_age: row.get("patient_age"),
+            patient_size: row.get("patient_size"),
+            patient_weight: row.get("patient_weight"),
+            study_date: row.get("study_date"),
+            study_time: row.get("study_time"),
+            accession_number: row.get("accession_number"),
+            study_id: row.get("study_id"),
+            study_description: row.get("study_description"),
+            modality: row.get("modality"),
+            series_number: row.get("series_number"),
+            series_date: row.get("series_date"),
+            series_time: row.get("series_time"),
+            series_description: row.get("series_description"),
+            body_part_examined: row.get("body_part_examined"),
+            protocol_name: row.get("protocol_name"),
+            series_related_instances: row.get("series_related_instances"),
+            created_time: row.get("created_time"),
+            updated_time: row.get("updated_time"),
         })
     }
 }
@@ -331,10 +404,7 @@ impl DbProvider for PgDbProvider {
         let query = query.bind(state_meta.series_date);
 
         let query = match &state_meta.series_time {
-            Some(time) => {
-
-                query.bind(time)
-            }
+            Some(time) => query.bind(time),
             None => query.bind(None::<chrono::NaiveTime>),
         };
 
@@ -356,9 +426,7 @@ impl DbProvider for PgDbProvider {
         let query = query.bind(state_meta.study_date);
 
         let query = match &state_meta.study_time {
-            Some(time) => {
-                query.bind(time)
-            }
+            Some(time) => query.bind(time),
             None => query.bind(None::<chrono::NaiveTime>),
         };
 
@@ -394,10 +462,7 @@ impl DbProvider for PgDbProvider {
         let query = query.bind(state_meta.patient_birth_date);
 
         let query = match &state_meta.patient_birth_time {
-            Some(time) => {
-
-                query.bind(time)
-            }
+            Some(time) => query.bind(time),
             None => query.bind(None::<chrono::NaiveTime>),
         };
 
@@ -454,10 +519,7 @@ impl DbProvider for PgDbProvider {
             let query = query.bind(state_meta.series_date);
 
             let query = match &state_meta.series_time {
-                Some(time) => {
-
-                    query.bind(time)
-                }
+                Some(time) => query.bind(time),
                 None => query.bind(None::<chrono::NaiveTime>),
             };
 
@@ -479,9 +541,7 @@ impl DbProvider for PgDbProvider {
             let query = query.bind(state_meta.study_date);
 
             let query = match &state_meta.study_time {
-                Some(time) => {
-                    query.bind(time)
-                }
+                Some(time) => query.bind(time),
                 None => query.bind(None::<chrono::NaiveTime>),
             };
 
@@ -517,10 +577,7 @@ impl DbProvider for PgDbProvider {
             let query = query.bind(state_meta.patient_birth_date);
 
             let query = match &state_meta.patient_birth_time {
-                Some(time) => {
-
-                    query.bind(time)
-                }
+                Some(time) => query.bind(time),
                 None => query.bind(None::<chrono::NaiveTime>),
             };
 
@@ -552,7 +609,38 @@ impl DbProvider for PgDbProvider {
         }
     }
 
-    // 在 impl PgDbProvider 中添加辅助方法
+    async fn get_state_metaes(
+        &self,
+        tenant_id: &str,
+        study_uid: &str,
+    ) -> Result<Vec<DicomStateMeta>, DbError> {
+        let pool = self.pool.clone();
+        match sqlx::query_as(
+            "SELECT * FROM dicom_state_meta WHERE tenant_id = $1 AND study_uid = $2",
+        )
+        .bind(tenant_id)
+        .bind(study_uid)
+        .fetch_all(&pool)
+        .await
+        {
+            Ok(result) => {
+                tracing::debug!(
+                    "Retrieved {} state meta records for tenant_id: {}, study_uid: {}",
+                    result.len(),
+                    tenant_id,
+                    study_uid
+                );
+                Ok(result)
+            }
+            Err(e) => {
+                error!(
+                    "Failed to get state meta info for tenant_id: {}, study_uid: {}: {}",
+                    tenant_id, study_uid, e
+                );
+                Err(DbError::DatabaseError(e))
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -561,7 +649,78 @@ mod tests {
     use crate::string_ext::*;
     use chrono::{NaiveDate, NaiveTime};
     use sqlx::postgres::PgPoolOptions;
+    #[tokio::test]
+    async fn test_get_study_info() -> Result<(), Box<dyn std::error::Error>> {
+        // 连接到 PostgreSQL 数据库
+        let pool = match PgPoolOptions::new()
+            .max_connections(5)
+            .acquire_timeout(std::time::Duration::from_secs(5))
+            .connect("postgresql://root:jp%23123@192.168.1.14:5432/postgres")
+            .await
+        {
+            Ok(pool) => pool,
+            Err(err) => panic!("Error connecting to PostgreSQL: {}", err),
+        };
 
+        let db_provider = PgDbProvider::new(pool);
+
+        let tenant_id = "1234567890";
+        let study_uid = "1.2.156.112605.0.1685486876.2025061710152134339.2.1.1";
+
+        // 添加超时包装
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            db_provider.get_study_info(tenant_id, study_uid),
+        )
+        .await??;
+
+        // 验证结果
+        assert!(result.is_some(), "Expected study info to be found");
+
+        let study_info = result.unwrap();
+        assert_eq!(study_info.tenant_id, tenant_id);
+        assert_eq!(study_info.study_instance_uid, study_uid);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_state_info() -> Result<(), Box<dyn std::error::Error>> {
+        // 连接到 PostgreSQL 数据库
+        let pool = match PgPoolOptions::new()
+            .max_connections(5)
+            .acquire_timeout(std::time::Duration::from_secs(5)) // 添加超时
+            .connect("postgresql://root:jp%23123@192.168.1.14:5432/postgres")
+            .await
+        {
+            Ok(pool) => pool,
+            Err(err) => panic!("Error connecting to PostgreSQL: {}", err),
+        };
+
+        let db_provider = PgDbProvider::new(pool);
+
+        let tenant_id = "1234567890";
+        let study_uid = "1.2.156.112605.0.1685486876.2025061710152134339.2.1.1";
+
+        // 添加超时包装
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            db_provider.get_state_metaes(&tenant_id, &study_uid),
+        )
+        .await??;
+
+        // 验证保存成功
+        // 验证返回结果
+        assert_eq!(result.len(), 14, "Expected 14 records for the study_uid");
+
+        // 验证每条记录的 tenant_id 和 study_uid 是否正确
+        for state_meta in result {
+            assert_eq!(state_meta.tenant_id.as_str(), tenant_id);
+            assert_eq!(state_meta.study_uid.as_str(), study_uid);
+        }
+
+        Ok(())
+    }
     #[tokio::test]
     async fn test_save_state_info() -> Result<(), Box<dyn std::error::Error>> {
         // 连接到 PostgreSQL 数据库
@@ -581,8 +740,8 @@ mod tests {
         let patient_id = BoundedString::<64>::try_from("test_patient_456".to_string())?;
         let study_uid = SopUidString::try_from("1.2.3.4.5.6.7.8.9")?;
         let series_uid = SopUidString::try_from("9.8.7.6.5.4.3.2.1")?;
-        let study_uid_hash = UidHashString::make_from("1.2.3.4.5.6.7.8.9");
-        let series_uid_hash = UidHashString::make_from("9.8.7.6.5.4.3.2.1");
+        let study_uid_hash = UidHashString::make_from_db("1.2.3.4.5.6.7.8.9");
+        let series_uid_hash = UidHashString::make_from_db("9.8.7.6.5.4.3.2.1");
         let study_date_origin = DicomDateString::try_from("20231201".to_string())?;
         let accession_number = BoundedString::<16>::try_from("ACC123456".to_string())?;
         let modality = Some(BoundedString::<16>::try_from("CT".to_string())?);
@@ -620,10 +779,6 @@ mod tests {
             patient_age,
             patient_size: Some(175.5),
             patient_weight: Some(70.2),
-            medical_alerts: None,
-            allergies: None,
-            pregnancy_status: None,
-            occupation: None,
             study_date,
             study_time,
             accession_number,

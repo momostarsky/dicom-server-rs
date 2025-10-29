@@ -105,8 +105,10 @@ pub struct DicomStateMeta {
     #[serde(rename = "series_uid")]
     pub series_uid: SopUidString,
     #[serde(rename = "study_uid_hash")]
+
     pub study_uid_hash: UidHashString,
     #[serde(rename = "series_uid_hash")]
+
     pub series_uid_hash: UidHashString,
     #[serde(rename = "study_date_origin")]
     pub study_date_origin: DicomDateString,
@@ -125,14 +127,8 @@ pub struct DicomStateMeta {
     pub patient_size: Option<f64>,
     #[serde(rename = "patient_weight")]
     pub patient_weight: Option<f64>,
-    #[serde(rename = "medical_alerts")]
-    pub medical_alerts: Option<BoundedString<64>>,
-    #[serde(rename = "allergies")]
-    pub allergies: Option<BoundedString<64>>,
-    #[serde(rename = "pregnancy_status")]
-    pub pregnancy_status: Option<i32>,
-    #[serde(rename = "occupation")]
-    pub occupation: Option<BoundedString<64>>,
+
+
 
     #[serde(rename = "study_date")]
     pub study_date: NaiveDate,
@@ -474,8 +470,8 @@ pub fn make_image_info(
     );
 
     // 计算哈希值
-    let study_uid_hash = UidHashString::make_from(&common_meta.study_uid.as_str());
-    let series_uid_hash = UidHashString::make_from(&common_meta.series_uid.as_str());
+    let study_uid_hash = UidHashString::make_from_db(&common_meta.study_uid.as_str());
+    let series_uid_hash = UidHashString::make_from_db(&common_meta.series_uid.as_str());
 
     // 时间戳
     let now = chrono::Local::now().naive_local();
@@ -621,28 +617,7 @@ pub fn make_state_info(
     let patient_size = dicom_utils::get_decimal_value(dicom_obj, tags::PATIENT_SIZE);
     let patient_weight = dicom_utils::get_decimal_value(dicom_obj, tags::PATIENT_WEIGHT);
 
-    let medical_alerts = dicom_utils::get_text_value(dicom_obj, tags::MEDICAL_ALERTS)
-        .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert medical alerts".to_string())
-        })?;
 
-    let allergies = dicom_utils::get_text_value(dicom_obj, tags::ALLERGIES)
-        .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
-        .transpose()
-        .map_err(|_| DicomParseError::ConversionError("Failed to convert allergies".to_string()))?;
-
-    let pregnancy_status = dicom_utils::get_int_value(dicom_obj, tags::PREGNANCY_STATUS);
-    let occupation = dicom_utils::get_text_value(dicom_obj, tags::OCCUPATION)
-        .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert occupation".to_string())
-        })?;
     let study_date = common_meta.study_date;
     // 检查相关信息
     let study_time = dicom_utils::get_text_value(dicom_obj, tags::STUDY_TIME)
@@ -776,8 +751,8 @@ pub fn make_state_info(
         dicom_utils::get_int_value(dicom_obj, tags::NUMBER_OF_SERIES_RELATED_INSTANCES);
 
     // 计算哈希值
-    let study_uid_hash = UidHashString::make_from(&common_meta.study_uid.as_str());
-    let series_uid_hash = UidHashString::make_from(&common_meta.series_uid.as_str());
+    let study_uid_hash = UidHashString::make_from_db(&common_meta.study_uid.as_str());
+    let series_uid_hash = UidHashString::make_from_db(&common_meta.series_uid.as_str());
 
     // 时间戳
     let now = chrono::Local::now().naive_local();
@@ -805,10 +780,7 @@ pub fn make_state_info(
         patient_age,
         patient_size,
         patient_weight,
-        medical_alerts,
-        allergies,
-        pregnancy_status,
-        occupation,
+
         // 检查信息
         study_date,
         study_time,

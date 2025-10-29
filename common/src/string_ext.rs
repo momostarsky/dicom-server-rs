@@ -225,6 +225,13 @@ impl DicomDateString {
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
+
+    pub(crate) fn make_from_db(s: &str) -> Self {
+        let fx = FixedLengthString::new_from_str(s)
+            .map(|fixed| Self(fixed))
+            .unwrap();
+        Self { 0: fx.0 }
+    }
 }
 impl TryFrom<String> for DicomDateString {
     type Error = BoundedStringError;
@@ -285,7 +292,7 @@ impl TryFrom<&String> for UuidString {
 pub struct UidHashString(pub(crate) BoundedString<20>);
 
 impl UidHashString {
-    pub fn make_from(uid: &str) -> Self {
+    pub(crate) fn make_from_db(uid: &str) -> Self {
         let mut hasher = SeaHasher::new();
         uid.hash(&mut hasher);
         let hash_value = hasher.finish();
@@ -516,8 +523,8 @@ mod tests {
             created_time: DateTime::from_timestamp(1728971020, 104453242)
                 .unwrap()
                 .naive_utc(),
-            series_uid_hash: UidHashString::make_from("123456789"),
-            study_uid_hash: UidHashString::make_from("323456789"),
+            series_uid_hash: UidHashString::make_from_db("123456789"),
+            study_uid_hash: UidHashString::make_from_db("323456789"),
             accession_number: "14769824".try_into().unwrap(),
             target_ts: "1.2.840.10008.1.2.1".try_into().unwrap(),
             study_date: NaiveDate::from_ymd_opt(2021, 1, 30).unwrap(),
@@ -537,4 +544,3 @@ mod tests {
         println!("Serialized JSON: {}", json);
     }
 }
-

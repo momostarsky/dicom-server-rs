@@ -481,6 +481,10 @@ impl DbProvider for MySqlProvider {
             }
         }
     }
+
+    async fn get_state_metaes(&self, tenant_id: &str, study_uid: &str) -> Result<Vec<DicomStateMeta>, DbError> {
+        todo!()
+    }
 }
 #[cfg(test)]
 mod tests {
@@ -512,8 +516,8 @@ mod tests {
         let patient_id = BoundedString::<64>::try_from("test_patient_456".to_string())?;
         let study_uid = SopUidString::try_from("1.2.3.4.5.6.7.8.9")?;
         let series_uid = SopUidString::try_from("9.8.7.6.5.4.3.2.1")?;
-        let study_uid_hash = UidHashString::make_from("1.2.3.4.5.6.7.8.9");
-        let series_uid_hash = UidHashString::make_from("9.8.7.6.5.4.3.2.1");
+        let study_uid_hash = UidHashString::make_from_db("1.2.3.4.5.6.7.8.9");
+        let series_uid_hash = UidHashString::make_from_db("9.8.7.6.5.4.3.2.1");
         let study_date_origin = DicomDateString::try_from("20231201".to_string())?;
         let accession_number = BoundedString::<16>::try_from("ACC123456".to_string())?;
         let modality = Some(BoundedString::<16>::try_from("CT".to_string())?);
@@ -553,10 +557,7 @@ mod tests {
             patient_age,
             patient_size: Some(175.5),
             patient_weight: Some(70.2),
-            medical_alerts: None,
-            allergies: None,
-            pregnancy_status: None,
-            occupation: None,
+           
             study_date,
             study_time,
             accession_number,
