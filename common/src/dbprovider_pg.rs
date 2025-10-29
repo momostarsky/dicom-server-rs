@@ -688,7 +688,7 @@ mod tests {
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1")?;
         let study_uid_hash = BoundedString::<20>::make_from_db("1.2.3.4.5.6.7.8.9".to_string());
         let series_uid_hash = BoundedString::<20>::make_from_db("9.8.7.6.5.4.3.2.1".to_string());
-        let study_date_origin = DicomDateString::try_from("20231201".to_string())?;
+        let study_date_origin = DicomDateString::make_from_db("20231201" );
         let accession_number = BoundedString::<16>::try_from("ACC123456".to_string())?;
         let modality = Some(BoundedString::<16>::try_from("CT".to_string())?);
         let series_number = Some(1);

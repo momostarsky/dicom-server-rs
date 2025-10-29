@@ -102,6 +102,7 @@ impl<const N: usize> TryFrom<&String> for BoundedString<N> {
     }
 }
 
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct FixedLengthString<const N: usize> {
