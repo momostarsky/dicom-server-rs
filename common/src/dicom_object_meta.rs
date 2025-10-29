@@ -474,7 +474,7 @@ pub fn make_image_info(
     let series_uid_hash = UidHashString::make_from_db(&common_meta.series_uid.as_str());
 
     // 时间戳
-    let now = chrono::Local::now().naive_local();
+    let now =  chrono::Local::now().naive_local();
 
     Ok(DicomImageMeta {
         tenant_id: BoundedString::<64>::try_from(tenant_id.to_string()).map_err(|_| {

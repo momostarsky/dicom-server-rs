@@ -1,41 +1,35 @@
-CREATE TABLE dicom_state_meta (
--- 基本标识信息
-tenant_id   VARCHAR(64) NOT NULL,
-patient_id  VARCHAR(64) NOT NULL,
-study_uid   VARCHAR(64)  NOT NULL,
-series_uid  VARCHAR(64)  NOT NULL,
-study_uid_hash    VARCHAR(20)   NOT NULL,
-series_uid_hash   VARCHAR(20)   NOT NULL,
--- 患者相关信息
-patient_name VARCHAR(64),
-patient_sex VARCHAR(1),
-patient_birth_date DATE,
-patient_birth_time TIME,
-patient_age VARCHAR(16),
-patient_size DOUBLE PRECISION,
-patient_weight DOUBLE PRECISION,
-pregnancy_status INTEGER,
--- 检查相关信息
-study_date DATE NOT NULL,
-study_date_origin  VARCHAR(8) NOT NULL,
-study_time TIME,
-accession_number VARCHAR(16) NOT NULL,
-study_id VARCHAR(16),
-study_description VARCHAR(64),
--- 序列相关信息
-modality VARCHAR(16),
-series_number INTEGER,
-series_date DATE,
-series_time TIME,
-series_description VARCHAR(256),
-body_part_examined VARCHAR(64),
-protocol_name VARCHAR(64),
-series_related_instances INTEGER,
--- 时间戳
-created_time TIMESTAMP(6),
-updated_time TIMESTAMP(6),
--- 主键约束
-PRIMARY KEY (tenant_id, study_uid, series_uid)
+create table dicomdb.dicom_state_meta
+(
+    tenant_id                varchar(64)  not null,
+    patient_id               varchar(64)  not null,
+    study_uid                varchar(64)  not null,
+    series_uid               varchar(64)  not null,
+    study_uid_hash           char(20)     not null,
+    series_uid_hash          char(20)     not null,
+    patient_name             varchar(64)  null,
+    patient_sex              varchar(1)   null,
+    patient_birth_date       date         null,
+    patient_birth_time       time         null,
+    patient_age              varchar(16)  null,
+    patient_size             double       null,
+    patient_weight           double       null,
+    pregnancy_status         int          null,
+    study_date               date         not null,
+    study_date_origin        char(8)      not null,
+    study_time               time         null,
+    accession_number         varchar(16)  not null,
+    study_id                 varchar(16)  null,
+    study_description        varchar(64)  null,
+    modality                 varchar(16)  null,
+    series_number            int          null,
+    series_date              date         null,
+    series_time              time         null,
+    series_description       varchar(256) null,
+    body_part_examined       varchar(64)  null,
+    protocol_name            varchar(64)  null,
+    series_related_instances int          null,
+    created_time             datetime(6)  null,
+    updated_time             datetime(6)  null,
+    primary key (tenant_id, study_uid, series_uid),
+    constraint index_state_unique unique (tenant_id, study_uid, series_uid, accession_number)
 );
--- 同一个StudyUID 只能有一个AccessionNumber
-create unique index index_state_unique on dicom_state_meta(tenant_id, study_uid, series_uid, accession_number);
