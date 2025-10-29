@@ -62,3 +62,4 @@ base64 = { workspace = true }
 cipher = "0.4.4"
 salsa20 = "0.10.2"
 generic-array = "0.14.7"
+chrono-tz = "0.10.4"

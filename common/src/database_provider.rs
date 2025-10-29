@@ -40,4 +40,10 @@ pub trait DbProvider: Send + Sync {
         &self,
         state_meta: &[DicomStateMeta],
     ) -> Result<(), DbError>;
+
+    async fn get_state_metaes(
+        &self,
+        tenant_id: &str,
+        study_uid: &str,
+    ) -> Result<Vec<DicomStateMeta>, DbError>;
 }

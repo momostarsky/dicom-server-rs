@@ -1,5 +1,5 @@
 use crate::dicom_utils;
-use crate::string_ext::{BoundedString, DicomDateString, SopUidString, UidHashString, UuidString};
+use crate::string_ext::{BoundedString, DicomDateString, FixedLengthString};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
@@ -19,7 +19,7 @@ pub enum TransferStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DicomStoreMeta {
     #[serde(rename = "trace_id")]
-    pub trace_id: UuidString,
+    pub trace_id: FixedLengthString<36>,
     #[serde(rename = "worker_node_id")]
     pub worker_node_id: BoundedString<64>,
     #[serde(rename = "tenant_id")]
@@ -27,29 +27,29 @@ pub struct DicomStoreMeta {
     #[serde(rename = "patient_id")]
     pub patient_id: BoundedString<64>,
     #[serde(rename = "study_uid")]
-    pub study_uid: SopUidString,
+    pub study_uid: BoundedString<64>,
     #[serde(rename = "series_uid")]
-    pub series_uid: SopUidString,
+    pub series_uid: BoundedString<64>,
     #[serde(rename = "sop_uid")]
-    pub sop_uid: SopUidString,
+    pub sop_uid: BoundedString<64>,
     #[serde(rename = "file_size")]
     pub file_size: u32,
     #[serde(rename = "file_path")]
     pub file_path: BoundedString<512>,
     #[serde(rename = "transfer_syntax_uid")]
-    pub transfer_syntax_uid: SopUidString,
+    pub transfer_syntax_uid: BoundedString<64>,
     #[serde(rename = "number_of_frames")]
     pub number_of_frames: i32,
     #[serde(rename = "created_time")]
     pub created_time: NaiveDateTime,
     #[serde(rename = "series_uid_hash")]
-    pub series_uid_hash: UidHashString,
+    pub series_uid_hash: BoundedString<20>,
     #[serde(rename = "study_uid_hash")]
-    pub study_uid_hash: UidHashString,
+    pub study_uid_hash: BoundedString<20>,
     #[serde(rename = "accession_number")]
     pub accession_number: BoundedString<16>,
     #[serde(rename = "target_ts")]
-    pub target_ts: SopUidString,
+    pub target_ts: BoundedString<64>,
     #[serde(rename = "study_date")]
     pub study_date: NaiveDate,
     #[serde(rename = "transfer_status")]
@@ -101,13 +101,13 @@ pub struct DicomStateMeta {
     #[serde(rename = "patient_id")]
     pub patient_id: BoundedString<64>,
     #[serde(rename = "study_uid")]
-    pub study_uid: SopUidString,
+    pub study_uid: BoundedString<64>,
     #[serde(rename = "series_uid")]
-    pub series_uid: SopUidString,
+    pub series_uid: BoundedString<64>,
     #[serde(rename = "study_uid_hash")]
-    pub study_uid_hash: UidHashString,
+    pub study_uid_hash: BoundedString<20>,
     #[serde(rename = "series_uid_hash")]
-    pub series_uid_hash: UidHashString,
+    pub series_uid_hash: BoundedString<20>,
     #[serde(rename = "study_date_origin")]
     pub study_date_origin: DicomDateString,
 
@@ -125,14 +125,6 @@ pub struct DicomStateMeta {
     pub patient_size: Option<f64>,
     #[serde(rename = "patient_weight")]
     pub patient_weight: Option<f64>,
-    #[serde(rename = "medical_alerts")]
-    pub medical_alerts: Option<BoundedString<64>>,
-    #[serde(rename = "allergies")]
-    pub allergies: Option<BoundedString<64>>,
-    #[serde(rename = "pregnancy_status")]
-    pub pregnancy_status: Option<i32>,
-    #[serde(rename = "occupation")]
-    pub occupation: Option<BoundedString<64>>,
 
     #[serde(rename = "study_date")]
     pub study_date: NaiveDate,
@@ -162,9 +154,9 @@ pub struct DicomStateMeta {
     #[serde(rename = "series_related_instances")]
     pub series_related_instances: Option<i32>,
     #[serde(rename = "created_time")]
-    pub created_time: Option<NaiveDateTime>,
+    pub created_time: NaiveDateTime,
     #[serde(rename = "updated_time")]
-    pub updated_time: Option<NaiveDateTime>,
+    pub updated_time: NaiveDateTime,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -176,19 +168,19 @@ pub struct DicomImageMeta {
     pub patient_id: BoundedString<64>,
 
     #[serde(rename = "study_uid")]
-    pub study_uid: SopUidString,
+    pub study_uid: BoundedString<64>,
 
     #[serde(rename = "series_uid")]
-    pub series_uid: SopUidString,
+    pub series_uid: BoundedString<64>,
 
     #[serde(rename = "sop_uid")]
-    pub sop_uid: SopUidString,
+    pub sop_uid: BoundedString<64>,
 
     #[serde(rename = "study_uid_hash")]
-    pub study_uid_hash: UidHashString,
+    pub study_uid_hash: BoundedString<20>,
 
     #[serde(rename = "series_uid_hash")]
-    pub series_uid_hash: UidHashString,
+    pub series_uid_hash: BoundedString<20>,
 
     #[serde(rename = "instance_number")]
     pub instance_number: Option<i32>,
@@ -257,7 +249,7 @@ pub struct DicomImageMeta {
     pub window_width: Option<BoundedString<64>>,
 
     #[serde(rename = "transfer_syntax_uid")]
-    pub transfer_syntax_uid: SopUidString,
+    pub transfer_syntax_uid: BoundedString<64>,
 
     #[serde(rename = "pixel_data_location")]
     pub pixel_data_location: Option<BoundedString<512>>,
@@ -266,7 +258,7 @@ pub struct DicomImageMeta {
     pub thumbnail_location: Option<BoundedString<512>>,
 
     #[serde(rename = "sop_class_uid")]
-    pub sop_class_uid: SopUidString,
+    pub sop_class_uid: BoundedString<64>,
 
     #[serde(rename = "image_status")]
     pub image_status: Option<BoundedString<32>>,
@@ -474,8 +466,8 @@ pub fn make_image_info(
     );
 
     // 计算哈希值
-    let study_uid_hash = UidHashString::make_from(&common_meta.study_uid.as_str());
-    let series_uid_hash = UidHashString::make_from(&common_meta.series_uid.as_str());
+    let study_uid_hash = BoundedString::<20>::make_from_db(common_meta.study_uid.to_string());
+    let series_uid_hash = BoundedString::<20>::make_from_db(common_meta.series_uid.to_string());
 
     // 时间戳
     let now = chrono::Local::now().naive_local();
@@ -487,13 +479,13 @@ pub fn make_image_info(
         patient_id: BoundedString::<64>::try_from(common_meta.patient_id).map_err(|_| {
             DicomParseError::ConversionError("Failed to convert patient ID".to_string())
         })?,
-        study_uid: SopUidString::try_from(&common_meta.study_uid).map_err(|_| {
+        study_uid: BoundedString::<64>::try_from(&common_meta.study_uid).map_err(|_| {
             DicomParseError::ConversionError("Failed to convert study UID".to_string())
         })?,
-        series_uid: SopUidString::try_from(&common_meta.series_uid).map_err(|_| {
+        series_uid: BoundedString::<64>::try_from(&common_meta.series_uid).map_err(|_| {
             DicomParseError::ConversionError("Failed to convert series UID".to_string())
         })?,
-        sop_uid: SopUidString::try_from(&common_meta.sop_uid).map_err(|_| {
+        sop_uid: BoundedString::<64>::try_from(&common_meta.sop_uid).map_err(|_| {
             DicomParseError::ConversionError("Failed to convert SOP UID".to_string())
         })?,
         study_uid_hash,
@@ -524,10 +516,10 @@ pub fn make_image_info(
         window_center,
         window_width,
 
-        transfer_syntax_uid: SopUidString::try_from(transfer_syntax_uid).unwrap(),
+        transfer_syntax_uid: BoundedString::<64>::try_from(transfer_syntax_uid).unwrap(),
         pixel_data_location: None,
         thumbnail_location: None,
-        sop_class_uid: SopUidString::try_from(sop_class_uid).map_err(|_| {
+        sop_class_uid: BoundedString::<64>::try_from(sop_class_uid).map_err(|_| {
             DicomParseError::SopClassUidIsEmpty("SOP Class UID is empty".to_string())
         })?,
         image_status,
@@ -621,28 +613,6 @@ pub fn make_state_info(
     let patient_size = dicom_utils::get_decimal_value(dicom_obj, tags::PATIENT_SIZE);
     let patient_weight = dicom_utils::get_decimal_value(dicom_obj, tags::PATIENT_WEIGHT);
 
-    let medical_alerts = dicom_utils::get_text_value(dicom_obj, tags::MEDICAL_ALERTS)
-        .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert medical alerts".to_string())
-        })?;
-
-    let allergies = dicom_utils::get_text_value(dicom_obj, tags::ALLERGIES)
-        .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
-        .transpose()
-        .map_err(|_| DicomParseError::ConversionError("Failed to convert allergies".to_string()))?;
-
-    let pregnancy_status = dicom_utils::get_int_value(dicom_obj, tags::PREGNANCY_STATUS);
-    let occupation = dicom_utils::get_text_value(dicom_obj, tags::OCCUPATION)
-        .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert occupation".to_string())
-        })?;
     let study_date = common_meta.study_date;
     // 检查相关信息
     let study_time = dicom_utils::get_text_value(dicom_obj, tags::STUDY_TIME)
@@ -776,8 +746,8 @@ pub fn make_state_info(
         dicom_utils::get_int_value(dicom_obj, tags::NUMBER_OF_SERIES_RELATED_INSTANCES);
 
     // 计算哈希值
-    let study_uid_hash = UidHashString::make_from(&common_meta.study_uid.as_str());
-    let series_uid_hash = UidHashString::make_from(&common_meta.series_uid.as_str());
+    let study_uid_hash = BoundedString::<20>::make_from_db(common_meta.study_uid.to_string());
+    let series_uid_hash = BoundedString::<20>::make_from_db(common_meta.series_uid.to_string());
 
     // 时间戳
     let now = chrono::Local::now().naive_local();
@@ -785,8 +755,8 @@ pub fn make_state_info(
 
     let tenant_id = BoundedString::<64>::try_from(tenant_id.to_string()).unwrap();
     let patient_id = BoundedString::<64>::try_from(&common_meta.patient_id).unwrap();
-    let study_uid = SopUidString::try_from(&common_meta.study_uid).unwrap();
-    let series_uid = SopUidString::try_from(&common_meta.series_uid).unwrap();
+    let study_uid = BoundedString::<64>::try_from(&common_meta.study_uid).unwrap();
+    let series_uid = BoundedString::<64>::try_from(&common_meta.series_uid).unwrap();
     let accession_number = BoundedString::<16>::try_from(acc_num).unwrap();
 
     Ok(DicomStateMeta {
@@ -805,10 +775,7 @@ pub fn make_state_info(
         patient_age,
         patient_size,
         patient_weight,
-        medical_alerts,
-        allergies,
-        pregnancy_status,
-        occupation,
+
         // 检查信息
         study_date,
         study_time,
@@ -827,8 +794,8 @@ pub fn make_state_info(
 
         series_related_instances,
         // 时间戳
-        created_time: Some(now),
-        updated_time: Some(now),
+        created_time: now,
+        updated_time: now,
     })
 }
 
