@@ -1,7 +1,6 @@
-use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 
 #[derive(Debug, Snafu)]
 #[non_exhaustive]
@@ -184,58 +183,30 @@ impl<const N: usize> TryFrom<&String> for FixedLengthString<N> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(transparent)]
-pub struct SopUidString(BoundedString<64>);
-
-impl SopUidString {
-    pub fn from_bounded_string(bounded: BoundedString<64>) -> Self {
-        Self(bounded)
-    }
-    pub(crate) fn make_from_db(s: String) -> Self {
-        Self {
-            0: BoundedString::make_from_db(s),
-        }
-    }
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
-impl TryFrom<String> for SopUidString {
-    type Error = BoundedStringError;
-    fn try_from(s: String) -> BoundedResult<Self> {
-        BoundedString::new_from_string(&s).map(|bounded| Self(bounded))
-    }
-}
-
-impl TryFrom<&str> for SopUidString {
-    type Error = BoundedStringError;
-    fn try_from(s: &str) -> BoundedResult<Self> {
-        BoundedString::new_from_str(s).map(|bounded| Self(bounded))
-    }
-}
-
-impl TryFrom<&String> for SopUidString {
-    type Error = BoundedStringError;
-    fn try_from(s: &String) -> BoundedResult<Self> {
-        BoundedString::new_from_string(s).map(|bounded| Self(bounded))
-    }
-}
-
 /// DICOM文件中的表示日期的字符串，格式为 YYYYMMDD, 长度为 8, 例如 "20231005"
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
 pub struct DicomDateString(FixedLengthString<8>);
 
 impl DicomDateString {
-    pub fn from_fixed_length_string(fixed: FixedLengthString<8>) -> Self {
-        Self(fixed)
-    }
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
 
     pub(crate) fn make_from_db(s: &str) -> Self {
+        // 使用 NaiveDate 验证日期格式和有效性
+        chrono::NaiveDate::parse_from_str(&s, "%Y%m%d")
+            .map_err(|_| BoundedStringError::LengthError {
+                fixlen: 8,
+                len: s.len(),
+            })
+            .expect(
+                format!(
+                    "DicomDateString::make_from_db  only support YYYYMMDD format, but got {}",
+                    s
+                )
+                .as_str(),
+            );
         let fx = FixedLengthString::new_from_str(s)
             .map(|fixed| Self(fixed))
             .unwrap();
@@ -245,6 +216,13 @@ impl DicomDateString {
 impl TryFrom<String> for DicomDateString {
     type Error = BoundedStringError;
     fn try_from(s: String) -> BoundedResult<Self> {
+        // 使用 NaiveDate 验证日期格式和有效性
+        chrono::NaiveDate::parse_from_str(&s, "%Y%m%d").map_err(|_| {
+            BoundedStringError::LengthError {
+                fixlen: 8,
+                len: s.len(),
+            }
+        })?;
         FixedLengthString::new_from_string(&s).map(|fixed| Self(fixed))
     }
 }
@@ -252,6 +230,13 @@ impl TryFrom<String> for DicomDateString {
 impl TryFrom<&str> for DicomDateString {
     type Error = BoundedStringError;
     fn try_from(s: &str) -> BoundedResult<Self> {
+        // 使用 NaiveDate 验证日期格式和有效性
+        chrono::NaiveDate::parse_from_str(&s, "%Y%m%d").map_err(|_| {
+            BoundedStringError::LengthError {
+                fixlen: 8,
+                len: s.len(),
+            }
+        })?;
         FixedLengthString::new_from_str(s).map(|fixed| Self(fixed))
     }
 }
@@ -259,95 +244,14 @@ impl TryFrom<&str> for DicomDateString {
 impl TryFrom<&String> for DicomDateString {
     type Error = BoundedStringError;
     fn try_from(s: &String) -> BoundedResult<Self> {
+        // 使用 NaiveDate 验证日期格式和有效性
+        chrono::NaiveDate::parse_from_str(&s, "%Y%m%d").map_err(|_| {
+            BoundedStringError::LengthError {
+                fixlen: 8,
+                len: s.len(),
+            }
+        })?;
         FixedLengthString::new_from_string(s).map(|fixed| Self(fixed))
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(transparent)]
-pub struct UuidString(FixedLengthString<36>);
-
-impl UuidString {
-    pub fn from_fixed_length_string(fixed: FixedLengthString<36>) -> Self {
-        Self(fixed)
-    }
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
-impl TryFrom<String> for UuidString {
-    type Error = BoundedStringError;
-    fn try_from(s: String) -> BoundedResult<Self> {
-        FixedLengthString::new_from_string(&s).map(|fixed| Self(fixed))
-    }
-}
-
-impl TryFrom<&str> for UuidString {
-    type Error = BoundedStringError;
-    fn try_from(s: &str) -> BoundedResult<Self> {
-        FixedLengthString::new_from_str(s).map(|fixed| Self(fixed))
-    }
-}
-
-impl TryFrom<&String> for UuidString {
-    type Error = BoundedStringError;
-    fn try_from(s: &String) -> BoundedResult<Self> {
-        FixedLengthString::new_from_string(s).map(|fixed| Self(fixed))
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(transparent)]
-pub struct UidHashString(pub(crate) BoundedString<20>);
-
-impl UidHashString {
-    pub(crate) fn make_from_db(uid: &str) -> Self {
-        let mut hasher = SeaHasher::new();
-        uid.hash(&mut hasher);
-        let hash_value = hasher.finish();
-        // 格式化为20位字符串，前面补X
-        let hash_str = format!("{:020X}", hash_value);
-        Self(BoundedString::new_from_str(&hash_str).unwrap())
-    }
-    pub fn from_bounded_string(bounded: BoundedString<20>) -> Self {
-        Self(bounded)
-    }
-    pub fn from_string(s: String) -> Self {
-        Self(BoundedString::new_from_string(&s).unwrap())
-    }
-
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-    // 使用 deref 方式访问
-    pub fn as_ref(&self) -> &String {
-        self.0.as_ref()
-    }
-}
-
-impl TryFrom<&String> for UidHashString {
-    type Error = BoundedStringError;
-    fn try_from(s: &String) -> BoundedResult<Self> {
-        BoundedString::new_from_string(s).map(|fixed| Self(fixed))
-    }
-}
-// 为 UidHashString 实现 From<String>
-impl From<String> for UidHashString {
-    fn from(s: String) -> Self {
-        // 假设 UidHashString 是基于 BoundedString 或类似包装类型
-        // 根据实际的 UidHashString 定义调整实现
-        UidHashString::try_from(s).unwrap_or_else(|_| {
-            // 或者提供一个默认值或处理错误的方式
-            panic!("Failed to convert String to UidHashString")
-        })
-    }
-}
-
-// 同时实现 From<&str>
-impl From<&str> for UidHashString {
-    fn from(s: &str) -> Self {
-        UidHashString::try_from(s)
-            .unwrap_or_else(|_| panic!("Failed to convert &str to UidHashString"))
     }
 }
 
@@ -494,21 +398,9 @@ mod tests {
     }
 
     // 为 SopUidString 实现 Display trait
-    impl fmt::Display for SopUidString {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{}", self.0.as_str())
-        }
-    }
 
     // 为 DicomDateString 实现 Display trait
     impl fmt::Display for DicomDateString {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{}", self.0.as_str())
-        }
-    }
-
-    // 为 UuidString 实现 Display trait
-    impl fmt::Display for UuidString {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "{}", self.0.as_str())
         }
@@ -532,8 +424,8 @@ mod tests {
             created_time: DateTime::from_timestamp(1728971020, 104453242)
                 .unwrap()
                 .naive_utc(),
-            series_uid_hash: UidHashString::make_from_db("123456789"),
-            study_uid_hash: UidHashString::make_from_db("323456789"),
+            series_uid_hash: BoundedString::<20>::make_from_db("123456789".to_string()),
+            study_uid_hash: BoundedString::<20>::make_from_db("323456789".to_string()),
             accession_number: "14769824".try_into().unwrap(),
             target_ts: "1.2.840.10008.1.2.1".try_into().unwrap(),
             study_date: NaiveDate::from_ymd_opt(2021, 1, 30).unwrap(),

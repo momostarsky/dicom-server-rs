@@ -1,4 +1,4 @@
-
+use crate::string_ext::{BoundedString};
 use config::{Config, ConfigError, Environment, File};
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
@@ -6,7 +6,6 @@ use dotenv::dotenv;
 use serde::Deserialize;
 use std::env;
 use std::sync::Once;
-use crate::string_ext::UidHashString;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct RedisConfig {
@@ -147,17 +146,43 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
             println!("main_database:dbtype {:?}", app_config.main_database.dbtype);
             println!("main_database:host {:?}", app_config.main_database.host);
             println!("main_database:port {:?}", app_config.main_database.port);
-            println!("main_database:username {:?}", app_config.main_database.username);
-            println!("main_database:password {:?}", app_config.main_database.password);
-            println!("main_database:database {:?}", app_config.main_database.database);
+            println!(
+                "main_database:username {:?}",
+                app_config.main_database.username
+            );
+            println!(
+                "main_database:password {:?}",
+                app_config.main_database.password
+            );
+            println!(
+                "main_database:database {:?}",
+                app_config.main_database.database
+            );
 
-            println!("secondary_database:dbtype {:?}", app_config.secondary_database.dbtype);
-            println!("secondary_database:host {:?}", app_config.secondary_database.host);
-            println!("secondary_database:port {:?}", app_config.secondary_database.port);
-            println!("secondary_database:username {:?}", app_config.secondary_database.username);
-            println!("secondary_database:password {:?}", app_config.secondary_database.password);
-            println!("secondary_database:database {:?}", app_config.secondary_database.database);
-
+            println!(
+                "secondary_database:dbtype {:?}",
+                app_config.secondary_database.dbtype
+            );
+            println!(
+                "secondary_database:host {:?}",
+                app_config.secondary_database.host
+            );
+            println!(
+                "secondary_database:port {:?}",
+                app_config.secondary_database.port
+            );
+            println!(
+                "secondary_database:username {:?}",
+                app_config.secondary_database.username
+            );
+            println!(
+                "secondary_database:password {:?}",
+                app_config.secondary_database.password
+            );
+            println!(
+                "secondary_database:database {:?}",
+                app_config.secondary_database.database
+            );
 
             println!("server:port {:?}", app_config.server.port);
             println!("server:host {:?}", app_config.server.host);
@@ -365,7 +390,6 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
     }
 }
 pub fn generate_database_connection(dbconfig: &DatabaseConfig) -> Result<String, String> {
- 
     let password = dbconfig
         .password
         .replace("@", "%40")
@@ -395,7 +419,6 @@ pub fn generate_database_connection(dbconfig: &DatabaseConfig) -> Result<String,
 }
 
 pub fn generate_pg_database_connection(dbconfig: &DatabaseConfig) -> Result<String, String> {
-
     let password = dbconfig
         .password
         .replace("@", "%40")
@@ -431,9 +454,9 @@ pub fn dicom_study_dir(
     study_date: &str,
     study_uid: &str,
     create_not_exists: bool,
-) -> Result<(UidHashString, String), String> {
+) -> Result<(BoundedString<20>, String), String> {
     let app_config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
-    let study_uid_hash = UidHashString::make_from_db(study_uid);
+    let study_uid_hash = BoundedString::<20>::make_from_db(study_uid.to_string());
     let dicom_store_path = &app_config.local_storage.dicm_store_path;
     let study_dir = format!(
         "{}/{}/{}/{}",
@@ -443,7 +466,7 @@ pub fn dicom_study_dir(
         std::fs::create_dir_all(&study_dir)
             .map_err(|e| format!("Failed to create directory '{}': {}", study_dir, e))?;
     }
-    Ok((study_uid_hash , study_dir))
+    Ok((study_uid_hash, study_dir))
 }
 
 pub fn json_metadata_dir(
@@ -468,8 +491,11 @@ pub fn dicom_series_dir(
     study_uid: &str,
     series_uid: &str,
     create_not_exists: bool,
-) -> Result<(UidHashString, UidHashString, String), String> {
-    let (study_uid_hash, series_uid_hash) = (UidHashString::make_from_db(study_uid), UidHashString::make_from_db(series_uid));
+) -> Result<(BoundedString<20>, BoundedString<20>, String), String> {
+    let (study_uid_hash, series_uid_hash) = (
+        BoundedString::<20>::make_from_db(study_uid.to_string()),
+        BoundedString::<20>::make_from_db(series_uid.to_string()),
+    );
     let app_config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
     let dicom_store_path = &app_config.local_storage.dicm_store_path;
     let series_dir = format!(
@@ -480,11 +506,7 @@ pub fn dicom_series_dir(
         std::fs::create_dir_all(&series_dir)
             .map_err(|e| format!("Failed to create directory '{}': {}", series_dir, e))?;
     }
-    Ok((
-        study_uid_hash.into(),
-        series_uid_hash.into(),
-        series_dir,
-    ))
+    Ok((study_uid_hash.into(), series_uid_hash.into(), series_dir))
 }
 
 pub fn dicom_file_path(dir: &str, sop_uid: &str) -> String {

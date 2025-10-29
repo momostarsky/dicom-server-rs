@@ -1,36 +1,18 @@
 use crate::database_entities::{SeriesEntity, StudyEntity};
 use crate::database_provider::{DbError, DbProvider};
 use crate::dicom_object_meta::DicomStateMeta;
-use crate::string_ext::{BoundedString, DicomDateString, FixedLengthString, SopUidString, UidHashString, UuidString};
+use crate::string_ext::{BoundedString, DicomDateString, FixedLengthString};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::mysql::MySqlRow;
-use sqlx::{Database, Decode, Encode, Error, FromRow, MySql, MySqlPool,   Row};
+use sqlx::{Database, Decode, Encode, Error, FromRow, MySql, MySqlPool, Row};
 use tracing::{error, info};
 
-impl sqlx::Type<MySql> for UidHashString {
-    fn type_info() -> <MySql as Database>::TypeInfo {
-        <i64 as sqlx::Type<MySql>>::type_info()
-    }
-}
 impl<const N: usize> sqlx::Type<MySql> for BoundedString<N> {
     fn type_info() -> <MySql as Database>::TypeInfo {
         <&str as sqlx::Type<MySql>>::type_info()
-    }
-}
-impl sqlx::Type<MySql> for SopUidString {
-    fn type_info() -> <MySql as Database>::TypeInfo {
-        <&str as sqlx::Type<MySql>>::type_info()
-    }
-}
-impl Encode<'_, MySql> for UidHashString {
-    fn encode_by_ref(
-        &self,
-        buf: &mut <MySql as Database>::ArgumentBuffer<'_>,
-    ) -> Result<IsNull, BoxDynError> {
-        <&str as Encode<MySql>>::encode(self.as_str(), buf)
     }
 }
 
@@ -52,52 +34,36 @@ impl<'r, const N: usize> Decode<'r, MySql> for BoundedString<N> {
     }
 }
 
-
 //
 // // 为 FixedLengthString 实现 PostgreSQL 的 Decode trait
 impl<'r, const N: usize> Decode<'r, MySql> for FixedLengthString<N> {
     fn decode(value: <MySql as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let str_val = <&str  as Decode<MySql>>::decode(value)?;
+        let str_val = <&str as Decode<MySql>>::decode(value)?;
         Ok(FixedLengthString::<N>::try_from(str_val).map_err(|e| Box::new(e) as BoxDynError)?)
-    }
-}
-//
-// // 为 SopUidString 实现 PostgreSQL 的 Decode trait
-impl<'r> Decode<'r, MySql> for SopUidString {
-    fn decode(value: <MySql as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let str_val = <&str  as Decode<MySql>>::decode(value)?;
-        Ok(SopUidString::try_from(str_val).map_err(|e| Box::new(e) as BoxDynError)?)
     }
 }
 
 //   为 UuidString 实现 PostgreSQL 的 Decode trait
-impl<'r> Decode<'r, MySql> for UuidString {
-    fn decode(value: <MySql as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let str_val = <&str  as Decode<MySql>>::decode(value)?;
-        Ok(UuidString::try_from(str_val).map_err(|e| Box::new(e) as BoxDynError)?)
-    }
-}
-impl<'r> Decode<'r, MySql> for UidHashString {
-    fn decode(value: <MySql as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let str_val = <&str as Decode<MySql>>::decode(value)?;
-        Ok(UidHashString::make_from_db(str_val))
-    }
-}
+
 impl sqlx::Type<MySql> for DicomDateString {
     fn type_info() -> <MySql as Database>::TypeInfo {
         <&str as sqlx::Type<MySql>>::type_info()
     }
 }
-
+impl Encode<'_, MySql> for DicomDateString {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <MySql as Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, BoxDynError> {
+        <&str as Encode<MySql>>::encode(self.as_str(), buf)
+    }
+}
 impl<'r> Decode<'r, MySql> for DicomDateString {
     fn decode(value: <MySql as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
         let str_val = <&str as Decode<MySql>>::decode(value)?;
         Ok(DicomDateString::make_from_db(str_val))
     }
 }
-
-
-
 
 impl FromRow<'_, MySqlRow> for SeriesEntity {
     fn from_row(row: &MySqlRow) -> Result<Self, Error> {
@@ -139,7 +105,9 @@ impl FromRow<'_, MySqlRow> for StudyEntity {
             patient_name: row.get("patient_name"),
             patient_birth_date: row.get("patient_birth_date"),
             patient_birth_time: row.get("patient_birth_time"),
-            study_uid_hash: UidHashString::from_string(row.get::<String, _>("study_uid_hash")),
+            study_uid_hash: BoundedString::<20>::make_from_db(
+                row.get::<String, _>("study_uid_hash"),
+            ),
             study_date_origin: row.get("study_date_origin"),
         })
     }
@@ -149,20 +117,20 @@ impl FromRow<'_, MySqlRow> for DicomStateMeta {
     fn from_row(row: &'_ MySqlRow) -> Result<Self, Error> {
         let s = row.get::<_, &str>("study_uid_hash");
         let ss = row.get::<_, &str>("series_uid_hash");
-         let date_str = row.get::<_, &str>("study_date_origin");
-        let study_uid_hash_v = UidHashString::make_from_db(s);
-        let series_uid_hash_v = UidHashString::make_from_db(ss);
-         let study_date_origin_v = DicomDateString::make_from_db(date_str);
-         let tenant_id = row.get::<_, &str>("tenant_id");
+        let date_str = row.get::<_, &str>("study_date_origin");
+        let study_uid_hash_v = BoundedString::<20>::make_from_db(s);
+        let series_uid_hash_v = BoundedString::<20>::make_from_db(ss);
+        let study_date_origin_v = DicomDateString::make_from_db(date_str);
+        let tenant_id = row.get::<_, &str>("tenant_id");
         let tenant_id_v = BoundedString::<64>::make_from_db(tenant_id);
         let patient_id = row.get::<_, &str>("patient_id");
         let patient_id_v = BoundedString::<64>::make_from_db(patient_id);
         let study_uid = row.get::<_, &str>("study_uid");
-        let study_uid_v = SopUidString::make_from_db(study_uid);
+        let study_uid_v = BoundedString::<64>::make_from_db(study_uid);
         let series_uid = row.get::<_, &str>("series_uid");
-        let series_uid_v = SopUidString::make_from_db(series_uid);
+        let series_uid_v = BoundedString::<64>::make_from_db(series_uid);
         let accession_number = row.get::<_, &str>("accession_number");
-       let accession_number_v = BoundedString::<16>::make_from_db(accession_number);
+        let accession_number_v = BoundedString::<16>::make_from_db(accession_number);
         // 显式处理时间字段，使用 try_get 并指定类型
         // 显式处理时间字段，通过解析字符串的形式
         let created_time_str: DateTime<Utc> = row.get("created_time");
@@ -201,33 +169,6 @@ impl FromRow<'_, MySqlRow> for DicomStateMeta {
             body_part_examined: row.get("body_part_examined"),
             protocol_name: row.get("protocol_name"),
             series_related_instances: row.get("series_related_instances"),
-            // tenant_id: tenant_id_v,
-            // patient_id: patient_id_v,
-            // study_uid: study_uid_v,
-            // series_uid: series_uid_v,
-            // study_uid_hash: study_uid_hash_v,
-            // series_uid_hash: series_uid_hash_v,
-            // study_date_origin: study_date_origin_v,
-            // patient_name: row.get("patient_name"),
-            // patient_sex: row.get("patient_sex"),
-            // patient_birth_date: row.get("patient_birth_date"),
-            // patient_birth_time: row.get("patient_birth_time"),
-            // patient_age: row.get("patient_age"),
-            // patient_size: row.get("patient_size"),
-            // patient_weight: row.get("patient_weight"),
-            // study_date: row.get("study_date"),
-            // study_time: row.get("study_time"),
-            // accession_number: accession_number_v,
-            // study_id: row.get("study_id"),
-            // study_description: row.get("study_description"),
-            // modality: row.get("modality"),
-            // series_number: row.get("series_number"),
-            // series_date: row.get("series_date"),
-            // series_time: row.get("series_time"),
-            // series_description: row.get("series_description"),
-            // body_part_examined: row.get("body_part_examined"),
-            // protocol_name: row.get("protocol_name"),
-            // series_related_instances: row.get("series_related_instances"),
             created_time,
             updated_time,
         })
@@ -476,8 +417,8 @@ impl DbProvider for MySqlProvider {
         };
 
         match query
-            .bind( state_meta.created_time)
-            .bind( state_meta.updated_time)
+            .bind(state_meta.created_time)
+            .bind(state_meta.updated_time)
             .execute(&pool)
             .await
         {
@@ -721,10 +662,10 @@ mod tests {
         // 创建测试数据
         let tenant_id = BoundedString::<64>::try_from("test_tenant_123".to_string())?;
         let patient_id = BoundedString::<64>::try_from("test_patient_456".to_string())?;
-        let study_uid = SopUidString::try_from("1.2.3.4.5.6.7.8.9")?;
-        let series_uid = SopUidString::try_from("9.8.7.6.5.4.3.2.1")?;
-        let study_uid_hash = UidHashString::make_from_db("1.2.3.4.5.6.7.8.9");
-        let series_uid_hash = UidHashString::make_from_db("9.8.7.6.5.4.3.2.1");
+        let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9")?;
+        let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1")?;
+        let study_uid_hash = BoundedString::<20>::make_from_db("1.2.3.4.5.6.7.8.9".to_string());
+        let series_uid_hash = BoundedString::<20>::make_from_db("9.8.7.6.5.4.3.2.1".to_string());
         let study_date_origin = DicomDateString::try_from("20231201".to_string())?;
         let accession_number = BoundedString::<16>::try_from("ACC123456".to_string())?;
         let modality = Some(BoundedString::<16>::try_from("CT".to_string())?);

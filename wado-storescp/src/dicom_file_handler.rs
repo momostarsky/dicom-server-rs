@@ -1,3 +1,4 @@
+use chrono::NaiveDate;
 use common::dicom_object_meta::{DicomStoreMeta, TransferStatus};
 use common::dicom_utils::get_tag_value;
 use common::message_sender_kafka::KafkaMessagePublisher;
@@ -14,7 +15,6 @@ use slog::{error, info};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::LazyLock;
-use chrono::NaiveDate;
 use uuid::Uuid;
 
 /// 校验 DICOM StudyDate 格式是否符合 YYYYMMDD 格式
@@ -236,10 +236,10 @@ pub(crate) async fn process_dicom_file(
     let saved_path = PathBuf::from(file_path); // 此时可以安全转移所有权
     let uuid_v7 = Uuid::now_v7();
     let trace_uid = uuid_v7.to_string(); // 或直接用 format!("{}", uuid_v7)
-    // 修改为
-    let cdate = chrono::Local::now().naive_local(); 
+                                         // 修改为
+    let cdate = chrono::Local::now().naive_local();
     Ok(DicomStoreMeta {
-        trace_id: common::string_ext::UuidString::try_from(trace_uid)
+        trace_id: common::string_ext::FixedLengthString::<36>::try_from(trace_uid)
             .with_whatever_context(|err| format!("Failed to create trace_id: {}", err))?,
         worker_node_id: common::string_ext::BoundedString::try_from("DICOM_STORE_SCP")
             .with_whatever_context(|err| format!("Failed to create worker_node_id: {}", err))?,
@@ -247,19 +247,20 @@ pub(crate) async fn process_dicom_file(
             .with_whatever_context(|err| format!("Failed to create tenant_id: {}", err))?,
         patient_id: common::string_ext::BoundedString::try_from(pat_id)
             .with_whatever_context(|err| format!("Failed to create patient_id: {}", err))?,
-        study_uid: common::string_ext::SopUidString::try_from(study_uid)
+        study_uid: common::string_ext::BoundedString::<64>::try_from(study_uid)
             .with_whatever_context(|err| format!("Failed to create study_uid: {}", err))?,
-        series_uid: common::string_ext::SopUidString::try_from(series_uid)
+        series_uid: common::string_ext::BoundedString::<64>::try_from(series_uid)
             .with_whatever_context(|err| format!("Failed to create series_uid: {}", err))?,
-        sop_uid: common::string_ext::SopUidString::try_from(sop_instance_uid)
+        sop_uid: common::string_ext::BoundedString::<64>::try_from(sop_instance_uid)
             .with_whatever_context(|err| format!("Failed to create sop_uid: {}", err))?,
         file_path: common::string_ext::BoundedString::try_from(saved_path.to_str().unwrap())
             .with_whatever_context(|err| format!("Failed to create file_path: {}", err))?,
         file_size: fsize as u32,
-        transfer_syntax_uid: common::string_ext::SopUidString::try_from(ts).with_whatever_context(
-            |err| format!("Failed to create transfer_syntax_uid: {}", err),
-        )?,
-        target_ts: common::string_ext::SopUidString::try_from(final_ts)
+        transfer_syntax_uid: common::string_ext::BoundedString::<64>::try_from(ts)
+            .with_whatever_context(|err| {
+                format!("Failed to create transfer_syntax_uid: {}", err)
+            })?,
+        target_ts: common::string_ext::BoundedString::<64>::try_from(final_ts)
             .with_whatever_context(|err| format!("Failed to create target_ts: {}", err))?,
         study_date: NaiveDate::parse_from_str(study_date.as_str(), "%Y%m%d")
             .with_whatever_context(|err| format!("Failed to create study_date: {}", err))?,
