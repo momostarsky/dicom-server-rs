@@ -447,6 +447,7 @@ pub fn generate_pg_database_connection(dbconfig: &DatabaseConfig) -> Result<Stri
     Ok(db_conn)
 }
 
+/// 生成 UID 的哈希值, 对于不足20位时，定长设为20位,前置补0
 pub fn hash_uid(uid: &str) -> String {
     use seahash::SeaHasher;
     use std::hash::Hasher;

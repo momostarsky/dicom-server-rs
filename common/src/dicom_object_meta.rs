@@ -7,6 +7,7 @@ use database::dicom_meta::{DicomImageMeta, DicomStateMeta};
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
 use serde::{Deserialize, Serialize};
+use x509_parser::nom::Parser;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -36,47 +37,46 @@ impl DicomCommonMeta {
         // 提取 patient_id
         let patient_id_str = dicom_utils::get_text_value(dicom_obj, tags::PATIENT_ID)
             .filter(|v| !v.is_empty() && v.len() <= 64)
-            .ok_or_else(|| DicomParseError::MissingRequiredField("Patient ID".to_string()))?;
+            .ok_or_else(|| DicomParseError::MissingRequiredField("PATIENT_ID".to_string()))?;
 
         // 提取 study_uid
         let study_uid = dicom_utils::get_text_value(dicom_obj, tags::STUDY_INSTANCE_UID)
             .filter(|v| !v.is_empty() && v.len() <= 64)
             .ok_or_else(|| {
-                DicomParseError::MissingRequiredField("Study Instance UID".to_string())
+                DicomParseError::MissingRequiredField("STUDY_INSTANCE_UID".to_string())
             })?;
 
         // 提取 series_uid
         let series_uid = dicom_utils::get_text_value(dicom_obj, tags::SERIES_INSTANCE_UID)
             .filter(|v| !v.is_empty() && v.len() <= 64)
             .ok_or_else(|| {
-                DicomParseError::MissingRequiredField("Series Instance UID".to_string())
+                DicomParseError::MissingRequiredField("SERIES_INSTANCE_UID".to_string())
             })?;
 
         // 提取 sop_uid (仅对 DicomImageMeta 需要)
         let sop_uid = dicom_utils::get_text_value(dicom_obj, tags::SOP_INSTANCE_UID)
             .filter(|v| !v.is_empty() && v.len() <= 64)
-            .ok_or_else(|| DicomParseError::MissingRequiredField("SOP Instance UID".to_string()))?;
+            .ok_or_else(|| DicomParseError::MissingRequiredField("SOP_INSTANCE_UID".to_string()))?;
 
         // 提取 study_date_str
-        let study_date_str =
-            dicom_utils::get_text_value(dicom_obj, tags::STUDY_DATE).ok_or_else(|| {
-                DicomParseError::MissingRequiredField("Study Date text value".to_string())
-            })?;
-
-        // 验证 study_date_str 格式
-        if study_date_str.len() != 8 || !study_date_str.chars().all(|c| c.is_ascii_digit()) {
-            return Err(DicomParseError::InvalidDateFormat(format!(
-                "Study Date must be in YYYYMMDD format, got: {}",
-                study_date_str
-            )));
-        }
+        let study_date_str = dicom_utils::get_text_value(dicom_obj, tags::STUDY_DATE)
+            .ok_or_else(|| DicomParseError::MissingRequiredField("STUDY_DATE".to_string()))?;
+        let study_date_v = match NaiveDate::parse_from_str(&study_date_str, "%Y%m%d") {
+            Ok(date) => date,
+            Err(_) => {
+                return Err(DicomParseError::InvalidDateFormat(format!(
+                    "Study Date must be in YYYYMMDD format, got: {}",
+                    study_date_str
+                )));
+            }
+        };
 
         Ok(DicomCommonMeta {
             patient_id: patient_id_str,
             study_uid,
             series_uid,
             sop_uid,
-            study_date: NaiveDate::parse_from_str(&study_date_str, "%Y%m%d").unwrap(),
+            study_date: study_date_v,
             study_date_str,
         })
     }
