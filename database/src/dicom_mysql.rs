@@ -409,3 +409,208 @@ impl DbProvider for MySqlDbProvider {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dicom_dbtype::*;
+    use chrono::{NaiveDate, NaiveTime};
+
+    #[tokio::test]
+    async fn test_save_state_info() -> Result<(), Box<dyn std::error::Error>> {
+        let db_provider = MySqlDbProvider::new(
+            "mysql://dicomstore:hzjp%23123@192.168.1.14:3306/dicomdb".to_string()
+        );
+
+        // 创建测试数据
+        let tenant_id = BoundedString::<64>::try_from("test_tenant_mysql_123".to_string())?;
+        let patient_id = BoundedString::<64>::try_from("test_patient_mysql_456".to_string())?;
+        let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9.mysql")?;
+        let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.mysql")?;
+        let study_uid_hash = BoundedString::<20>::new_from_str("1.2.3.4.5.6.7.8.9.my").unwrap();
+        let series_uid_hash = BoundedString::<20>::new_from_str("9.8.7.6.5.4.3.2.1.my").unwrap();
+        let study_date_origin = DicomDateString::new("20231201");
+        let accession_number = BoundedString::<16>::try_from("ACC123456MYSQL".to_string())?;
+        let modality = Some(BoundedString::<16>::try_from("MR".to_string())?);
+        let series_number = Some(1);
+        let series_date = Some(NaiveDate::from_ymd_opt(2023, 12, 1).unwrap());
+        let series_time = Some(NaiveTime::parse_from_str("120000", "%H%M%S")?);
+        let series_description = Some(BoundedString::<256>::try_from("Test Series MySQL".to_string())?);
+        let body_part_examined = Some(BoundedString::<64>::try_from("HEAD".to_string())?);
+        let protocol_name = Some(BoundedString::<64>::try_from("HEAD MRI".to_string())?);
+        let study_date = NaiveDate::from_ymd_opt(2023, 12, 1).unwrap();
+        let study_time = Some(NaiveTime::parse_from_str("120000", "%H%M%S")?);
+        let study_id = Some(BoundedString::<16>::try_from("STUDY123MYSQL".to_string())?);
+        let study_description = Some(BoundedString::<64>::try_from("Test Study MySQL".to_string())?);
+        let patient_age = Some(BoundedString::<16>::try_from("045Y".to_string())?);
+        let patient_sex = Some(BoundedString::<1>::try_from("F".to_string())?);
+        let patient_name = Some(BoundedString::<64>::try_from("TEST^PATIENT_MYSQL".to_string())?);
+        let patient_birth_date = Some(NaiveDate::from_ymd_opt(1978, 1, 1).unwrap());
+        let patient_birth_time = Some(NaiveTime::parse_from_str("080000", "%H%M%S")?);
+        let created_time = chrono::Local::now().naive_local();
+        let updated_time = chrono::Local::now().naive_local();
+
+        // 创建 DicomStateMeta 实例
+        let state_meta = DicomStateMeta {
+            tenant_id,
+            patient_id,
+            study_uid,
+            series_uid,
+            study_uid_hash,
+            series_uid_hash,
+            study_date_origin,
+            patient_name,
+            patient_sex,
+            patient_birth_date,
+            patient_birth_time,
+            patient_age,
+            patient_size: Some(165.5),
+            patient_weight: Some(60.2),
+            study_date,
+            study_time,
+            accession_number,
+            study_id,
+            study_description,
+            modality,
+            series_number,
+            series_date,
+            series_time,
+            series_description,
+            body_part_examined,
+            protocol_name,
+            series_related_instances: None,
+            created_time,
+            updated_time,
+        };
+
+        // 执行保存操作
+        let result = db_provider.save_state_info(&state_meta).await;
+
+        // 验证保存成功
+        assert!(
+            result.is_ok(),
+            "Failed to save DicomStateMeta: {:?}",
+            result.err()
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_state_metaes() -> Result<(), Box<dyn std::error::Error>> {
+        let db_provider = MySqlDbProvider::new(
+            "mysql://dicomstore:hzjp%23123@192.168.1.14:3306/dicomdb".to_string()
+        );
+
+        let tenant_id = "1234567890";
+        let study_uid = "1.2.156.112605.0.1685486876.2025061710152134339.2.1.1";
+
+        // 执行查询操作
+        let result = db_provider.get_state_metaes(tenant_id, study_uid).await;
+
+        // 验证查询成功
+        assert!(
+            result.is_ok(),
+            "Failed to get DicomStateMeta list: {:?}",
+            result.err()
+        );
+
+        let state_meta_list = result.unwrap();
+
+        // 验证返回结果不为空
+        assert!(!state_meta_list.is_empty(), "Expected non-empty result");
+
+        // 验证每条记录的 tenant_id 和 study_uid 是否正确
+        for state_meta in state_meta_list {
+            assert_eq!(state_meta.tenant_id.as_str(), tenant_id);
+            assert_eq!(state_meta.study_uid.as_str(), study_uid);
+            let json = serde_json::to_string_pretty(&state_meta)?;
+            println!("DicomStateMeta JSON: {}", json);
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_save_state_list() -> Result<(), Box<dyn std::error::Error>> {
+        let db_provider = MySqlDbProvider::new(
+            "mysql://dicomstore:hzjp%23123@192.168.1.14:3306/dicomdb".to_string()
+        );
+
+        // 创建测试数据列表
+        let mut state_meta_list = Vec::new();
+
+        // 创建第一个测试数据
+        let tenant_id = BoundedString::<64>::try_from("test_tenant_mysql_list_123".to_string())?;
+        let patient_id = BoundedString::<64>::try_from("test_patient_mysql_list_456".to_string())?;
+        let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9.mysql.list")?;
+        let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.mysql.list")?;
+        let study_uid_hash = BoundedString::<20>::new_from_str("1.2.3.4.5.6.7.8.9.my" ).unwrap();
+        let series_uid_hash = BoundedString::<20>::new_from_str("9.8.7.6.5.4.3.2.1.my").unwrap();
+        let study_date_origin = DicomDateString::new("20231202");
+        let accession_number = BoundedString::<16>::try_from("ACC123457MYSQL".to_string())?;
+        let modality = Some(BoundedString::<16>::try_from("CT".to_string())?);
+        let series_number = Some(2);
+        let series_date = Some(NaiveDate::from_ymd_opt(2023, 12, 2).unwrap());
+        let series_time = Some(NaiveTime::parse_from_str("130000", "%H%M%S")?);
+        let series_description = Some(BoundedString::<256>::try_from("Test Series List MySQL".to_string())?);
+        let body_part_examined = Some(BoundedString::<64>::try_from("CHEST".to_string())?);
+        let protocol_name = Some(BoundedString::<64>::try_from("CHEST CT".to_string())?);
+        let study_date = NaiveDate::from_ymd_opt(2023, 12, 2).unwrap();
+        let study_time = Some(NaiveTime::parse_from_str("130000", "%H%M%S")?);
+        let study_id = Some(BoundedString::<16>::try_from("STUDY124MYSQL".to_string())?);
+        let study_description = Some(BoundedString::<64>::try_from("Test Study List MySQL".to_string())?);
+        let patient_age = Some(BoundedString::<16>::try_from("046Y".to_string())?);
+        let patient_sex = Some(BoundedString::<1>::try_from("M".to_string())?);
+        let patient_name = Some(BoundedString::<64>::try_from("TEST^PATIENT2_MYSQL".to_string())?);
+        let patient_birth_date = Some(NaiveDate::from_ymd_opt(1977, 1, 1).unwrap());
+        let patient_birth_time = Some(NaiveTime::parse_from_str("090000", "%H%M%S")?);
+        let created_time = chrono::Local::now().naive_local();
+        let updated_time = chrono::Local::now().naive_local();
+
+        let state_meta = DicomStateMeta {
+            tenant_id,
+            patient_id,
+            study_uid,
+            series_uid,
+            study_uid_hash,
+            series_uid_hash,
+            study_date_origin,
+            patient_name,
+            patient_sex,
+            patient_birth_date,
+            patient_birth_time,
+            patient_age,
+            patient_size: Some(175.5),
+            patient_weight: Some(70.2),
+            study_date,
+            study_time,
+            accession_number,
+            study_id,
+            study_description,
+            modality,
+            series_number,
+            series_date,
+            series_time,
+            series_description,
+            body_part_examined,
+            protocol_name,
+            series_related_instances: None,
+            created_time,
+            updated_time,
+        };
+
+        state_meta_list.push(state_meta);
+
+        // 执行批量保存操作
+        let result = db_provider.save_state_list(&state_meta_list).await;
+
+        // 验证保存成功
+        assert!(
+            result.is_ok(),
+            "Failed to save DicomStateMeta list: {:?}",
+            result.err()
+        );
+
+        Ok(())
+    }
+}

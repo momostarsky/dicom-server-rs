@@ -1,0 +1,62 @@
+[package]
+name = "database"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+md5 = { workspace = true }
+const-crc32 = { workspace = true }
+snafu = { workspace = true }
+uuid = { workspace = true, features = ["v4", "v7", "fast-rng"] }
+serde_json = "1.0.145"
+serde = { workspace = true, features = ["derive"] }
+config = { workspace = true }  # 配置文件解析
+dotenv = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+dicom-core = { workspace = true }
+dicom-ul = { workspace = true, features = ["async"] }
+dicom-object = { workspace = true }
+dicom-encoding = { workspace = true }
+dicom-pixeldata = { workspace = true, features = ["native", "jpeg", "rle", "image", "jpegxl", "openjp2", "rayon", "deflate"] }
+dicom-dictionary-std = { workspace = true }
+dicom-transfer-syntax-registry = { workspace = true }
+seahash = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+urlencoding = { workspace = true }
+url = { workspace = true }
+slog = { workspace = true }
+slog-term = { workspace = true }
+slog-async = { workspace = true }
+slog-stdlog = { workspace = true }
+slog-scope = { workspace = true }
+rdkafka = { workspace = true }
+futures = { workspace = true }
+futures-util = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+rayon = { workspace = true }
+thiserror = { workspace = true }
+encoding_rs = { workspace = true }
+gdcm_conv = { workspace = true }
+rstest = { workspace = true }
+openssl = { workspace = true, features = ["v102", "vendored"] }  # 自带 OpenSSL，无需额外安装
+x509-parser = { workspace = true }  # 请检查最新版本
+der = { workspace = true }
+pem = { workspace = true }
+hex = { workspace = true } # x509-parser 可能依赖它
+regex = { workspace = true }
+lazy_static = { workspace = true }
+tempfile = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+
+aes-gcm = { workspace = true }
+rand = { workspace = true }
+base64 = { workspace = true }
+cipher = "0.4.4"
+salsa20 = "0.10.2"
+generic-array = "0.14.7"
+chrono-tz = "0.10.4"
+tokio-postgres = { version = "0.7.15", features = ["default", "with-time-0_3", "with-uuid-1", "with-chrono-0_4"] }
+postgres-types = "0.2.11"
+mysql = { version = "26.0.1", default-features = false, features = ["minimal-rust", "rustls-tls","chrono","time"] }
