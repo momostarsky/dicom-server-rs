@@ -14,6 +14,7 @@ use dicom_ul::{pdu::PDataValueType, Pdu};
 use slog::o;
 
 use crate::dicom_file_handler::classify_and_publish_dicom_messages;
+use database::dicom_meta::DicomStoreMeta;
 use slog::{debug, info, warn};
 
 pub async fn run_store_async(
@@ -99,7 +100,7 @@ pub async fn run_store_async(
     let storage_producer = KafkaMessagePublisher::new(queue_topic_main.parse().unwrap());
     let log_producer = KafkaMessagePublisher::new(queue_topic_log.parse().unwrap());
 
-    let mut dicom_message_lists: Vec<common::dicom_object_meta::DicomStoreMeta> = vec![];
+    let mut dicom_message_lists: Vec<DicomStoreMeta> = vec![];
     let ip_address = peer.ip().to_string();
     let client_ae_title = association.client_ae_title().to_string();
     loop {

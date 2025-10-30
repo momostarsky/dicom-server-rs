@@ -1,7 +1,6 @@
 use crate::dicom_dbtype::{BoundedString, DicomDateString};
 use mysql::prelude::*;
-use mysql::{FromValueError, Value};
-use std::convert::Infallible;
+use mysql::Value;
 
 impl<const N: usize> From<BoundedString<N>> for Value {
     fn from(bounded_string: BoundedString<N>) -> Self {
@@ -31,7 +30,7 @@ impl From<DicomDateString> for Value {
 
 impl From<String> for DicomDateString {
     fn from(value: String) -> Self {
-        DicomDateString::new(value.as_str())
+        DicomDateString::make_from_db(value.as_str())
     }
 }
 impl FromValue for DicomDateString {

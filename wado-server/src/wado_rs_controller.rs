@@ -1,12 +1,12 @@
-use crate::redis_helper::{db_study_entity_is_not_exists, db_study_entity_is_not_found, db_study_entity_remove, get_redis_value_with_config, set_redis_value_with_expiry_and_config};
 use crate::{AppState, common_utils};
 use actix_web::http::header::ACCEPT;
 use actix_web::{HttpRequest, HttpResponse, Responder, get, web, web::Path};
-use common::database_entities::{SeriesEntity, StudyEntity};
 use common::dicom_json_helper;
 use common::dicom_json_helper::walk_directory;
 use common::dicom_utils::get_tag_values;
+use common::redis_key::RedisHelper;
 use common::server_config::{dicom_series_dir, dicom_study_dir, json_metadata_dir};
+use database::dicom_meta::DicomStateMeta;
 use dicom_dictionary_std::tags;
 use dicom_object::OpenFileOptions;
 use dicom_object::collector::CharacterSetOverride;
@@ -29,150 +29,36 @@ fn is_accept_type_supported(accept_header: &str, expected_type: &str) -> bool {
         .iter()
         .any(|&t| t.to_lowercase() == expected_type_lower)
 }
-
-fn get_redis_key_for_series(tenant_id: &str, series_uid: &str) -> String {
-    format!("wado:{}:series:{}", tenant_id, series_uid)
-}
-
 // 提取重复的获取study_info逻辑
 async fn get_study_info_with_cache(
     tenant_id: &str,
     study_uid: &str,
     app_state: &web::Data<AppState>,
-) -> Result<StudyEntity, HttpResponse> {
+) -> Result<Vec<DicomStateMeta>, HttpResponse> {
     let log = app_state.log.clone();
-    let redis_key = format!("wado:{}:study:{}", tenant_id, study_uid);
+    // 首先尝试从 Redis 缓存中获取数据
+    let rh = RedisHelper::new(app_state.config.redis.clone());
 
-    // 首先尝试从Redis获取study_info
-    let study_info =
-        match get_redis_value_with_config::<String>(&app_state.config.redis, &redis_key) {
-            Some(cached_json) => {
-                // 如果Redis中有缓存，尝试反序列化
-                match serde_json::from_str::<StudyEntity>(&cached_json) {
-                    Ok(info) => Some(info),
-                    Err(e) => {
-                        error!(
-                            log,
-                            "Failed to deserialize study_info from Redis cache: {}", e
-                        );
-                        None
-                    }
-                }
-            }
-            None => None,
-        };
-
-    // 如果Redis中没有缓存，则从数据库获取
-    match study_info {
-        Some(info) => Ok(info),
-        None => {
-            match app_state.db.get_study_info(tenant_id, study_uid).await {
-                Ok(Some(info)) => {
-                    info!(log, "Retrieved study_info from database");
-                    // 将从数据库获取的数据存入Redis缓存
-                    match serde_json::to_string(&info) {
-                        Ok(study_info_json) => {
-                            db_study_entity_remove::<String>(&app_state.config.redis, &study_uid);
-                            set_redis_value_with_expiry_and_config::<String>(
-                                &app_state.config.redis,
-                                &redis_key,
-                                &study_info_json,
-                                2 * 60 * 60, // 2小时过期时间
-                            );
-                        }
-                        Err(e) => {
-                            error!(
-                                log,
-                                "Failed to serialize study_info to JSON for caching: {}", e
-                            );
-                        }
-                    }
-                    Ok(info)
-                }
-                Ok(None) => {
-                    error!(
-                        log,
-                        "Study not found in database: {},{}", tenant_id, study_uid
-                    );
-                    let error_msg = format!("Study not found: {},{}", tenant_id, study_uid);
-                    // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
-                    db_study_entity_is_not_found::<String>(&app_state.config.redis, &study_uid, 30);
-                    Err(HttpResponse::NotFound().body(error_msg))
-                }
-                Err(e) => {
-                    let error_msg = format!("Failed to retrieve study info: {}", e);
-                    Err(HttpResponse::InternalServerError().body(error_msg))
-                }
-            }
+    match rh.get_study_metadata(tenant_id, study_uid) {
+        Ok(metas) => {
+            info!(log, "Retrieved study_info from Redis cache");
+            return Ok(metas);
         }
+        Err(_) => {}
     }
-}
 
-// 提取重复的获取series_info逻辑
-async fn get_series_info_with_cache(
-    tenant_id: &str,
-    series_uid: &str,
-    app_state: &web::Data<AppState>,
-) -> Result<SeriesEntity, HttpResponse> {
-    let log = app_state.log.clone();
-    let redis_key = get_redis_key_for_series(tenant_id, series_uid);
-
-    // 首先尝试从Redis获取series_info
-    let series_info =
-        match get_redis_value_with_config::<String>(&app_state.config.redis, &redis_key) {
-            Some(cached_json) => {
-                // 如果Redis中有缓存，尝试反序列化
-                match serde_json::from_str::<SeriesEntity>(&cached_json) {
-                    Ok(info) => Some(info),
-                    Err(e) => {
-                        error!(
-                            log,
-                            "Failed to deserialize series_info from Redis cache: {}", e
-                        );
-                        None
-                    }
-                }
-            }
-            None => None,
-        };
-
-    // 如果Redis中没有缓存，则从数据库获取
-    match series_info {
-        Some(info) => Ok(info),
-        None => {
-            match app_state.db.get_series_info(tenant_id, series_uid).await {
-                Ok(Some(info)) => {
-                    info!(log, "Retrieved series_info from database");
-                    // 将从数据库获取的数据存入Redis缓存
-                    match serde_json::to_string(&info) {
-                        Ok(series_info_json) => {
-                            set_redis_value_with_expiry_and_config::<String>(
-                                &app_state.config.redis,
-                                &redis_key,
-                                &series_info_json,
-                                2 * 60 * 60, // 2小时过期时间
-                            );
-                        }
-                        Err(e) => {
-                            error!(
-                                log,
-                                "Failed to serialize series_info to JSON for caching: {}", e
-                            );
-                        }
-                    }
-                    Ok(info)
-                }
-                Ok(None) => {
-                    let error_msg =
-                        format!("retrieve_instance not found: {},{}", tenant_id, series_uid);
-                    Err(HttpResponse::NotFound().body(error_msg))
-                }
-                Err(e) => {
-                    let error_msg =
-                        format!("retrieve_instance Failed to retrieve study info: {}", e);
-                    Err(HttpResponse::InternalServerError().body(error_msg))
-                }
-            }
+    match app_state.db.get_state_metaes(tenant_id, study_uid).await {
+        Ok(metas) => {
+            info!(log, "Retrieved study_info from database");
+            rh.del_study_entity_not_exists(tenant_id, study_uid);
+            // 将查询结果序列化并写入 Redis 缓存，过期时间设置为2小时
+            rh.set_study_metadata(tenant_id, study_uid, &metas, 2 * RedisHelper::ONE_HOUR);
+            Ok(metas)
+        }
+        Err(e) => {
+            let error_msg = format!("Failed to retrieve study info: {}", e);
+            rh.set_study_entity_not_exists(tenant_id, study_uid, 5 * RedisHelper::ONE_MINULE);
+            Err(HttpResponse::InternalServerError().body(error_msg))
         }
     }
 }
@@ -189,10 +75,13 @@ async fn retrieve_study_metadata(
         log,
         "retrieve_study_metadata Tenant ID: {}  and StudyUID:{} ", tenant_id, study_uid
     );
-    // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
-    let is_not_found = db_study_entity_is_not_exists::<String>(&app_state.config.redis, &study_uid);
 
-    if is_not_found.is_some() {
+    // 首先尝试从 Redis 缓存中获取数据
+    let rh = RedisHelper::new(app_state.config.redis.clone());
+    // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
+    let is_not_found = rh.get_study_entity_not_exists(tenant_id.as_str(), study_uid.as_str());
+
+    if is_not_found.is_ok() {
         return HttpResponse::NotFound().body(format!(
             "retrieve_study_metadata Study not found in database retry after 30 seconds: {},{}",
             tenant_id, study_uid
@@ -211,10 +100,18 @@ async fn retrieve_study_metadata(
         Ok(info) => info,
         Err(response) => return response,
     };
-    info!(log, "Study Info: {:?}", study_info);
+    if study_info.is_empty() {
+        return HttpResponse::NotFound().body(format!(
+            "retrieve_study_metadata Study not found in database retry after 30 seconds: {},{}",
+            tenant_id, study_uid
+        ));
+    }
+
+    info!(log, "Study Info: {:?}", study_info.first());
+    let study_info = study_info.first().unwrap();
     let (_study_uid_hash, dicom_dir) = match dicom_study_dir(
         tenant_id.as_str(),
-        &study_info.study_date_origin,
+        study_info.study_date_origin.as_str(),
         study_uid.as_str(),
         false,
     ) {
@@ -225,8 +122,11 @@ async fn retrieve_study_metadata(
         }
     };
 
-    let json_dir = match json_metadata_dir(tenant_id.as_str(), &study_info.study_date_origin, true)
-    {
+    let json_dir = match json_metadata_dir(
+        tenant_id.as_str(),
+        study_info.study_date_origin.as_str(),
+        true,
+    ) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -293,9 +193,12 @@ async fn retrieve_series_metadata(
             ACCEPT_DICOM_JSON_TYPE
         ));
     }
-    let is_not_found = db_study_entity_is_not_exists::<String>(&app_state.config.redis, &study_uid);
+    // 首先尝试从 Redis 缓存中获取数据
+    let rh = RedisHelper::new(app_state.config.redis.clone());
+    // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
+    let is_not_found = rh.get_study_entity_not_exists(tenant_id.as_str(), study_uid.as_str());
 
-    if is_not_found.is_some() {
+    if is_not_found.is_ok() {
         return HttpResponse::NotFound().body(format!(
             "retrieve_series_metadata Study not found in database retry after 30 seconds: {},{}",
             tenant_id, study_uid
@@ -306,17 +209,30 @@ async fn retrieve_series_metadata(
         Ok(info) => info,
         Err(response) => return response,
     };
-    info!(log, "Study Info: {:?}", study_info);
-    // 获取series_info (使用提取的函数)
-    let series_info = match get_series_info_with_cache(&tenant_id, &series_uid, &app_state).await {
-        Ok(info) => info,
-        Err(response) => return response,
-    };
-    info!(log, "Series Info: {:?}", series_info);
-    info!(log, "Study Info: {:?}", study_info);
+    if study_info.is_empty() {
+        return HttpResponse::NotFound().body(format!(
+            "retrieve_series_metadata Study not found in database retry after 30 seconds: {},{}",
+            tenant_id, study_uid
+        ));
+    }
 
-    let json_dir = match json_metadata_dir(tenant_id.as_str(), &study_info.study_date_origin, true)
-    {
+    let series_info = study_info
+        .iter()
+        .find(|info| info.series_uid.as_str() == series_uid)
+        .cloned();
+
+    if series_info.is_none() {
+        return HttpResponse::NotFound()
+            .body(format!("Series not found in study info: {}", series_uid));
+    }
+    info!(log, "Series Info: {:?}", series_info);
+
+    let series_info = series_info.unwrap();
+    let json_dir = match json_metadata_dir(
+        tenant_id.as_str(),
+        series_info.study_date_origin.as_str(),
+        true,
+    ) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -340,7 +256,7 @@ async fn retrieve_series_metadata(
     info!(log, "Study Info: {:?}", study_info);
     let (_study_uid_hash, _series_uid_hash, dicom_dir) = match dicom_series_dir(
         tenant_id.as_str(),
-        &study_info.study_date_origin,
+        series_info.study_date_origin.as_str(),
         study_uid.as_str(),
         series_uid.as_str(),
         false,
@@ -400,24 +316,8 @@ async fn retrieve_series_metadata(
     match serde_json::to_string(&arr) {
         Ok(json_str) => {
             // 根据series_uid 将json_str 写入当前目录下面,文件路径为:./{series_uid}.json
-
             if let Err(e) = std::fs::write(&json_file_path, &json_str) {
                 error!(log, "Failed to write JSON file {}: {}", json_file_path, e);
-            }
-            // series_info 序列化JSON后,调用 set_redis_value_with_expiry 写入Redis, 过期时间为2小时
-            match serde_json::to_string(&series_info) {
-                Ok(series_info_json) => {
-                    let redis_config = &app_state.config.redis;
-                    set_redis_value_with_expiry_and_config::<String>(
-                        redis_config,
-                        &get_redis_key_for_series(&tenant_id, &series_uid),
-                        &series_info_json,
-                        2 * 60 * 60,
-                    );
-                }
-                Err(e) => {
-                    error!(log, "Failed to serialize series_info to JSON: {}", e);
-                }
             }
             HttpResponse::Ok()
                 .content_type(ACCEPT_DICOM_JSON_TYPE)
@@ -482,17 +382,28 @@ async fn retrieve_instance_impl(
         Ok(info) => info,
         Err(response) => return response,
     };
-    info!(log, "Study Info: {:?}", study_info);
+    if study_info.is_empty() {
+        return HttpResponse::NotFound().body(format!(
+            "retrieve_series_metadata Study not found in database retry after 30 seconds: {},{}",
+            tenant_id, study_uid
+        ));
+    }
+    let series_info = study_info
+        .iter()
+        .find(|info| info.series_uid.as_str() == series_uid)
+        .cloned();
 
-    let series_info = match get_series_info_with_cache(&tenant_id, &series_uid, &app_state).await {
-        Ok(info) => info,
-        Err(response) => return response,
-    };
+    if series_info.is_none() {
+        return HttpResponse::NotFound()
+            .body(format!("Series not found in study info: {}", series_uid));
+    }
     info!(log, "Series Info: {:?}", series_info);
+
+    let series_info = series_info.unwrap();
 
     let (_study_uid_hash, _series_uid_hash_v, dicom_dir) = match dicom_series_dir(
         tenant_id.as_str(),
-        &study_info.study_date_origin,
+        series_info.study_date_origin.as_str(),
         study_uid.as_str(),
         series_uid.as_str(),
         false,

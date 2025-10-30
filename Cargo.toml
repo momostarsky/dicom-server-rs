@@ -38,12 +38,6 @@ dicom-dictionary-std = { version = "0.9.0" }
 dicom-transfer-syntax-registry = {  version = "0.9.0" }
 seahash = "4.1.0"
 async-trait = "0.1.89"
-sqlx = { version = "0.8.6", features = ["mysql", "chrono",
-    "runtime-tokio-rustls",
-    "mysql",
-    "postgres",
-    "macros",
-    "runtime-tokio-native-tls"] }
 tracing = "0.1.41"
 
 slog-stdlog = "4.1.1"

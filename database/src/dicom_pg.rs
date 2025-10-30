@@ -7,9 +7,9 @@ pub struct PgDbProvider {
 }
 
 impl PgDbProvider {
-    pub async fn new(database_url: &str) -> Self {
+    pub fn new(database_url: String) -> Self {
         Self {
-            db_connection_string: database_url.to_string(),
+            db_connection_string: database_url,
         }
     }
     async fn make_client(&self) -> Result<Client, DbError> {
@@ -365,7 +365,7 @@ mod tests {
     #[tokio::test]
     async fn test_save_state_info() -> Result<(), Box<dyn std::error::Error>> {
         let db_provider =
-            PgDbProvider::new("postgresql://root:jp%23123@192.168.1.14:5432/postgres").await;
+            PgDbProvider::new("postgresql://root:jp%23123@192.168.1.14:5432/postgres".to_string());
 
         // 创建测试数据
         let tenant_id = BoundedString::<64>::try_from("test_tenant_123".to_string())?;
@@ -374,7 +374,7 @@ mod tests {
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1".to_string())?;
         let study_uid_hash = BoundedString::<20>::new_from_str("1.2.3.4.5.6.7.8.9").unwrap();
         let series_uid_hash = BoundedString::<20>::new_from_str("9.8.7.6.5.4.3.2.1").unwrap();
-        let study_date_origin = DicomDateString::new("20231201");
+        let study_date_origin = DicomDateString::make_from_db("20231201");
         let accession_number = BoundedString::<16>::try_from("ACC123456".to_string())?;
         let modality = Some(BoundedString::<16>::try_from("CT".to_string())?);
         let series_number = Some(1);
@@ -444,7 +444,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_state_metaes() -> Result<(), Box<dyn std::error::Error>> {
         let db_provider =
-            PgDbProvider::new("postgresql://root:jp%23123@192.168.1.14:5432/postgres").await;
+            PgDbProvider::new("postgresql://root:jp%23123@192.168.1.14:5432/postgres".to_string());
 
         let tenant_id = "1234567890";
         let study_uid = "1.2.156.112605.0.1685486876.2025061710152134339.2.1.1";
@@ -478,7 +478,7 @@ mod tests {
     #[tokio::test]
     async fn test_save_state_list() -> Result<(), Box<dyn std::error::Error>> {
         let db_provider =
-            PgDbProvider::new("postgresql://root:jp%23123@192.168.1.14:5432/postgres").await;
+            PgDbProvider::new("postgresql://root:jp%23123@192.168.1.14:5432/postgres".to_string());
 
         // 创建测试数据列表
         let mut state_meta_list = Vec::new();
@@ -490,7 +490,7 @@ mod tests {
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.list".to_string())?;
         let study_uid_hash = BoundedString::<20>::new_from_str("0AA07C2AA455BEB01D5A").unwrap();
         let series_uid_hash = BoundedString::<20>::new_from_str("0AB07C2AA455BEB01D5A").unwrap();
-        let study_date_origin = DicomDateString::new("20231202");
+        let study_date_origin = DicomDateString::make_from_db("20231202");
         let accession_number = BoundedString::<16>::try_from("ACC123457".to_string())?;
         let modality = Some(BoundedString::<16>::try_from("MRI".to_string())?);
         let series_number = Some(2);

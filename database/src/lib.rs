@@ -1,10 +1,10 @@
-mod dicom_dbtype;
-mod dicom_meta;
-mod dicom_dbprovider;
-mod dicom_pg;
-mod dicom_pg_types;
-mod dicom_mysql;
-mod dicom_mysql_types;
+pub mod dicom_dbprovider;
+pub mod dicom_dbtype;
+pub mod dicom_meta;
+pub mod dicom_mysql;
+pub mod dicom_mysql_types;
+pub mod dicom_pg;
+pub mod dicom_pg_types;
 
 pub fn add(left: u64, right: u64) -> u64 {
     left + right

@@ -142,6 +142,17 @@ pub struct DicomStateMeta {
     pub updated_time: NaiveDateTime,
 }
 
+impl DicomStateMeta {
+    pub fn unique_key(&self) -> (String, String, String, String) {
+        (
+            self.tenant_id.as_str().to_string(),
+            self.patient_id.as_str().to_string(),
+            self.study_uid.as_str().to_string(),
+            self.series_uid.as_str().to_string(),
+        )
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DicomImageMeta {
     #[serde(rename = "tenant_id")]

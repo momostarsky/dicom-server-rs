@@ -1,5 +1,4 @@
 use crate::dicom_dbtype::{BoundedString, DicomDateString};
-use chrono::NaiveDate;
 use postgres_types::private::BytesMut;
 use postgres_types::{FromSql, IsNull, ToSql, Type};
 use std::error::Error;

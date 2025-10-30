@@ -1,5 +1,5 @@
-use crate::string_ext::{BoundedString};
 use config::{Config, ConfigError, Environment, File};
+use database::dicom_dbtype::BoundedString;
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dotenv::dotenv;
@@ -447,6 +447,18 @@ pub fn generate_pg_database_connection(dbconfig: &DatabaseConfig) -> Result<Stri
     Ok(db_conn)
 }
 
+pub fn hash_uid(uid: &str) -> String {
+    use seahash::SeaHasher;
+    use std::hash::Hasher;
+
+    let mut hasher = SeaHasher::new();
+    hasher.write(uid.as_bytes());
+    let hash_value = hasher.finish();
+
+    // 将 u64 转换为字符串，并用前导零填充到 20 位
+    format!("{:020}", hash_value)
+}
+
 /// 获取 dicom study 存储路径: storage_root/{tenant_id}/{study_date}/{study_uid}
 /// 注意: 该路径下可能包含多个 series 目录
 pub fn dicom_study_dir(
@@ -456,7 +468,12 @@ pub fn dicom_study_dir(
     create_not_exists: bool,
 ) -> Result<(BoundedString<20>, String), String> {
     let app_config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
-    let study_uid_hash = BoundedString::<20>::make_from_db(study_uid.to_string());
+    let study_uid_hash = BoundedString::<20>::new_from_str(study_uid).map_err(|e| {
+        format!(
+            "Failed to create BoundedString<20> from study_uid '{}': {}",
+            study_uid, e
+        )
+    })?;
     let dicom_store_path = &app_config.local_storage.dicm_store_path;
     let study_dir = format!(
         "{}/{}/{}/{}",
@@ -492,10 +509,7 @@ pub fn dicom_series_dir(
     series_uid: &str,
     create_not_exists: bool,
 ) -> Result<(BoundedString<20>, BoundedString<20>, String), String> {
-    let (study_uid_hash, series_uid_hash) = (
-        BoundedString::<20>::make_from_db(study_uid.to_string()),
-        BoundedString::<20>::make_from_db(series_uid.to_string()),
-    );
+    let (study_uid_hash, series_uid_hash) = (hash_uid(study_uid), hash_uid(series_uid));
     let app_config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
     let dicom_store_path = &app_config.local_storage.dicm_store_path;
     let series_dir = format!(

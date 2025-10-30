@@ -1,7 +1,7 @@
-use common::dicom_object_meta::{DicomImageMeta, DicomStateMeta, DicomStoreMeta};
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::utils::{get_logger, group_dicom_state};
 use common::{database_factory, server_config};
+use database::dicom_meta::{DicomImageMeta, DicomStateMeta, DicomStoreMeta};
 use futures::StreamExt;
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message};
@@ -12,13 +12,11 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tokio::runtime::Handle;
 
-
 pub async fn start_process() {
     // 设置全局logger
 
     let rlogger = get_logger();
     let global_logger = rlogger.new(o!("wado-consume"=>"start_process"));
-
 
     // 设置日志系统
     info!(global_logger, "start process");
@@ -31,10 +29,6 @@ pub async fn start_process() {
             std::process::exit(-2);
         }
     };
-
-
-
-
 
     let kafka_config = config.kafka;
 
@@ -82,8 +76,7 @@ pub async fn start_process() {
     // 启动消息读取任务（在新线程中运行异步代码）
     let reader_thread = thread::spawn(move || {
         handle_for_reader.block_on(async {
-             read_message(consumer, vec_for_reader, last_process_time).await;
-
+            read_message(consumer, vec_for_reader, last_process_time).await;
         });
     });
 
@@ -178,7 +171,6 @@ async fn read_message(
             }
         }
     }
-
 }
 
 static MAX_MESSAGES_PER_BATCH: usize = 50;
@@ -274,12 +266,11 @@ async fn persist_message_loop(
                 continue;
             }
         };
-                // 插入状态消息
+        // 插入状态消息
         if let Err(e) = db.save_state_list(&state_metas).await {
             error!(logger, "Failed to save_state_list: {}", e);
             continue;
         }
-
 
         // 更新最后处理时间
         {
