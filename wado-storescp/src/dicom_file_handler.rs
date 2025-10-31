@@ -241,24 +241,24 @@ pub(crate) async fn process_dicom_file(
                                          // 修改为
     let cdate = chrono::Local::now().naive_local();
     Ok(DicomStoreMeta {
-        trace_id: FixedLengthString::<36>::new_from_string(&trace_uid)
+        trace_id: FixedLengthString::<36>::from_string(&trace_uid)
             .with_whatever_context(|err| format!("Failed to create trace_id: {}", err))?,
         worker_node_id: BoundedString::<64>::try_from("DICOM_STORE_SCP")
             .with_whatever_context(|err| format!("Failed to create worker_node_id: {}", err))?,
-        tenant_id: BoundedString::<64>::new_from_string(&tenant_id)
+        tenant_id: BoundedString::<64>::from_string(&tenant_id)
             .with_whatever_context(|err| format!("Failed to create tenant_id: {}", err))?,
-        patient_id: BoundedString::<64>::new_from_string(&pat_id)
+        patient_id: BoundedString::<64>::from_string(&pat_id)
             .with_whatever_context(|err| format!("Failed to create patient_id: {}", err))?,
         study_uid: BoundedString::<64>::try_from(study_uid)
             .with_whatever_context(|err| format!("Failed to create study_uid: {}", err))?,
         series_uid: BoundedString::<64>::try_from(series_uid)
             .with_whatever_context(|err| format!("Failed to create series_uid: {}", err))?,
-        sop_uid: BoundedString::<64>::new_from_string(&sop_instance_uid)
+        sop_uid: BoundedString::<64>::from_string(&sop_instance_uid)
             .with_whatever_context(|err| format!("Failed to create sop_uid: {}", err))?,
         file_path: BoundedString::try_from(saved_path.to_str().unwrap())
             .with_whatever_context(|err| format!("Failed to create file_path: {}", err))?,
         file_size: fsize as u32,
-        transfer_syntax_uid: BoundedString::<64>::new_from_string(ts).with_whatever_context(
+        transfer_syntax_uid: BoundedString::<64>::from_string(ts).with_whatever_context(
             |err| format!("Failed to create transfer_syntax_uid: {}", err),
         )?,
         target_ts: BoundedString::<64>::try_from(final_ts)

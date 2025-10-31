@@ -217,13 +217,13 @@ pub fn make_image_info(
         patient_id: BoundedString::<64>::try_from(common_meta.patient_id).map_err(|_| {
             DicomParseError::ConversionError("Failed to convert patient ID".to_string())
         })?,
-        study_uid: BoundedString::<64>::new_from_str(&common_meta.study_uid).map_err(|_| {
+        study_uid: BoundedString::<64>::from_str(&common_meta.study_uid).map_err(|_| {
             DicomParseError::ConversionError("Failed to convert study UID".to_string())
         })?,
-        series_uid: BoundedString::<64>::new_from_str(&common_meta.series_uid).map_err(|_| {
+        series_uid: BoundedString::<64>::from_str(&common_meta.series_uid).map_err(|_| {
             DicomParseError::ConversionError("Failed to convert series UID".to_string())
         })?,
-        sop_uid: BoundedString::<64>::new_from_str(&common_meta.sop_uid).map_err(|_| {
+        sop_uid: BoundedString::<64>::from_str(&common_meta.sop_uid).map_err(|_| {
             DicomParseError::ConversionError("Failed to convert SOP UID".to_string())
         })?,
         study_uid_hash,
@@ -492,10 +492,10 @@ pub fn make_state_info(
     let study_date_origin = DicomDateString::try_from(&common_meta.study_date_str).unwrap();
 
     let tenant_id = BoundedString::<64>::try_from(tenant_id.to_string()).unwrap();
-    let patient_id = BoundedString::<64>::new_from_str(&common_meta.patient_id).unwrap();
-    let study_uid = BoundedString::<64>::new_from_str(&common_meta.study_uid).unwrap();
-    let series_uid = BoundedString::<64>::new_from_str(&common_meta.series_uid).unwrap();
-    let accession_number = BoundedString::<16>::new_from_str(acc_num.as_str()).unwrap();
+    let patient_id = BoundedString::<64>::from_str(&common_meta.patient_id).unwrap();
+    let study_uid = BoundedString::<64>::from_str(&common_meta.study_uid).unwrap();
+    let series_uid = BoundedString::<64>::from_str(&common_meta.series_uid).unwrap();
+    let accession_number = BoundedString::<16>::from_str(acc_num.as_str()).unwrap();
 
     Ok(DicomStateMeta {
         tenant_id,

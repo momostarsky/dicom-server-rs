@@ -50,7 +50,6 @@ regex = { workspace = true }
 lazy_static = { workspace = true }
 tempfile = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
-
 aes-gcm = { workspace = true }
 rand = { workspace = true }
 base64 = { workspace = true }

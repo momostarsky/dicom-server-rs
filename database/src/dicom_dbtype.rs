@@ -18,7 +18,7 @@ type BoundedResult<T, E = BoundedStringError> = Result<T, E>;
 #[serde(transparent)]
 #[derive(Default)]
 pub struct BoundedString<const N: usize> {
-    pub value: String,
+    value: String,
 }
 
 impl<const N: usize> BoundedString<N> {
@@ -32,7 +32,7 @@ impl<const N: usize> BoundedString<N> {
             Ok(Self { value: s })
         }
     }
-    pub fn new_from_str(s: &str) -> BoundedResult<BoundedString<N>> {
+    pub fn from_str(s: &str) -> BoundedResult<BoundedString<N>> {
         if s.len() > N {
             Err(BoundedStringError::TooLong {
                 max: N,
@@ -44,7 +44,7 @@ impl<const N: usize> BoundedString<N> {
             })
         }
     }
-    pub fn new_from_string(s: &String) -> BoundedResult<BoundedString<N>> {
+    pub fn from_string(s: &String) -> BoundedResult<BoundedString<N>> {
         if s.len() > N {
             Err(BoundedStringError::TooLong {
                 max: N,
@@ -80,7 +80,7 @@ impl<const N: usize> Eq for BoundedString<N> {}
 impl<const N: usize> TryFrom<&str> for BoundedString<N> {
     type Error = BoundedStringError;
     fn try_from(s: &str) -> BoundedResult<Self> {
-        BoundedString::new_from_str(s)
+        BoundedString::from_str(s)
     }
 }
 
@@ -160,7 +160,7 @@ impl<const N: usize> FixedLengthString<N> {
         }
     }
 
-    pub fn new_from_str(s: &str) -> BoundedResult<FixedLengthString<N>> {
+    pub fn from_str(s: &str) -> BoundedResult<FixedLengthString<N>> {
         if s.len() != N {
             Err(BoundedStringError::LengthError {
                 fixlen: N,
@@ -173,7 +173,7 @@ impl<const N: usize> FixedLengthString<N> {
         }
     }
 
-    pub fn new_from_string(s: &String) -> BoundedResult<FixedLengthString<N>> {
+    pub fn from_string(s: &String) -> BoundedResult<FixedLengthString<N>> {
         if s.len() != N {
             Err(BoundedStringError::LengthError {
                 fixlen: N,
@@ -194,7 +194,7 @@ impl DicomDateString {
         self.value.as_str()
     }
 
-    pub(crate) fn make_from_db(s: &str) -> Self {
+    pub(crate) fn from_db(s: &str) -> Self {
         // 使用 NaiveDate 验证日期格式和有效性
         chrono::NaiveDate::parse_from_str(&s, "%Y%m%d")
             .map_err(|_| BoundedStringError::LengthError {

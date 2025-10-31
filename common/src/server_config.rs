@@ -469,7 +469,7 @@ pub fn dicom_study_dir(
     create_not_exists: bool,
 ) -> Result<(BoundedString<20>, String), String> {
     let app_config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
-    let study_uid_hash = BoundedString::<20>::new_from_str(study_uid).map_err(|e| {
+    let study_uid_hash = BoundedString::<20>::from_str(study_uid).map_err(|e| {
         format!(
             "Failed to create BoundedString<20> from study_uid '{}': {}",
             study_uid, e

@@ -426,9 +426,9 @@ mod tests {
         let patient_id = BoundedString::<64>::try_from("test_patient_mysql_456".to_string())?;
         let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9.mysql")?;
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.mysql")?;
-        let study_uid_hash = BoundedString::<20>::new_from_str("1.2.3.4.5.6.7.8.9.my").unwrap();
-        let series_uid_hash = BoundedString::<20>::new_from_str("9.8.7.6.5.4.3.2.1.my").unwrap();
-        let study_date_origin = DicomDateString::make_from_db("20231201");
+        let study_uid_hash = BoundedString::<20>::from_str("1.2.3.4.5.6.7.8.9.my").unwrap();
+        let series_uid_hash = BoundedString::<20>::from_str("9.8.7.6.5.4.3.2.1.my").unwrap();
+        let study_date_origin = DicomDateString::from_db("20231201");
         let accession_number = BoundedString::<16>::try_from("ACC123456MYSQL".to_string())?;
         let modality = Some(BoundedString::<16>::try_from("MR".to_string())?);
         let series_number = Some(1);
@@ -544,9 +544,9 @@ mod tests {
         let patient_id = BoundedString::<64>::try_from("test_patient_mysql_list_456".to_string())?;
         let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9.mysql.list")?;
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.mysql.list")?;
-        let study_uid_hash = BoundedString::<20>::new_from_str("1.2.3.4.5.6.7.8.9.my" ).unwrap();
-        let series_uid_hash = BoundedString::<20>::new_from_str("9.8.7.6.5.4.3.2.1.my").unwrap();
-        let study_date_origin = DicomDateString::make_from_db("20231202");
+        let study_uid_hash = BoundedString::<20>::from_str("1.2.3.4.5.6.7.8.9.my" ).unwrap();
+        let series_uid_hash = BoundedString::<20>::from_str("9.8.7.6.5.4.3.2.1.my").unwrap();
+        let study_date_origin = DicomDateString::from_db("20231202");
         let accession_number = BoundedString::<16>::try_from("ACC123457MYSQL".to_string())?;
         let modality = Some(BoundedString::<16>::try_from("CT".to_string())?);
         let series_number = Some(2);

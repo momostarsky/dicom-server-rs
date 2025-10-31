@@ -30,7 +30,7 @@ impl From<DicomDateString> for Value {
 
 impl From<String> for DicomDateString {
     fn from(value: String) -> Self {
-        DicomDateString::make_from_db(value.as_str())
+        DicomDateString::from_db(value.as_str())
     }
 }
 impl FromValue for DicomDateString {

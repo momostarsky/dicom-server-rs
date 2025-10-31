@@ -372,9 +372,9 @@ mod tests {
         let patient_id = BoundedString::<64>::try_from("test_patient_456".to_string())?;
         let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9".to_string())?;
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1".to_string())?;
-        let study_uid_hash = BoundedString::<20>::new_from_str("1.2.3.4.5.6.7.8.9").unwrap();
-        let series_uid_hash = BoundedString::<20>::new_from_str("9.8.7.6.5.4.3.2.1").unwrap();
-        let study_date_origin = DicomDateString::make_from_db("20231201");
+        let study_uid_hash = BoundedString::<20>::from_str("1.2.3.4.5.6.7.8.9").unwrap();
+        let series_uid_hash = BoundedString::<20>::from_str("9.8.7.6.5.4.3.2.1").unwrap();
+        let study_date_origin = DicomDateString::from_db("20231201");
         let accession_number = BoundedString::<16>::try_from("ACC123456".to_string())?;
         let modality = Some(BoundedString::<16>::try_from("CT".to_string())?);
         let series_number = Some(1);
@@ -488,9 +488,9 @@ mod tests {
         let patient_id = BoundedString::<64>::try_from("test_patient_list_456".to_string())?;
         let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9.list".to_string())?;
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.list".to_string())?;
-        let study_uid_hash = BoundedString::<20>::new_from_str("0AA07C2AA455BEB01D5A").unwrap();
-        let series_uid_hash = BoundedString::<20>::new_from_str("0AB07C2AA455BEB01D5A").unwrap();
-        let study_date_origin = DicomDateString::make_from_db("20231202");
+        let study_uid_hash = BoundedString::<20>::from_str("0AA07C2AA455BEB01D5A").unwrap();
+        let series_uid_hash = BoundedString::<20>::from_str("0AB07C2AA455BEB01D5A").unwrap();
+        let study_date_origin = DicomDateString::from_db("20231202");
         let accession_number = BoundedString::<16>::try_from("ACC123457".to_string())?;
         let modality = Some(BoundedString::<16>::try_from("MRI".to_string())?);
         let series_number = Some(2);
