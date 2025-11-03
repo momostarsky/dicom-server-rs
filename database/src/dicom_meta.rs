@@ -77,6 +77,30 @@ impl PartialEq for DicomStoreMeta {
 }
 impl Eq for DicomStoreMeta {}
 
+/// DicomJsonMeta 用于记录DICOM文件生成JSON格式的元数据给WADO-RS使用
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DicomJsonMeta {
+    #[serde(rename = "tenant_id")]
+    pub tenant_id: BoundedString<64>,
+    #[serde(rename = "study_uid")]
+    pub study_uid: BoundedString<64>,
+    #[serde(rename = "series_uid")]
+    pub series_uid: BoundedString<64>,
+    #[serde(rename = "study_uid_hash")]
+    pub study_uid_hash: BoundedString<20>,
+    #[serde(rename = "series_uid_hash")]
+    pub series_uid_hash: BoundedString<20>,
+    #[serde(rename = "study_date_origin")]
+    pub study_date_origin: DicomDateString,
+    #[serde(rename = "flag_time")]
+    pub flag_time: NaiveDateTime,
+    #[serde(rename = "created_time")]
+    pub created_time: NaiveDateTime,
+    #[serde(rename = "json_status")]
+    pub json_status: i32,
+    #[serde(rename = "retry_times")]
+    pub retry_times: i32,
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DicomStateMeta {
     #[serde(rename = "tenant_id")]

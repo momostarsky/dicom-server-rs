@@ -1,5 +1,5 @@
 use crate::dicom_dbprovider::{DbError, DbProvider};
-use crate::dicom_meta::DicomStateMeta;
+use crate::dicom_meta::{DicomJsonMeta, DicomStateMeta};
 use async_trait::async_trait;
 use mysql::prelude::*;
 use mysql::*;
@@ -315,7 +315,11 @@ impl DbProvider for MySqlDbProvider {
         Ok(())
     }
 
-    async fn get_state_metaes(
+     async fn save_json_list(&self, state_meta: &[DicomJsonMeta]) -> std::result::Result<(), DbError> {
+         todo!()
+     }
+
+     async fn get_state_metaes(
         &self,
         tenant_id: &str,
         study_uid: &str,
@@ -407,7 +411,11 @@ impl DbProvider for MySqlDbProvider {
 
         Ok(result)
     }
-}
+
+     async fn get_json_metaes(&self) -> std::result::Result<Vec<DicomStateMeta>, DbError> {
+         todo!()
+     }
+ }
 
 #[cfg(test)]
 mod tests {

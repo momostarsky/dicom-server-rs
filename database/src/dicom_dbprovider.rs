@@ -1,4 +1,4 @@
-use crate::dicom_meta::DicomStateMeta;
+use crate::dicom_meta::{DicomJsonMeta, DicomStateMeta};
 use async_trait::async_trait;
 use thiserror::Error;
 
@@ -23,9 +23,13 @@ pub trait DbProvider: Send + Sync {
 
     async fn save_state_list(&self, state_meta: &[DicomStateMeta]) -> Result<(), DbError>;
 
+    async fn save_json_list(&self, state_meta: &[DicomJsonMeta]) -> Result<(), DbError>;
+
     async fn get_state_metaes(
         &self,
         tenant_id: &str,
         study_uid: &str,
     ) -> Result<Vec<DicomStateMeta>, DbError>;
+
+    async fn get_json_metaes(&self) -> Result<Vec<DicomStateMeta>, DbError>;
 }

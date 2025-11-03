@@ -1,5 +1,5 @@
 use crate::dicom_dbprovider::{DbError, DbProvider};
-use crate::dicom_meta::DicomStateMeta;
+use crate::dicom_meta::{DicomJsonMeta, DicomStateMeta};
 use async_trait::async_trait;
 use tokio_postgres::{Client, NoTls};
 pub struct PgDbProvider {
@@ -268,6 +268,77 @@ impl DbProvider for PgDbProvider {
         Ok(())
     }
 
+    async fn save_json_list(&self, json_meta_list: &[DicomJsonMeta]) -> Result<(), DbError> {
+        if json_meta_list.is_empty() {
+            return Ok(());
+        }
+
+        let mut client = self.make_client().await?;
+        let transaction = client.transaction().await.map_err(|e| {
+            println!("Failed to start transaction: {}", e);
+            DbError::DatabaseError(e.to_string())
+        })?;
+
+        println!(
+            "Starting transaction to save json meta list of length {}",
+            json_meta_list.len()
+        );
+
+        let statement = transaction
+            .prepare(
+                "INSERT INTO dicom_json_meta (
+                tenant_id,
+                study_uid,
+                series_uid,
+                study_uid_hash,
+                series_uid_hash,
+                study_date_origin,
+                flag_time
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (tenant_id, study_uid, series_uid)
+            DO UPDATE SET
+                study_uid_hash = EXCLUDED.study_uid_hash,
+                series_uid_hash = EXCLUDED.series_uid_hash,
+                study_date_origin = EXCLUDED.study_date_origin,
+                flag_time = EXCLUDED.flag_time",
+            )
+            .await
+            .map_err(|e| {
+                println!("Error transaction.prepare: {:?}", e);
+                DbError::DatabaseError(e.to_string())
+            })?;
+
+        // 遍历所有 DicomJsonMeta 对象并执行插入操作
+        for json_meta in json_meta_list {
+            transaction
+                .execute(
+                    &statement,
+                    &[
+                        &json_meta.tenant_id,
+                        &json_meta.study_uid,
+                        &json_meta.series_uid,
+                        &json_meta.study_uid_hash,
+                        &json_meta.series_uid_hash,
+                        &json_meta.study_date_origin,
+                        &json_meta.flag_time,
+                    ],
+                )
+                .await
+                .map_err(|e| {
+                    println!("Error transaction.execute: {:?}", e);
+                    DbError::DatabaseError(e.to_string())
+                })?;
+        }
+
+        // 提交事务
+        transaction.commit().await.map_err(|e| {
+            println!("Error transaction.commit: {:?}", e);
+            DbError::DatabaseError(e.to_string())
+        })?;
+
+        Ok(())
+    }
+
     async fn get_state_metaes(
         &self,
         tenant_id: &str,
@@ -314,6 +385,103 @@ impl DbProvider for PgDbProvider {
 
         let rows = client
             .query(&statement, &[&tenant_id, &study_uid])
+            .await
+            .map_err(|e| DbError::DatabaseError(e.to_string()))?;
+
+        let mut result = Vec::with_capacity(rows.len());
+        for row in rows {
+            let state_meta = DicomStateMeta {
+                tenant_id: row.get(0),
+                patient_id: row.get(1),
+                study_uid: row.get(2),
+                series_uid: row.get(3),
+                study_uid_hash: row.get(4),
+                series_uid_hash: row.get(5),
+                study_date_origin: row.get(6),
+                patient_name: row.get(7),
+                patient_sex: row.get(8),
+                patient_birth_date: row.get(9),
+                patient_birth_time: row.get(10),
+                patient_age: row.get(11),
+                patient_size: row.get(12),
+                patient_weight: row.get(13),
+                study_date: row.get(14),
+                study_time: row.get(15),
+                accession_number: row.get(16),
+                study_id: row.get(17),
+                study_description: row.get(18),
+                modality: row.get(19),
+                series_number: row.get(20),
+                series_date: row.get(21),
+                series_time: row.get(22),
+                series_description: row.get(23),
+                body_part_examined: row.get(24),
+                protocol_name: row.get(25),
+                series_related_instances: row.get(26),
+                created_time: row.get(27),
+                updated_time: row.get(28),
+            };
+            result.push(state_meta);
+        }
+
+        Ok(result)
+    }
+
+    async fn get_json_metaes(&self) -> Result<Vec<DicomStateMeta>, DbError> {
+        let client = self.make_client().await?;
+        let statement = client
+            .prepare(
+                " Select tenant_id,
+                patient_id,
+                study_uid,
+                series_uid,
+                study_uid_hash,
+                series_uid_hash,
+                study_date_origin,
+                patient_name,
+                patient_sex,
+                patient_birth_date,
+                patient_birth_time,
+                patient_age,
+                patient_size,
+                patient_weight,
+                study_date,
+                study_time,
+                accession_number,
+                study_id,
+                study_description,
+                modality,
+                series_number,
+                series_date,
+                series_time,
+                series_description,
+                body_part_examined,
+                protocol_name,
+                series_related_instances,
+                created_time,
+                updated_time
+                From (SELECT dsm.*
+                      FROM dicom_state_meta dsm
+                               LEFT JOIN dicom_json_meta djm
+                                         ON dsm.tenant_id = djm.tenant_id
+                                             AND dsm.study_uid = djm.study_uid
+                                             AND dsm.series_uid = djm.series_uid
+                      WHERE djm.tenant_id IS NULL
+                      UNION ALL
+                      SELECT dsm.*
+                      FROM dicom_state_meta dsm
+                               INNER JOIN dicom_json_meta djm
+                                          ON dsm.tenant_id = djm.tenant_id
+                                              AND dsm.study_uid = djm.study_uid
+                                              AND dsm.series_uid = djm.series_uid
+                      WHERE dsm.updated_time != djm.flag_time) AS t
+                order by t.updated_time;",
+            )
+            .await
+            .map_err(|e| DbError::DatabaseError(e.to_string()))?;
+
+        let rows = client
+            .query(&statement, &[])
             .await
             .map_err(|e| DbError::DatabaseError(e.to_string()))?;
 
@@ -474,7 +642,37 @@ mod tests {
 
         Ok(())
     }
+    #[tokio::test]
+    async fn test_get_json_metaes() -> Result<(), Box<dyn std::error::Error>> {
+        let db_provider =
+            PgDbProvider::new("postgresql://root:jp%23123@192.168.1.14:5432/postgres".to_string());
 
+
+
+        // 执行查询操作
+        let result = db_provider.get_json_metaes().await;
+
+        // 验证查询成功
+        assert!(
+            result.is_ok(),
+            "Failed to get DicomStateMeta list: {:?}",
+            result.err()
+        );
+
+        let state_meta_list = result.unwrap();
+
+        // 验证返回结果不为空
+        assert!(!state_meta_list.is_empty(), "Expected non-empty result");
+
+        // 验证每条记录的 tenant_id 和 study_uid 是否正确
+        for state_meta in state_meta_list {
+
+            let json = serde_json::to_string_pretty(&state_meta)?;
+            println!("DicomStateMeta JSON: {}", json);
+        }
+
+        Ok(())
+    }
     #[tokio::test]
     async fn test_save_state_list() -> Result<(), Box<dyn std::error::Error>> {
         let db_provider =
