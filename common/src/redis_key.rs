@@ -2,6 +2,7 @@ use crate::server_config::RedisConfig;
 use database::dicom_meta::DicomStateMeta;
 use redis::Commands;
 
+#[derive(Debug,Clone)]
 pub struct RedisHelper {
     config: RedisConfig,
 }

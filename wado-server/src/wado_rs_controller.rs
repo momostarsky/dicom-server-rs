@@ -5,7 +5,10 @@ use common::dicom_json_helper;
 use common::dicom_json_helper::walk_directory;
 use common::dicom_utils::get_tag_values;
 use common::redis_key::RedisHelper;
-use common::server_config::{dicom_series_dir, dicom_study_dir, json_metadata_dir};
+use common::server_config::{
+    dicom_series_dir, dicom_study_dir, json_metadata_for_series,
+    json_metadata_for_study,
+};
 use database::dicom_meta::DicomStateMeta;
 use dicom_dictionary_std::tags;
 use dicom_object::OpenFileOptions;
@@ -77,7 +80,7 @@ async fn retrieve_study_metadata(
     );
 
     // 首先尝试从 Redis 缓存中获取数据
-    let rh = RedisHelper::new(app_state.config.redis.clone());
+    let rh = &app_state.redis_helper;
     // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
     let is_not_found = rh.get_study_entity_not_exists(tenant_id.as_str(), study_uid.as_str());
 
@@ -96,6 +99,7 @@ async fn retrieve_study_metadata(
     //     ));
     // }
 
+    //  从缓存中加载study_info
     let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state).await {
         Ok(info) => info,
         Err(response) => return response,
@@ -109,32 +113,21 @@ async fn retrieve_study_metadata(
 
     info!(log, "Study Info: {:?}", study_info.first());
     let study_info = study_info.first().unwrap();
-    let (_study_uid_hash, dicom_dir) = match dicom_study_dir(
-        tenant_id.as_str(),
-        study_info.study_date_origin.as_str(),
-        study_uid.as_str(),
-        false,
-    ) {
+    let json_path = match json_metadata_for_study(&study_info, false) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
-                .body(format!("Failed to generate DICOM directory: {}", e));
+                .body(format!("Failed to compute json_metadata_for_study: {}", e));
         }
     };
 
-    let json_dir = match json_metadata_dir(
-        tenant_id.as_str(),
-        study_info.study_date_origin.as_str(),
-        true,
-    ) {
+    let dicom_dir = match dicom_study_dir(&study_info, false) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
-                .body(format!("Failed to generate JSON directory: {}", e));
+                .body(format!("Failed to compute DICOM directory: {}", e));
         }
     };
-
-    let json_path = format!("{}/{}.json", json_dir, study_uid);
 
     if !std::path::Path::new(&json_path).exists() {
         let dicom_path = PathBuf::from(&dicom_dir);
@@ -228,18 +221,13 @@ async fn retrieve_series_metadata(
     info!(log, "Series Info: {:?}", series_info);
 
     let series_info = series_info.unwrap();
-    let json_dir = match json_metadata_dir(
-        tenant_id.as_str(),
-        series_info.study_date_origin.as_str(),
-        true,
-    ) {
+    let json_file_path = match json_metadata_for_series(&series_info, true) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
                 .body(format!("Failed to generate JSON directory: {}", e));
         }
     };
-    let json_file_path = format!("{}/{}.json", json_dir, series_uid);
     //如果json_file_path 存在,则输出json
     if std::path::Path::new(&json_file_path).exists() {
         match std::fs::read_to_string(&json_file_path) {
@@ -254,17 +242,14 @@ async fn retrieve_series_metadata(
     }
 
     info!(log, "Study Info: {:?}", study_info);
-    let (_study_uid_hash, _series_uid_hash, dicom_dir) = match dicom_series_dir(
-        tenant_id.as_str(),
-        series_info.study_date_origin.as_str(),
-        study_uid.as_str(),
-        series_uid.as_str(),
-        false,
-    ) {
-        Ok(v) => v,
-        Err(e) => {
-            return HttpResponse::InternalServerError()
-                .body(format!("Failed to generate DICOM directory: {}", e));
+
+    let dicom_dir = match dicom_series_dir(&series_info, false) {
+        Ok(vv) => vv,
+        Err(_) => {
+            return HttpResponse::InternalServerError().body(format!(
+                "retrieve_study_metadata Failed to compute DICOM directory: {}",
+                "json_metadata_for_study"
+            ));
         }
     };
 
@@ -401,13 +386,7 @@ async fn retrieve_instance_impl(
 
     let series_info = series_info.unwrap();
 
-    let (_study_uid_hash, _series_uid_hash_v, dicom_dir) = match dicom_series_dir(
-        tenant_id.as_str(),
-        series_info.study_date_origin.as_str(),
-        study_uid.as_str(),
-        series_uid.as_str(),
-        false,
-    ) {
+    let dicom_dir = match dicom_series_dir(&series_info, false) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()

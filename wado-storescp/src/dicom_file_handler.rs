@@ -3,6 +3,7 @@ use chrono::NaiveDate;
 use common::dicom_utils::get_tag_value;
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
+use common::server_config::hash_uid;
 use common::utils::get_logger;
 use database::dicom_dbtype::{BoundedString, FixedLengthString};
 use database::dicom_meta::{DicomStoreMeta, TransferStatus};
@@ -192,12 +193,14 @@ pub(crate) async fn process_dicom_file(
         .whatever_context("failed to build DICOM meta file information")?;
     let mut file_obj = obj.with_exact_meta(file_meta);
 
-    let (study_uid_hash_v, series_uid_hash_v, dir_path) =
-        server_config::dicom_series_dir(tenant_id, &study_date, &study_uid, &series_uid, true)
+    let dir_path =
+        server_config::make_series_dicom_dir(tenant_id, &study_date, &study_uid, &series_uid, true)
             .whatever_context(format!(
         "failed to get dicom series dir: tenant_id={}, study_date={}, study_uid={}, series_uid={}",
         tenant_id, study_date, study_uid, series_uid
     ))?;
+    let study_uid_hash_v = hash_uid(study_uid.as_str());
+    let series_uid_hash_v = hash_uid(series_uid.as_str());
 
     let file_path = server_config::dicom_file_path(&dir_path, sop_instance_uid);
 
@@ -258,9 +261,9 @@ pub(crate) async fn process_dicom_file(
         file_path: BoundedString::try_from(saved_path.to_str().unwrap())
             .with_whatever_context(|err| format!("Failed to create file_path: {}", err))?,
         file_size: fsize as u32,
-        transfer_syntax_uid: BoundedString::<64>::from_string(ts).with_whatever_context(
-            |err| format!("Failed to create transfer_syntax_uid: {}", err),
-        )?,
+        transfer_syntax_uid: BoundedString::<64>::from_string(ts).with_whatever_context(|err| {
+            format!("Failed to create transfer_syntax_uid: {}", err)
+        })?,
         target_ts: BoundedString::<64>::try_from(final_ts)
             .with_whatever_context(|err| format!("Failed to create target_ts: {}", err))?,
         study_date: NaiveDate::parse_from_str(study_date.as_str(), "%Y%m%d")
@@ -269,8 +272,8 @@ pub(crate) async fn process_dicom_file(
         transfer_status: transcode_status,
         number_of_frames: frames,
         created_time: cdate,
-        series_uid_hash: series_uid_hash_v,
-        study_uid_hash: study_uid_hash_v,
+        series_uid_hash: series_uid_hash_v.into(),
+        study_uid_hash: study_uid_hash_v.into(),
         accession_number: BoundedString::try_from(accession_number)
             .with_whatever_context(|err| format!("Failed to create accession_number: {}", err))?,
         source_ip: BoundedString::try_from(ip)

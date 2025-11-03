@@ -1,5 +1,5 @@
 pub mod common_utils;
- 
+
 mod wado_rs_controller;
 
 use crate::wado_rs_controller::{
@@ -8,15 +8,16 @@ use crate::wado_rs_controller::{
 };
 use actix_cors::Cors;
 use actix_web::{App, HttpServer, middleware, web};
- 
+
 use common::license_manager::validate_client_certificate;
+use common::redis_key::RedisHelper;
 use common::server_config::AppConfig;
 use common::utils::setup_logging;
 use common::{database_factory, server_config};
-use slog;
-use slog::{ Logger, error, info};
-use std::sync::Arc;
 use database::dicom_dbprovider::DbProvider;
+use slog;
+use slog::{Logger, error, info};
+use std::sync::Arc;
 
 fn configure_log() -> Logger {
     // let decorator = slog_term::TermDecorator::new().build();
@@ -38,6 +39,7 @@ struct AppState {
     log: Logger,
     db: Arc<dyn DbProvider + Send + Sync>,
     config: AppConfig,
+    redis_helper: RedisHelper,
     // 可以添加其他配置
 }
 
@@ -140,7 +142,7 @@ async fn main() -> std::io::Result<()> {
         ));
     }
 
-    let db_provider =match database_factory::create_db_instance(&config.main_database).await{
+    let db_provider = match database_factory::create_db_instance(&config.main_database).await {
         Ok(db_provider) => db_provider,
         Err(e) => {
             error!(log, "create_db_instance error: {:?}", e);
@@ -155,11 +157,13 @@ async fn main() -> std::io::Result<()> {
     let server_config = config.server;
     let local_storage_config = config.local_storage;
     info!(log, "LocalStorage Config is: {:?}", local_storage_config);
+    let reids_conn = g_config.redis.clone();
 
     let app_state = AppState {
         log: log.clone(),
         db: db_provider as Arc<dyn DbProvider + Send + Sync>, // 正确的类型转换
         config: g_config,
+        redis_helper: RedisHelper::new(reids_conn),
     };
     info!(
         log,
