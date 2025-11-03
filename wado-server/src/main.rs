@@ -4,7 +4,7 @@ mod wado_rs_controller;
 
 use crate::wado_rs_controller::{
     echo, manual_hello, retrieve_instance, retrieve_instance_frames, retrieve_series_metadata,
-    retrieve_study_metadata,
+    retrieve_study_metadata, retrieve_study_subsereis,
 };
 use actix_cors::Cors;
 use actix_web::{App, HttpServer, middleware, web};
@@ -199,6 +199,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(cors)
             .app_data(web::Data::new(app_state.clone()))
             .service(retrieve_study_metadata)
+            .service(retrieve_study_subsereis)
             .service(retrieve_series_metadata)
             .service(retrieve_instance)
             .service(retrieve_instance_frames)
