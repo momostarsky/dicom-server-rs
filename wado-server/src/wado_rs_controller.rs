@@ -37,17 +37,20 @@ async fn get_study_info_with_cache(
     tenant_id: &str,
     study_uid: &str,
     app_state: &web::Data<AppState>,
+    from_cache: bool,
 ) -> Result<Vec<DicomStateMeta>, HttpResponse> {
     let log = app_state.log.clone();
     // 首先尝试从 Redis 缓存中获取数据
-    let rh = RedisHelper::new(app_state.config.redis.clone());
+    let rh = &app_state.redis_helper;
 
-    match rh.get_study_metadata(tenant_id, study_uid) {
-        Ok(metas) => {
-            info!(log, "Retrieved study_info from Redis cache");
-            return Ok(metas);
+    if from_cache {
+        match rh.get_study_metadata(tenant_id, study_uid) {
+            Ok(metas) => {
+                info!(log, "Retrieved study_info from Redis cache");
+                return Ok(metas);
+            }
+            Err(_) => {}
         }
-        Err(_) => {}
     }
 
     match app_state.db.get_state_metaes(tenant_id, study_uid).await {
@@ -100,7 +103,8 @@ async fn retrieve_study_metadata(
     // }
 
     //  从缓存中加载study_info
-    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state).await {
+    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state, true).await
+    {
         Ok(info) => info,
         Err(response) => return response,
     };
@@ -152,8 +156,8 @@ async fn retrieve_study_metadata(
     }
 }
 
-#[get("/studies/{study_instance_uid}/subsereis")]
-async fn retrieve_study_subsereis(
+#[get("/studies/{study_instance_uid}/subseries")]
+async fn retrieve_study_subseries(
     study_instance_uid: Path<String>,
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -177,20 +181,12 @@ async fn retrieve_study_subsereis(
             tenant_id, study_uid
         ));
     }
-    // let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
-
-    // if accept != Some(ACCEPT_DICOM_JSON_TYPE) {
-    //     return HttpResponse::NotAcceptable().body(format!(
-    //         "retrieve_study_metadata Accept header must be {}",
-    //         ACCEPT_DICOM_JSON_TYPE
-    //     ));
-    // }
-
     //  从缓存中加载study_info
-    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state).await {
-        Ok(info) => info,
-        Err(response) => return response,
-    };
+    let study_info =
+        match get_study_info_with_cache(&tenant_id, &study_uid, &app_state, false).await {
+            Ok(info) => info,
+            Err(response) => return response,
+        };
     if study_info.is_empty() {
         return HttpResponse::NotFound().body(format!(
             "retrieve_study_metadata Study not found in database retry after 30 seconds: {},{}",
@@ -198,43 +194,13 @@ async fn retrieve_study_subsereis(
         ));
     }
 
-    info!(log, "Study Info: {:?}", study_info.first());
-    let study_info = study_info.first().unwrap();
-    let json_path = match json_metadata_for_study(&study_info, false) {
-        Ok(v) => v,
-        Err(e) => {
-            return HttpResponse::InternalServerError()
-                .body(format!("Failed to compute json_metadata_for_study: {}", e));
-        }
-    };
-
-    let dicom_dir = match dicom_study_dir(&study_info, false) {
-        Ok(v) => v,
-        Err(e) => {
-            return HttpResponse::InternalServerError()
-                .body(format!("Failed to compute DICOM directory: {}", e));
-        }
-    };
-
-    if !std::path::Path::new(&json_path).exists() {
-        let dicom_path = PathBuf::from(&dicom_dir);
-        let json_path = PathBuf::from(&json_path);
-        info!(log, "DICOM directory: {:?}", dicom_path);
-        if let Err(e) = dicom_json_helper::generate_json_file(&dicom_path, &json_path) {
-            return HttpResponse::InternalServerError().body(format!(
-                "retrieve_study_metadata Failed to generate JSON file: {}: {}",
-                json_path.display(),
-                e
-            ));
-        }
-    }
-    match std::fs::read_to_string(&json_path) {
+    match serde_json::to_string(&study_info) {
         Ok(content) => HttpResponse::Ok()
             .content_type(ACCEPT_DICOM_JSON_TYPE)
             .body(content),
         Err(e) => HttpResponse::InternalServerError().body(format!(
-            "retrieve_study_metadata Failed to read JSON file: {}: {}",
-            json_path, e
+            "retrieve_study_subseries Failed to read JSON file: {} ",
+            e
         )),
     }
 }
@@ -284,7 +250,8 @@ async fn retrieve_series_metadata(
         ));
     }
     // ... existing code ...
-    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state).await {
+    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state, true).await
+    {
         Ok(info) => info,
         Err(response) => return response,
     };
@@ -295,12 +262,124 @@ async fn retrieve_series_metadata(
         ));
     }
 
+    let series_info = study_info
+        .iter()
+        .find(|info| info.series_uid.as_str() == series_uid)
+        .cloned();
+
+    if series_info.is_none() {
+        return HttpResponse::NotFound()
+            .body(format!("Series not found in study info: {}", series_uid));
+    }
+    info!(log, "Series Info: {:?}", series_info);
+
+    let series_info = series_info.unwrap();
+    let json_file_path = match json_metadata_for_series(&series_info, true) {
+        Ok(v) => v,
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .body(format!("Failed to generate JSON directory: {}", e));
+        }
+    };
+    //如果json_file_path 存在,则输出json
+    if std::path::Path::new(&json_file_path).exists() {
+        match std::fs::read_to_string(&json_file_path) {
+            Ok(json_content) => {
+                info!(log, "JSON file found: {}", json_file_path);
+                return HttpResponse::Ok()
+                    .content_type(ACCEPT_DICOM_JSON_TYPE)
+                    .body(json_content);
+            }
+            Err(_) => {}
+        }
+    }
+
     info!(log, "Study Info: {:?}", study_info);
 
-    match serde_json::to_string(&study_info) {
-        Ok(json_str) => HttpResponse::Ok()
-            .content_type(ACCEPT_DICOM_JSON_TYPE)
-            .body(json_str),
+    let dicom_dir = match dicom_series_dir(&series_info, false) {
+        Ok(vv) => vv,
+        Err(_) => {
+            return HttpResponse::InternalServerError().body(format!(
+                "retrieve_study_metadata Failed to compute DICOM directory: {}",
+                "json_metadata_for_study"
+            ));
+        }
+    };
+
+    let files = match walk_directory(dicom_dir) {
+        Ok(files) => files,
+        Err(e) => {
+            return HttpResponse::InternalServerError().body(format!(
+                "retrieve_study_metadata Failed to walk directory: {}",
+                e
+            ));
+        }
+    };
+    // 将循环处理改为并行处理
+    let mut handles = vec![];
+
+    // 添加每个 DICOM 文件作为 multipart 中的一部分
+    for file_path in &files {
+        // 读取 DICOM 文件内容
+        let file_path_clone = file_path.clone(); // 克隆路径供异步任务使用
+        let handle = task::spawn_blocking(move || {
+            // 读取 DICOM 文件内容
+            let sop_json = match OpenFileOptions::new()
+                .charset_override(CharacterSetOverride::AnyVr)
+                .read_until(tags::PIXEL_DATA)
+                .open_file(&file_path_clone)
+            {
+                Ok(dicom_object) => {
+                    let mut dicom_json = Map::new();
+                    dicom_object.tags().into_iter().for_each(|tag| {
+                        let value_str: Vec<String> = get_tag_values(tag, &dicom_object);
+                        let vr = dicom_object.element(tag).expect("REASON").vr().to_string();
+                        let tag_key = format!("{:04X}{:04X}", tag.group(), tag.element());
+                        let element_json = json!({
+                            "vr": vr,
+                            "Value": value_str
+                        });
+                        dicom_json.insert(tag_key, element_json);
+                    });
+                    Ok(dicom_json)
+                }
+                Err(e) => Err(format!(
+                    "Failed to read DICOM file {}: {}",
+                    file_path_clone.display(),
+                    e
+                )),
+            };
+            sop_json
+        });
+        handles.push(handle);
+    }
+
+    // 等待所有任务完成
+    let mut arr = vec![];
+    for handle in handles {
+        match handle.await {
+            Ok(result) => match result {
+                Ok(sop_json) => arr.push(sop_json),
+                Err(e) => {
+                    return HttpResponse::InternalServerError().body(e);
+                }
+            },
+            Err(e) => {
+                return HttpResponse::InternalServerError().body(format!("Task join error: {}", e));
+            }
+        }
+    }
+
+    match serde_json::to_string(&arr) {
+        Ok(json_str) => {
+            // 根据series_uid 将json_str 写入当前目录下面,文件路径为:./{series_uid}.json
+            if let Err(e) = std::fs::write(&json_file_path, &json_str) {
+                error!(log, "Failed to write JSON file {}: {}", json_file_path, e);
+            }
+            HttpResponse::Ok()
+                .content_type(ACCEPT_DICOM_JSON_TYPE)
+                .body(json_str)
+        }
         Err(e) => HttpResponse::InternalServerError().body(format!(
             "retrieve_study_metadata Failed to walk directory: {}",
             e
@@ -356,7 +435,8 @@ async fn retrieve_instance_impl(
         sop_uid
     );
     // 获取series_info (使用提取的函数)
-    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state).await {
+    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state, true).await
+    {
         Ok(info) => info,
         Err(response) => return response,
     };
