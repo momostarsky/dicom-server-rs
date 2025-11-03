@@ -607,6 +607,7 @@ pub fn json_metadata_for_series(
     }
     Ok(json_path)
 }
+ 
 
 pub fn dicom_file_path(dir: &str, sop_uid: &str) -> String {
     format!("{}/{}.dcm", dir, sop_uid)

@@ -6,7 +6,8 @@ use common::dicom_json_helper::walk_directory;
 use common::dicom_utils::get_tag_values;
 use common::redis_key::RedisHelper;
 use common::server_config::{
-    dicom_series_dir, dicom_study_dir, json_metadata_for_series, json_metadata_for_study,
+    dicom_file_path, dicom_series_dir, dicom_study_dir, json_metadata_for_series,
+    json_metadata_for_study,
 };
 use database::dicom_meta::DicomStateMeta;
 use dicom_dictionary_std::tags;
@@ -467,7 +468,7 @@ async fn retrieve_instance_impl(
         }
     };
 
-    let dicom_file = build_dicom_instance_file_path(&dicom_dir, &sop_uid);
+    let dicom_file = dicom_file_path(&dicom_dir, &sop_uid);
     match OpenFileOptions::new().open_file(&dicom_file) {
         Ok(obj) => match obj.get(tags::PIXEL_DATA) {
             Some(element) => match element.to_bytes() {
@@ -486,10 +487,6 @@ async fn retrieve_instance_impl(
         },
         Err(_) => HttpResponse::NotFound().body(format!("DICOM file not found: {}", &dicom_file)),
     }
-}
-
-fn build_dicom_instance_file_path(dicom_dir: &str, sop_uid: &str) -> String {
-    format!("{}/{}.dcm", dicom_dir, sop_uid)
 }
 
 #[get("/echo")]
