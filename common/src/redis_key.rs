@@ -2,7 +2,7 @@ use crate::server_config::RedisConfig;
 use database::dicom_meta::DicomStateMeta;
 use redis::Commands;
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct RedisHelper {
     config: RedisConfig,
 }
@@ -13,9 +13,22 @@ impl RedisHelper {
     }
 
     fn make_client(&self) -> Result<redis::Connection, redis::RedisError> {
-        redis::Client::open(self.config.url.as_str())
-            .expect("Invalid Redis connection URL")
-            .get_connection()
+        // redis::Client::open(self.config.url.as_str())
+        //     .expect("Invalid Redis connection URL")
+        //     .get_connection()
+        let client =
+            redis::Client::open(self.config.url.as_str()).expect("Invalid Redis connection URL");
+
+        let mut connection = client.get_connection()?;
+
+        // 如果配置中有密码，则进行认证
+        if let Some(password) = &self.config.password {
+            redis::cmd("AUTH")
+                .arg(password)
+                .query::<()>(&mut connection)?;
+        }
+
+        Ok(connection)
     }
     /// 生成的KEY用于将StudyUID的元数据缓存在Redis中
     pub fn key_for_study_metadata(&self, tenant_id: &str, study_uid: &str) -> String {

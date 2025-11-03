@@ -11,7 +11,7 @@ use std::sync::Once;
 #[derive(Debug, Deserialize, Clone)]
 pub struct RedisConfig {
     pub url: String,            //连接地址
-    pub passwd: Option<String>, //密码
+    pub password: Option<String>, //密码
     pub is_lts: Option<bool>,   //是否启动TLS
 }
 
@@ -607,7 +607,7 @@ pub fn json_metadata_for_series(
     }
     Ok(json_path)
 }
- 
+
 
 pub fn dicom_file_path(dir: &str, sop_uid: &str) -> String {
     format!("{}/{}.dcm", dir, sop_uid)
