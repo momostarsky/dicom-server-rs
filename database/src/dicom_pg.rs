@@ -478,7 +478,7 @@ impl DbProvider for PgDbProvider {
                                          ON dsm.tenant_id = djm.tenant_id
                                              AND dsm.study_uid = djm.study_uid
                                              AND dsm.series_uid = djm.series_uid
-                      WHERE djm.tenant_id IS NULL
+                      WHERE djm.tenant_id IS NULL AND dsm.updated_time <  $1
                       UNION ALL
                       SELECT dsm.*
                       FROM dicom_state_meta dsm
@@ -486,9 +486,9 @@ impl DbProvider for PgDbProvider {
                                           ON dsm.tenant_id = djm.tenant_id
                                               AND dsm.study_uid = djm.study_uid
                                               AND dsm.series_uid = djm.series_uid
-                      WHERE dsm.updated_time != djm.flag_time) AS t
-                WHERE t.updated_time <  $1
-                order by t.updated_time desc limit 10;",
+                      WHERE dsm.updated_time != djm.flag_time AND　dsm.updated_time <  $1
+                      ) AS t
+                order by t.updated_time asc limit 10;",
             )
             .await
             .map_err(|e| DbError::DatabaseError(e.to_string()))?;

@@ -545,7 +545,7 @@ impl DbProvider for MySqlDbProvider {
                                      ON dsm.tenant_id = djm.tenant_id
                                          AND dsm.study_uid = djm.study_uid
                                          AND dsm.series_uid = djm.series_uid
-                  WHERE djm.tenant_id IS NULL
+                  WHERE djm.tenant_id IS NULL  AND　dsm.updated_time < ?
                   UNION ALL
                   SELECT dsm.*
                   FROM dicom_state_meta dsm
@@ -553,14 +553,15 @@ impl DbProvider for MySqlDbProvider {
                                       ON dsm.tenant_id = djm.tenant_id
                                           AND dsm.study_uid = djm.study_uid
                                           AND dsm.series_uid = djm.series_uid
-                  WHERE dsm.updated_time != djm.flag_time) AS t
-                  WHERE t.updated_time < ?
-            order by t.updated_time desc limit 10;
+                  WHERE dsm.updated_time != djm.flag_time
+                   AND  dsm.updated_time < ?
+                  ) AS t
+                  order by t.updated_time asc limit 10;
         "#;
 
         // 执行查询
         let result: Vec<DicomStateMeta> = conn
-            .exec_map(query, params! { end_time }, |row: mysql::Row| {
+            .exec_map(query, params! { end_time,end_time }, |row: mysql::Row| {
                 // 映射查询结果到 DicomStateMeta 结构体
                 DicomStateMeta {
                     tenant_id: row.get("tenant_id").unwrap_or_default(),
@@ -604,11 +605,11 @@ impl DbProvider for MySqlDbProvider {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Sub;
     use super::*;
     use crate::dicom_dbprovider::current_time;
     use crate::dicom_dbtype::*;
     use chrono::{NaiveDate, NaiveTime};
+    use std::ops::Sub;
 
     #[tokio::test]
     async fn test_save_state_info() -> Result<(), Box<dyn std::error::Error>> {
@@ -786,8 +787,8 @@ mod tests {
             "mysql://dicomstore:hzjp%23123@192.168.1.14:3306/dicomdb".to_string(),
         );
 
-        let cd =current_time();
-        let cd =  cd.sub(chrono::Duration::minutes(5));
+        let cd = current_time();
+        let cd = cd.sub(chrono::Duration::minutes(5));
         // 执行查询操作
         let result = db_provider.get_json_metaes(cd).await;
 
