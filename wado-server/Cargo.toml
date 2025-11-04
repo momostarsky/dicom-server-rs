@@ -17,7 +17,7 @@ actix-cors = { workspace = true }
 slog = { workspace = true }
 slog-term = { workspace = true }
 slog-async = { workspace = true }
-serde = { workspace = true }
+serde = { workspace = true  ,features = ["derive"]}
 serde_qs = { workspace = true }
 serde_json = { workspace = true }
 urlencoding = { workspace = true }
@@ -38,3 +38,5 @@ openssl = { workspace = true }
 sysinfo = "0.29"
 database = { path = "../database" }
 common = { path = "../common" }
+utoipa = { version = "5.4.0", features = ["actix_extras", "non_strict_integers"] }
+utoipa-swagger-ui = { version = "9", features = ["actix-web"] }

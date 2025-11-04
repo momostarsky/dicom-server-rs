@@ -486,12 +486,15 @@ impl DbProvider for PgDbProvider {
                                           ON dsm.tenant_id = djm.tenant_id
                                               AND dsm.study_uid = djm.study_uid
                                               AND dsm.series_uid = djm.series_uid
-                      WHERE dsm.updated_time != djm.flag_time AND　dsm.updated_time <  $1
+                      WHERE dsm.updated_time != djm.flag_time AND dsm.updated_time <  $1
                       ) AS t
                 order by t.updated_time asc limit 10;",
             )
             .await
-            .map_err(|e| DbError::DatabaseError(e.to_string()))?;
+            .map_err(|e| {
+                println!("{:?}", e);
+                DbError::DatabaseError(e.to_string())
+            })?;
 
         let rows = client
             .query(&statement, &[&end_time])

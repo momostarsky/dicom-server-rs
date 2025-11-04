@@ -19,6 +19,12 @@ use database::dicom_dbprovider::DbProvider;
 use slog;
 use slog::{Logger, error, info};
 use std::sync::Arc;
+use utoipa::{
+    IntoParams, OpenApi, PartialSchema, ToSchema,
+    openapi::schema::{Object, ObjectBuilder},
+};
+use utoipa_swagger_ui::SwaggerUi;
+// 将原来的简单结构体定义替换为完整的 OpenApi 配置
 
 fn configure_log() -> Logger {
     // let decorator = slog_term::TermDecorator::new().build();
@@ -34,7 +40,14 @@ fn configure_log() -> Logger {
     log.clone()
 }
 // 定义应用状态
-
+#[derive(OpenApi)]
+#[openapi(
+    tags((name = "user", description = "用户管理 API")),
+    paths(
+        wado_rs_controller::retrieve_study_metadata,
+    )
+)]
+struct ApiDoc;
 #[derive(Clone)]
 struct AppState {
     log: Logger,
@@ -43,6 +56,7 @@ struct AppState {
     redis_helper: RedisHelper,
     // 可以添加其他配置
 }
+
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -175,6 +189,7 @@ async fn main() -> std::io::Result<()> {
         log,
         "Starting the server at {}:{}", server_config.host, server_config.port
     );
+
     HttpServer::new(move || {
         let mut cors = Cors::default()
             .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
@@ -199,11 +214,15 @@ async fn main() -> std::io::Result<()> {
             });
         }
 
+        let mut doc = ApiDoc::openapi();
+        doc.info.title = String::from("WADO-RS Api");
+
         App::new()
             // 使用.wrap()方法添加Compress中间件
             .wrap(middleware::Compress::default())
             .wrap(cors)
             .app_data(web::Data::new(app_state.clone()))
+            .service(SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-docs/openapi.json", doc))
             .service(retrieve_study_metadata)
             .service(retrieve_study_subseries)
             .service(retrieve_series_metadata)

@@ -23,7 +23,7 @@ pub(crate) async fn background_task_manager(app_state: AppState) {
         let memory_usage = get_memory_usage(&sys);
 
         // 检查是否满足执行条件（CPU < 60% 且 内存 < 70%）
-        if cpu_usage < 60.0 && memory_usage < 70.0 {
+        if cpu_usage < 40.0 && memory_usage < 80.0 {
             // 执行后台任务
             if let Err(e) = execute_background_json_generation(&app_state).await {
                 error!(app_state.log, "Background JSON generation failed: {}", e);

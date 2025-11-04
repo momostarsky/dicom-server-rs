@@ -70,6 +70,22 @@ async fn get_study_info_with_cache(
         }
     }
 }
+
+
+#[utoipa::path(
+    get,
+    path = "/studies/{study_instance_uid}/metadata",
+    params(
+        ("study_instance_uid" = String, Path, description = "Study Instance UID"),
+    ),
+    responses(
+        (status = 200, description = "Study metadata retrieved successfully", content_type = "application/dicom+json"),
+        (status = 404, description = "Study not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "WADO-RS"
+)]
+
 #[get("/studies/{study_instance_uid}/metadata")]
 async fn retrieve_study_metadata(
     study_instance_uid: Path<String>,
