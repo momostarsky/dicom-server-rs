@@ -5,6 +5,7 @@ use slog::{error, info};
 use std::ops::Sub;
 use sysinfo::{CpuExt, ProcessExt, System, SystemExt};
 use tokio::time::{Duration, interval};
+use crate::common_utils::generate_series_json;
 
 // 后台任务管理器
 pub(crate) async fn background_task_manager(app_state: AppState) {
@@ -88,7 +89,7 @@ async fn execute_background_json_generation(
     for record in pending_records {
         // 这里应该调用实际的JSON生成逻辑
         // 可以参考wado_rs_controller.rs中的实现
-        match generate_json_for_record(app_state, &record).await {
+        match generate_series_json( &record).await {
             Ok(_) => {
                 info!(
                     app_state.log,
@@ -149,23 +150,5 @@ async fn execute_background_json_generation(
         app_state.log,
         "Background JSON metadata generation completed"
     );
-    Ok(())
-}
-
-// 为单个记录生成JSON
-async fn generate_json_for_record(
-    app_state: &AppState,
-    record: &DicomStateMeta,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // 实现具体的JSON生成逻辑
-    // 这里应该参考retrieve_series_metadata等函数的实现
-    info!(
-        app_state.log,
-        "Generating JSON for study: {}, series: {}", record.study_uid, record.series_uid
-    );
-
-    // TODO: 实现实际的JSON生成逻辑
-    // 可以调用dicom_json_helper中的相关函数
-
     Ok(())
 }

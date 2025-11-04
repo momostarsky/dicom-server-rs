@@ -1,3 +1,4 @@
+use crate::common_utils::generate_series_json;
 use crate::{AppState, common_utils};
 use actix_web::http::header::ACCEPT;
 use actix_web::{HttpRequest, HttpResponse, Responder, get, web, web::Path};
@@ -297,94 +298,32 @@ async fn retrieve_series_metadata(
 
     info!(log, "Study Info: {:?}", study_info);
 
-    let dicom_dir = match dicom_series_dir(&series_info, false) {
-        Ok(vv) => vv,
-        Err(_) => {
-            return HttpResponse::InternalServerError().body(format!(
-                "retrieve_study_metadata Failed to compute DICOM directory: {}",
-                "json_metadata_for_study"
-            ));
-        }
-    };
-
-    let files = match walk_directory(dicom_dir) {
-        Ok(files) => files,
-        Err(e) => {
-            return HttpResponse::InternalServerError().body(format!(
-                "retrieve_study_metadata Failed to walk directory: {}",
-                e
-            ));
-        }
-    };
-    // 将循环处理改为并行处理
-    let mut handles = vec![];
-
-    for file_path in &files {
-        // 读取 DICOM 文件内容
-        let file_path_clone = file_path.clone(); // 克隆路径供异步任务使用
-        let handle = task::spawn_blocking(move || {
-            // 读取 DICOM 文件内容
-            let sop_json = match OpenFileOptions::new()
-                .charset_override(CharacterSetOverride::AnyVr)
-                .read_until(tags::PIXEL_DATA)
-                .open_file(&file_path_clone)
-            {
-                Ok(dicom_object) => {
-                    let mut dicom_json = Map::new();
-                    dicom_object.tags().into_iter().for_each(|tag| {
-                        let value_str: Vec<String> = get_tag_values(tag, &dicom_object);
-                        let vr = dicom_object.element(tag).expect("REASON").vr().to_string();
-                        let tag_key = format!("{:04X}{:04X}", tag.group(), tag.element());
-                        let element_json = json!({
-                            "vr": vr,
-                            "Value": value_str
-                        });
-                        dicom_json.insert(tag_key, element_json);
-                    });
-                    Ok(dicom_json)
-                }
-                Err(e) => Err(format!(
-                    "Failed to read DICOM file {}: {}",
-                    file_path_clone.display(),
-                    e
-                )),
-            };
-            sop_json
-        });
-        handles.push(handle);
-    }
-
-    // 等待所有任务完成
-    let mut arr = vec![];
-    for handle in handles {
-        match handle.await {
-            Ok(result) => match result {
-                Ok(sop_json) => arr.push(sop_json),
-                Err(e) => {
-                    return HttpResponse::InternalServerError().body(e);
-                }
-            },
-            Err(e) => {
-                return HttpResponse::InternalServerError().body(format!("Task join error: {}", e));
-            }
-        }
-    }
-
-    match serde_json::to_string(&arr) {
-        Ok(json_str) => {
-            // 根据series_uid 将json_str 写入当前目录下面,文件路径为:./{series_uid}.json
-            if let Err(e) = std::fs::write(&json_file_path, &json_str) {
-                error!(log, "Failed to write JSON file {}: {}", json_file_path, e);
-            }
-            HttpResponse::Ok()
-                .content_type(ACCEPT_DICOM_JSON_TYPE)
-                .body(json_str)
-        }
+    match generate_series_json(&series_info).await {
+        Ok(json_str) => HttpResponse::Ok()
+            .content_type(ACCEPT_DICOM_JSON_TYPE)
+            .body(json_str),
         Err(e) => HttpResponse::InternalServerError().body(format!(
-            "retrieve_study_metadata Failed to walk directory: {}",
+            "retrieve_study_metadata Failed to generate_series_json : {}",
             e
         )),
     }
+
+    //
+    // match serde_json::to_string(&arr) {
+    //     Ok(json_str) => {
+    //         // 根据series_uid 将json_str 写入当前目录下面,文件路径为:./{series_uid}.json
+    //         if let Err(e) = std::fs::write(&json_file_path, &json_str) {
+    //             error!(log, "Failed to write JSON file {}: {}", json_file_path, e);
+    //         }
+    //         HttpResponse::Ok()
+    //             .content_type(ACCEPT_DICOM_JSON_TYPE)
+    //             .body(json_str)
+    //     }
+    //     Err(e) => HttpResponse::InternalServerError().body(format!(
+    //         "retrieve_study_metadata Failed to walk directory: {}",
+    //         e
+    //     )),
+    // }
 }
 
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}")]
