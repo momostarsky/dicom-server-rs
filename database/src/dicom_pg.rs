@@ -475,7 +475,7 @@ impl DbProvider for PgDbProvider {
                                               AND dsm.study_uid = djm.study_uid
                                               AND dsm.series_uid = djm.series_uid
                       WHERE dsm.updated_time != djm.flag_time) AS t
-                order by t.updated_time;",
+                order by t.updated_time desc limit 10;",
             )
             .await
             .map_err(|e| DbError::DatabaseError(e.to_string()))?;
