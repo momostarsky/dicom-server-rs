@@ -500,7 +500,10 @@ impl DbProvider for MySqlDbProvider {
         Ok(result)
     }
 
-    async fn get_json_metaes(&self) -> std::result::Result<Vec<DicomStateMeta>, DbError> {
+    async fn get_json_metaes(
+        &self,
+        end_time: chrono::NaiveDateTime,
+    ) -> std::result::Result<Vec<DicomStateMeta>, DbError> {
         // 创建数据库连接
         let mut conn = mysql::Conn::new(self.db_connection_string.as_str())
             .map_err(|e| DbError::DatabaseError(format!("Failed to connect to MySQL: {}", e)))?;
@@ -551,12 +554,13 @@ impl DbProvider for MySqlDbProvider {
                                           AND dsm.study_uid = djm.study_uid
                                           AND dsm.series_uid = djm.series_uid
                   WHERE dsm.updated_time != djm.flag_time) AS t
+                  WHERE t.updated_time < ?
             order by t.updated_time desc limit 10;
         "#;
 
         // 执行查询
         let result: Vec<DicomStateMeta> = conn
-            .exec_map(query, (), |row: mysql::Row| {
+            .exec_map(query, params! { end_time }, |row: mysql::Row| {
                 // 映射查询结果到 DicomStateMeta 结构体
                 DicomStateMeta {
                     tenant_id: row.get("tenant_id").unwrap_or_default(),
@@ -600,6 +604,7 @@ impl DbProvider for MySqlDbProvider {
 
 #[cfg(test)]
 mod tests {
+    use std::ops::Sub;
     use super::*;
     use crate::dicom_dbprovider::current_time;
     use crate::dicom_dbtype::*;
@@ -781,8 +786,10 @@ mod tests {
             "mysql://dicomstore:hzjp%23123@192.168.1.14:3306/dicomdb".to_string(),
         );
 
+        let cd =current_time();
+        let cd =  cd.sub(chrono::Duration::minutes(5));
         // 执行查询操作
-        let result = db_provider.get_json_metaes().await;
+        let result = db_provider.get_json_metaes(cd).await;
 
         // 验证查询成功
         assert!(

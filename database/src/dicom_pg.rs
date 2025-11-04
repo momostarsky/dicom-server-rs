@@ -293,14 +293,20 @@ impl DbProvider for PgDbProvider {
                 study_uid_hash,
                 series_uid_hash,
                 study_date_origin,
-                flag_time
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                flag_time,
+                created_time,json_status,retry_times
+
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7,$8,$9,$10)
             ON CONFLICT (tenant_id, study_uid, series_uid)
             DO UPDATE SET
                 study_uid_hash = EXCLUDED.study_uid_hash,
                 series_uid_hash = EXCLUDED.series_uid_hash,
                 study_date_origin = EXCLUDED.study_date_origin,
-                flag_time = EXCLUDED.flag_time",
+                flag_time = EXCLUDED.flag_time,
+                created_time = EXCLUDED.created_time,
+                json_status = EXCLUDED.json_status,
+                retry_times = EXCLUDED.retry_times
+                ",
             )
             .await
             .map_err(|e| {
@@ -321,6 +327,9 @@ impl DbProvider for PgDbProvider {
                         &json_meta.series_uid_hash,
                         &json_meta.study_date_origin,
                         &json_meta.flag_time,
+                        &json_meta.created_time,
+                        &json_meta.json_status,
+                        &json_meta.retry_times,
                     ],
                 )
                 .await
@@ -427,7 +436,10 @@ impl DbProvider for PgDbProvider {
         Ok(result)
     }
 
-    async fn get_json_metaes(&self) -> Result<Vec<DicomStateMeta>, DbError> {
+    async fn get_json_metaes(
+        &self,
+        end_time: chrono::NaiveDateTime,
+    ) -> Result<Vec<DicomStateMeta>, DbError> {
         let client = self.make_client().await?;
         let statement = client
             .prepare(
@@ -475,13 +487,14 @@ impl DbProvider for PgDbProvider {
                                               AND dsm.study_uid = djm.study_uid
                                               AND dsm.series_uid = djm.series_uid
                       WHERE dsm.updated_time != djm.flag_time) AS t
+                WHERE t.updated_time <  $1
                 order by t.updated_time desc limit 10;",
             )
             .await
             .map_err(|e| DbError::DatabaseError(e.to_string()))?;
 
         let rows = client
-            .query(&statement, &[])
+            .query(&statement, &[&end_time])
             .await
             .map_err(|e| DbError::DatabaseError(e.to_string()))?;
 
@@ -530,6 +543,7 @@ mod tests {
     use crate::dicom_dbprovider::current_time;
     use crate::dicom_dbtype::*;
     use chrono::{NaiveDate, NaiveTime};
+    use std::ops::Sub;
 
     #[tokio::test]
     async fn test_save_state_info() -> Result<(), Box<dyn std::error::Error>> {
@@ -648,8 +662,10 @@ mod tests {
         let db_provider =
             PgDbProvider::new("postgresql://root:jp%23123@192.168.1.14:5432/postgres".to_string());
 
+        let cd = current_time();
+        let cd = cd.sub(chrono::Duration::minutes(3));
         // 执行查询操作
-        let result = db_provider.get_json_metaes().await;
+        let result = db_provider.get_json_metaes(cd).await;
 
         // 验证查询成功
         assert!(

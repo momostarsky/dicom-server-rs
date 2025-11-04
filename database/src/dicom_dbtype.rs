@@ -21,6 +21,12 @@ pub struct BoundedString<const N: usize> {
     value: String,
 }
 
+impl<const N: usize> fmt::Display for BoundedString<N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
 impl<const N: usize> BoundedString<N> {
     pub fn new(s: String) -> BoundedResult<BoundedString<N>> {
         if s.len() > N {

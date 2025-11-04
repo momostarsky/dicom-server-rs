@@ -319,7 +319,6 @@ async fn retrieve_series_metadata(
     // 将循环处理改为并行处理
     let mut handles = vec![];
 
-    // 添加每个 DICOM 文件作为 multipart 中的一部分
     for file_path in &files {
         // 读取 DICOM 文件内容
         let file_path_clone = file_path.clone(); // 克隆路径供异步任务使用

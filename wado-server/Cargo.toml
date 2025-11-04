@@ -35,5 +35,6 @@ url = { workspace = true }
 gdcm_conv = { workspace = true }
 reqwest = { workspace = true }
 openssl = { workspace = true }
+sysinfo = "0.29"
 database = { path = "../database" }
 common = { path = "../common" }

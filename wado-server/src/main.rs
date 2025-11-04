@@ -1,8 +1,12 @@
 pub mod common_utils;
 
+mod background;
 mod wado_rs_controller;
 
-use crate::wado_rs_controller::{echo, manual_hello, retrieve_instance, retrieve_instance_frames, retrieve_series_metadata, retrieve_study_metadata, retrieve_study_subseries};
+use crate::wado_rs_controller::{
+    echo, manual_hello, retrieve_instance, retrieve_instance_frames, retrieve_series_metadata,
+    retrieve_study_metadata, retrieve_study_subseries,
+};
 use actix_cors::Cors;
 use actix_web::{App, HttpServer, middleware, web};
 
@@ -162,6 +166,11 @@ async fn main() -> std::io::Result<()> {
         config: g_config,
         redis_helper: RedisHelper::new(reids_conn),
     };
+    // 启动后台任务管理器
+    let background_app_state = app_state.clone();
+    tokio::spawn(async move {
+        background::background_task_manager(background_app_state).await;
+    });
     info!(
         log,
         "Starting the server at {}:{}", server_config.host, server_config.port

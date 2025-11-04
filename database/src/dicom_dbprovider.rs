@@ -33,5 +33,5 @@ pub trait DbProvider: Send + Sync {
         study_uid: &str,
     ) -> Result<Vec<DicomStateMeta>, DbError>;
 
-    async fn get_json_metaes(&self) -> Result<Vec<DicomStateMeta>, DbError>;
+    async fn get_json_metaes(&self, end_time: chrono::NaiveDateTime) -> Result<Vec<DicomStateMeta>, DbError>;
 }
