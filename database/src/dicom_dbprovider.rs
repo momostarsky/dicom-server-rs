@@ -16,7 +16,9 @@ pub enum DbError {
     #[error("Transaction failed: {0}")]
     TransactionFailed(String),
 }
-
+pub fn current_time() -> chrono::NaiveDateTime {
+    chrono::Local::now().naive_local()
+}
 #[async_trait]
 pub trait DbProvider: Send + Sync {
     async fn save_state_info(&self, state_meta: &DicomStateMeta) -> Result<(), DbError>;

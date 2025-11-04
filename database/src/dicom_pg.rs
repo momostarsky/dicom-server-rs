@@ -527,6 +527,7 @@ impl DbProvider for PgDbProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dicom_dbprovider::current_time;
     use crate::dicom_dbtype::*;
     use chrono::{NaiveDate, NaiveTime};
 
@@ -560,8 +561,8 @@ mod tests {
         let patient_name = Some(BoundedString::<64>::try_from("TEST^PATIENT".to_string())?);
         let patient_birth_date = Some(NaiveDate::from_ymd_opt(1978, 1, 1).unwrap());
         let patient_birth_time = Some(NaiveTime::parse_from_str("080000", "%H%M%S")?);
-        let created_time = chrono::Local::now().naive_local();
-        let updated_time = chrono::Local::now().naive_local();
+        let created_time = current_time();
+        let updated_time = current_time();
 
         // 创建 DicomStateMeta 实例
         let state_meta = DicomStateMeta {
@@ -647,8 +648,6 @@ mod tests {
         let db_provider =
             PgDbProvider::new("postgresql://root:jp%23123@192.168.1.14:5432/postgres".to_string());
 
-
-
         // 执行查询操作
         let result = db_provider.get_json_metaes().await;
 
@@ -666,7 +665,6 @@ mod tests {
 
         // 验证每条记录的 tenant_id 和 study_uid 是否正确
         for state_meta in state_meta_list {
-
             let json = serde_json::to_string_pretty(&state_meta)?;
             println!("DicomStateMeta JSON: {}", json);
         }
@@ -710,8 +708,8 @@ mod tests {
         let patient_name = Some(BoundedString::<64>::try_from("TEST^PATIENT2".to_string())?);
         let patient_birth_date = Some(NaiveDate::from_ymd_opt(1977, 1, 1).unwrap());
         let patient_birth_time = Some(NaiveTime::parse_from_str("090000", "%H%M%S")?);
-        let created_time = chrono::Local::now().naive_local();
-        let updated_time = chrono::Local::now().naive_local();
+        let created_time = current_time();
+        let updated_time = current_time();
 
         let state_meta = DicomStateMeta {
             tenant_id,
@@ -764,6 +762,53 @@ mod tests {
         assert!(
             result.is_ok(),
             "Failed to save DicomStateMeta list: {:?}",
+            result.err()
+        );
+
+        Ok(())
+    }
+    #[tokio::test]
+    async fn test_save_json_list() -> Result<(), Box<dyn std::error::Error>> {
+        let db_provider =
+            PgDbProvider::new("postgresql://root:jp%23123@192.168.1.14:5432/postgres".to_string());
+
+        // 创建测试数据列表
+        let mut json_meta_list = Vec::new();
+
+        // 创建测试数据
+        let tenant_id = BoundedString::<64>::try_from("test_tenant_json_123".to_string())?;
+        let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9.json".to_string())?;
+        let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.json".to_string())?;
+        let study_uid_hash = BoundedString::<20>::from_str("0AC07C2AA455BEB01D5A").unwrap();
+        let series_uid_hash = BoundedString::<20>::from_str("0AD07C2AA455BEB01D5A").unwrap();
+        let study_date_origin = DicomDateString::from_db("20231203");
+        let flag_time = current_time();
+        let created_time = current_time();
+        let json_status = 0;
+        let retry_times = 0;
+
+        let json_meta = DicomJsonMeta {
+            tenant_id: tenant_id.clone(),
+            study_uid: study_uid.clone(),
+            series_uid: series_uid.clone(),
+            study_uid_hash,
+            series_uid_hash,
+            study_date_origin,
+            flag_time,
+            created_time,
+            json_status,
+            retry_times,
+        };
+
+        json_meta_list.push(json_meta);
+
+        // 执行批量保存操作
+        let result = db_provider.save_json_list(&json_meta_list).await;
+
+        // 验证保存成功
+        assert!(
+            result.is_ok(),
+            "Failed to save DicomJsonMeta list: {:?}",
             result.err()
         );
 

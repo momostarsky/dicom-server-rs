@@ -51,7 +51,8 @@ create table  dicom_json_meta
     json_status              int         not null default 0,
     retry_times              int         not null default 0
 );
-create primary key  PK_dicom_json_meta(tenant_id, study_uid, series_uid)
-    on  dicom_json_meta (tenant_id, study_uid, series_uid);
+
+ALTER TABLE dicom_json_meta
+ADD CONSTRAINT PK_dicom_json_meta PRIMARY KEY (tenant_id, study_uid, series_uid);
 
 

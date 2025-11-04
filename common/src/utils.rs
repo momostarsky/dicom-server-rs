@@ -1,7 +1,8 @@
 use std::option::Option;
 
- 
+use crate::dicom_object_meta::{make_image_info, make_state_info};
 use crate::message_sender::MessagePublisher;
+use database::dicom_meta::{DicomImageMeta, DicomStateMeta, DicomStoreMeta};
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu::Whatever;
 use dicom_object::ReadError;
@@ -13,8 +14,11 @@ use std::fs;
 use std::fs::OpenOptions;
 use std::path::Path;
 use std::sync::OnceLock;
-use database::dicom_meta::{DicomImageMeta, DicomStateMeta, DicomStoreMeta};
-use crate::dicom_object_meta::{make_image_info, make_state_info};
+
+/// 获取当前时间
+pub fn get_current_time() -> chrono::NaiveDateTime {
+    chrono::Local::now().naive_local()
+}
 
 pub async fn get_dicom_files_in_dir(p0: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let path = Path::new(p0);
