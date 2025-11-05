@@ -3,6 +3,7 @@ pub mod common_utils;
 mod background;
 mod constants;
 mod wado_rs_controller;
+mod wado_rs_models;
 
 use crate::wado_rs_controller::{
     echo_v1, echo_v2, retrieve_instance, retrieve_instance_frames, retrieve_series_metadata,
@@ -241,7 +242,7 @@ async fn main() -> std::io::Result<()> {
                     .service(scope::scope("/v2").service(echo_v2)),
             )
             .split_for_parts();
-        api.info.title = "WADO-RS Api".to_string();
+        api.info.title = "WADO-RS API".to_string();
         app.wrap(middleware::Compress::default())
             .wrap(cors)
             .app_data(web::Data::new(app_state.clone()))

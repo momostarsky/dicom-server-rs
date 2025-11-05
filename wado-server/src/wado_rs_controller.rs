@@ -14,6 +14,7 @@ use dicom_dictionary_std::tags;
 use dicom_object::OpenFileOptions;
 use slog::info;
 use std::path::PathBuf;
+use crate::wado_rs_models::SubSeriesMeta;
 
 static ACCEPT_DICOM_JSON_TYPE: &str = "application/dicom+json";
 static ACCEPT_JSON_TYPE: &str = "application/json";
@@ -176,7 +177,7 @@ async fn retrieve_study_metadata(
         ("study_instance_uid" = String, Path, description = "Study Instance UID"),
     ),
     responses(
-        (status = 200, description = "Study subseries retrieved successfully", content_type = "application/dicom+json"),
+        (status = 200, description = "Study subseries retrieved successfully", content_type = "application/dicom+json", body=[SubSeriesMeta]),
         (status = 404, description = "Study not found"),
         (status = 500, description = "Internal server error")
     ),
@@ -220,8 +221,14 @@ async fn retrieve_study_subseries(
             tenant_id, study_uid
         ));
     }
+    let items: Vec<SubSeriesMeta> = study_info
+        .iter()
+        .map(|s| {
+            SubSeriesMeta::new(s)   .into()
+        })
+        .collect::<Vec<_>>();
 
-    match serde_json::to_string(&study_info) {
+    match serde_json::to_string(&items) {
         Ok(content) => HttpResponse::Ok()
             .content_type(ACCEPT_DICOM_JSON_TYPE)
             .body(content),

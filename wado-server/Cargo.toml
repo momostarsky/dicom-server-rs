@@ -38,6 +38,6 @@ openssl = { workspace = true }
 sysinfo = "0.29"
 database = { path = "../database" }
 common = { path = "../common" }
-utoipa = { version = "5.4.0", features = ["actix_extras", "non_strict_integers"] }
+utoipa = { version = "5.4.0", features = ["actix_extras", "non_strict_integers","chrono","time","openapi_extensions","rc_schema","config"] }
 utoipa-swagger-ui = { version = "9", features = ["actix-web"] }
 utoipa-actix-web =  { version = "0.1.2"  }
