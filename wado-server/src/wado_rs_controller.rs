@@ -1,4 +1,5 @@
 use crate::common_utils::generate_series_json;
+use crate::constants::WADO_RS_CONTEXT_PATH;
 use crate::{AppState, common_utils};
 use actix_web::http::header::ACCEPT;
 use actix_web::{HttpRequest, HttpResponse, Responder, get, web, web::Path};
@@ -71,9 +72,9 @@ async fn get_study_info_with_cache(
     }
 }
 
-
 #[utoipa::path(
     get,
+ context_path= WADO_RS_CONTEXT_PATH,
     path = "/studies/{study_instance_uid}/metadata",
     params(
         ("study_instance_uid" = String, Path, description = "Study Instance UID"),
@@ -85,7 +86,6 @@ async fn get_study_info_with_cache(
     ),
     tag = "WADO-RS"
 )]
-
 #[get("/studies/{study_instance_uid}/metadata")]
 async fn retrieve_study_metadata(
     study_instance_uid: Path<String>,
@@ -173,7 +173,20 @@ async fn retrieve_study_metadata(
         )),
     }
 }
-
+#[utoipa::path( // <--- 添加整个宏
+    get,
+    context_path= WADO_RS_CONTEXT_PATH,
+    path = "/studies/{study_instance_uid}/subseries",
+    params(
+        ("study_instance_uid" = String, Path, description = "Study Instance UID"),
+    ),
+    responses(
+        (status = 200, description = "Study subseries retrieved successfully", content_type = "application/dicom+json"),
+        (status = 404, description = "Study not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "WADO-RS" // <--- 添加 tag
+)]
 #[get("/studies/{study_instance_uid}/subseries")]
 async fn retrieve_study_subseries(
     study_instance_uid: Path<String>,
@@ -222,6 +235,22 @@ async fn retrieve_study_subseries(
         )),
     }
 }
+
+#[utoipa::path(
+    get,
+     context_path= WADO_RS_CONTEXT_PATH,
+    path = "/studies/{study_instance_uid}/series/{series_instance_uid}/metadata",
+    params(
+        ("study_instance_uid" = String, Path, description = "Study Instance UID"),
+        ("series_instance_uid" = String, Path, description = "Series Instance UID"),
+    ),
+    responses(
+        (status = 200, description = "Series metadata retrieved successfully", content_type = "application/dicom+json"),
+        (status = 404, description = "Series or Study not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "WADO-RS" // <--- 确保这行存在
+)]
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}/metadata")]
 async fn retrieve_series_metadata(
     path: Path<(String, String)>,
@@ -323,25 +352,23 @@ async fn retrieve_series_metadata(
             e
         )),
     }
-
-    //
-    // match serde_json::to_string(&arr) {
-    //     Ok(json_str) => {
-    //         // 根据series_uid 将json_str 写入当前目录下面,文件路径为:./{series_uid}.json
-    //         if let Err(e) = std::fs::write(&json_file_path, &json_str) {
-    //             error!(log, "Failed to write JSON file {}: {}", json_file_path, e);
-    //         }
-    //         HttpResponse::Ok()
-    //             .content_type(ACCEPT_DICOM_JSON_TYPE)
-    //             .body(json_str)
-    //     }
-    //     Err(e) => HttpResponse::InternalServerError().body(format!(
-    //         "retrieve_study_metadata Failed to walk directory: {}",
-    //         e
-    //     )),
-    // }
 }
-
+#[utoipa::path( // <--- 添加整个宏
+    get,
+    context_path= WADO_RS_CONTEXT_PATH,
+    path = "/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}",
+    params(
+        ("study_instance_uid" = String, Path, description = "Study Instance UID"),
+        ("series_instance_uid" = String, Path, description = "Series Instance UID"),
+        ("sop_instance_uid" = String, Path, description = "SOP Instance UID"),
+    ),
+    responses(
+        (status = 200, description = "Instance retrieved successfully", content_type = "application/octet-stream"),
+        (status = 404, description = "Instance, Series or Study not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "WADO-RS" // <--- 添加 tag
+)]
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}")]
 async fn retrieve_instance(
     path: Path<(String, String, String)>,
@@ -352,6 +379,23 @@ async fn retrieve_instance(
     retrieve_instance_impl(study_uid, series_uid, sop_uid, 1, req, app_state).await
 }
 
+#[utoipa::path(
+    get,
+    context_path= WADO_RS_CONTEXT_PATH,
+    path = "/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}/frames/{frame_number}",
+    params(
+        ("study_instance_uid" = String, Path, description = "Study Instance UID"),
+        ("series_instance_uid" = String, Path, description = "Series Instance UID"),
+        ("sop_instance_uid" = String, Path, description = "SOP Instance UID"),
+        ("frame_number" = u32, Path, description = "Frame Number"),
+    ),
+    responses(
+        (status = 200, description = "Instance frame retrieved successfully"),
+        (status = 404, description = "Instance frame not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "WADO-RS"
+)]
 #[get(
     "/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}/frames/{frames}"
 )]
@@ -363,7 +407,24 @@ async fn retrieve_instance_frames(
     let (study_uid, series_uid, sop_uid, frames) = path.into_inner();
     retrieve_instance_impl(study_uid, series_uid, sop_uid, frames, req, app_state).await
 }
-
+#[utoipa::path( // <--- 添加整个宏
+    get,
+    context_path= WADO_RS_CONTEXT_PATH,
+    path = "/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}/frames/{frames}",
+    params(
+        ("study_instance_uid" = String, Path, description = "Study Instance UID"),
+        ("series_instance_uid" = String, Path, description = "Series Instance UID"),
+        ("sop_instance_uid" = String, Path, description = "SOP Instance UID"),
+        ("frames" = u32, Path, description = "Frame number"),
+    ),
+    responses(
+        (status = 200, description = "Instance frame retrieved successfully", content_type = "application/octet-stream"),
+        (status = 404, description = "Instance, Series, Study or Frame not found"),
+        (status = 501, description = "Frames > 1 not implemented"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "WADO-RS" // <--- 添加 tag
+)]
 // 通用函数处理 retrieve_instance 和 retrieve_instance_frames 的共同逻辑
 async fn retrieve_instance_impl(
     study_uid: String,
@@ -442,12 +503,31 @@ async fn retrieve_instance_impl(
         Err(_) => HttpResponse::NotFound().body(format!("DICOM file not found: {}", &dicom_file)),
     }
 }
-
-#[get("/echo")]
-async fn echo() -> impl Responder {
+// Echo endpoint - 如果你也想让它出现在API文档里:
+#[utoipa::path(
+    get,
+    context_path= WADO_RS_CONTEXT_PATH,
+    path = "/v1/echo",
+    responses(
+        (status = 200, description = "Echo Success"),
+    ),
+    tag = "WADO-RS"
+)]
+#[get("/v1/echo")]
+async fn echo_v1() -> impl Responder {
     HttpResponse::Ok().body("Success")
 }
 
-pub(crate) async fn manual_hello() -> impl Responder {
-    HttpResponse::Ok().body("Hey there!")
+#[utoipa::path(
+    get,
+    context_path= WADO_RS_CONTEXT_PATH,
+    path = "/v2/echo",
+    responses(
+        (status = 200, description = "Echo Yes"),
+    ),
+    tag = "WADO-RS"
+)]
+#[get("/v2/echo")]
+async fn echo_v2() -> impl Responder {
+    HttpResponse::Ok().body("Yes")
 }

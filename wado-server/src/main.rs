@@ -1,15 +1,14 @@
 pub mod common_utils;
 
 mod background;
+mod constants;
 mod wado_rs_controller;
 
-use crate::wado_rs_controller::{
-    echo, manual_hello, retrieve_instance, retrieve_instance_frames, retrieve_series_metadata,
-    retrieve_study_metadata, retrieve_study_subseries,
-};
+use crate::wado_rs_controller::{echo_v1, echo_v2, retrieve_instance, retrieve_instance_frames, retrieve_series_metadata, retrieve_study_metadata, retrieve_study_subseries};
 use actix_cors::Cors;
-use actix_web::{App, HttpServer, middleware, web};
+use actix_web::{App, HttpResponse, HttpServer, Responder, middleware, web};
 
+use crate::constants::WADO_RS_CONTEXT_PATH;
 use common::license_manager::validate_client_certificate;
 use common::redis_key::RedisHelper;
 use common::server_config::AppConfig;
@@ -42,9 +41,15 @@ fn configure_log() -> Logger {
 // 定义应用状态
 #[derive(OpenApi)]
 #[openapi(
-    tags((name = "user", description = "用户管理 API")),
+    tags((name = "WADO-RS", description = "WADO-RS API接口")),
     paths(
         wado_rs_controller::retrieve_study_metadata,
+        wado_rs_controller::retrieve_study_subseries,
+        wado_rs_controller::retrieve_series_metadata,
+        wado_rs_controller::retrieve_instance,
+        wado_rs_controller::retrieve_instance_frames,
+        wado_rs_controller::echo_v1,
+        wado_rs_controller::echo_v2,
     )
 )]
 struct ApiDoc;
@@ -56,7 +61,6 @@ struct AppState {
     redis_helper: RedisHelper,
     // 可以添加其他配置
 }
-
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -222,16 +226,23 @@ async fn main() -> std::io::Result<()> {
             .wrap(middleware::Compress::default())
             .wrap(cors)
             .app_data(web::Data::new(app_state.clone()))
+            .service(
+                web::scope(WADO_RS_CONTEXT_PATH)
+                    .service(retrieve_study_metadata)
+                    .service(retrieve_study_subseries)
+                    .service(retrieve_series_metadata)
+                    .service(retrieve_instance)
+                    .service(retrieve_instance_frames)
+                    .service(echo_v2)
+                    .service(echo_v1),
+            )
             .service(SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-docs/openapi.json", doc))
-            .service(retrieve_study_metadata)
-            .service(retrieve_study_subseries)
-            .service(retrieve_series_metadata)
-            .service(retrieve_instance)
-            .service(retrieve_instance_frames)
-            .service(echo)
             .route("/hey", web::get().to(manual_hello))
     })
     .bind((server_config.host, server_config.port))?
     .run()
     .await
+}
+pub(crate) async fn manual_hello() -> impl Responder {
+    HttpResponse::Ok().body("Hey there!")
 }
