@@ -40,3 +40,4 @@ database = { path = "../database" }
 common = { path = "../common" }
 utoipa = { version = "5.4.0", features = ["actix_extras", "non_strict_integers"] }
 utoipa-swagger-ui = { version = "9", features = ["actix-web"] }
+utoipa-actix-web =  { version = "0.1.2"  }

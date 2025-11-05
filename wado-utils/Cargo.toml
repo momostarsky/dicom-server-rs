@@ -1,0 +1,16 @@
+[package]
+name = "wado-utils"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+md5 = { workspace = true }
+const-crc32 = { workspace = true }
+snafu = { workspace = true }
+uuid = { workspace = true, features = ["v4", "v7", "fast-rng"] }
+serde_json = "1.0.145"
+serde = { workspace = true, features = ["derive"] }
+chrono = { workspace = true, features = ["serde"] }
+slog = { workspace = true }
+slog-term = { workspace = true }
+slog-async = { workspace = true }

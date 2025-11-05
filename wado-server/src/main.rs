@@ -4,7 +4,10 @@ mod background;
 mod constants;
 mod wado_rs_controller;
 
-use crate::wado_rs_controller::{echo_v1, echo_v2, retrieve_instance, retrieve_instance_frames, retrieve_series_metadata, retrieve_study_metadata, retrieve_study_subseries};
+use crate::wado_rs_controller::{
+    echo_v1, echo_v2, retrieve_instance, retrieve_instance_frames, retrieve_series_metadata,
+    retrieve_study_metadata, retrieve_study_subseries,
+};
 use actix_cors::Cors;
 use actix_web::{App, HttpResponse, HttpServer, Responder, middleware, web};
 
@@ -22,6 +25,7 @@ use utoipa::{
     IntoParams, OpenApi, PartialSchema, ToSchema,
     openapi::schema::{Object, ObjectBuilder},
 };
+use utoipa_actix_web::{AppExt, scope};
 use utoipa_swagger_ui::SwaggerUi;
 // 将原来的简单结构体定义替换为完整的 OpenApi 配置
 
@@ -39,20 +43,20 @@ fn configure_log() -> Logger {
     log.clone()
 }
 // 定义应用状态
-#[derive(OpenApi)]
-#[openapi(
-    tags((name = "WADO-RS", description = "WADO-RS API接口")),
-    paths(
-        wado_rs_controller::retrieve_study_metadata,
-        wado_rs_controller::retrieve_study_subseries,
-        wado_rs_controller::retrieve_series_metadata,
-        wado_rs_controller::retrieve_instance,
-        wado_rs_controller::retrieve_instance_frames,
-        wado_rs_controller::echo_v1,
-        wado_rs_controller::echo_v2,
-    )
-)]
-struct ApiDoc;
+// #[derive(OpenApi)]
+// #[openapi(
+//     tags((name = "WADO-RS", description = "WADO-RS API接口")),
+//     paths(
+//         wado_rs_controller::retrieve_study_metadata,
+//         wado_rs_controller::retrieve_study_subseries,
+//         wado_rs_controller::retrieve_series_metadata,
+//         wado_rs_controller::retrieve_instance,
+//         wado_rs_controller::retrieve_instance_frames,
+//         wado_rs_controller::echo_v1,
+//         wado_rs_controller::echo_v2,
+//     )
+// )]
+// struct ApiDoc;
 #[derive(Clone)]
 struct AppState {
     log: Logger,
@@ -218,25 +222,30 @@ async fn main() -> std::io::Result<()> {
             });
         }
 
-        let mut doc = ApiDoc::openapi();
-        doc.info.title = String::from("WADO-RS Api");
+        // let mut doc = ApiDoc::openapi();
+        // doc.info.title = String::from("WADO-RS Api");
 
-        App::new()
-            // 使用.wrap()方法添加Compress中间件
-            .wrap(middleware::Compress::default())
+        let (app, mut api) = App::new()
+            .into_utoipa_app()
+            .service(
+                scope::scope(WADO_RS_CONTEXT_PATH)
+                    .service(
+                        scope::scope("/v1")
+                            .service(retrieve_study_metadata)
+                            .service(retrieve_study_subseries)
+                            .service(retrieve_series_metadata)
+                            .service(retrieve_instance)
+                            .service(retrieve_instance_frames)
+                            .service(echo_v1),
+                    )
+                    .service(scope::scope("/v2").service(echo_v2)),
+            )
+            .split_for_parts();
+        api.info.title = "WADO-RS Api".to_string();
+        app.wrap(middleware::Compress::default())
             .wrap(cors)
             .app_data(web::Data::new(app_state.clone()))
-            .service(
-                web::scope(WADO_RS_CONTEXT_PATH)
-                    .service(retrieve_study_metadata)
-                    .service(retrieve_study_subseries)
-                    .service(retrieve_series_metadata)
-                    .service(retrieve_instance)
-                    .service(retrieve_instance_frames)
-                    .service(echo_v2)
-                    .service(echo_v1),
-            )
-            .service(SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-docs/openapi.json", doc))
+            .service(SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-docs/openapi.json", api))
             .route("/hey", web::get().to(manual_hello))
     })
     .bind((server_config.host, server_config.port))?
