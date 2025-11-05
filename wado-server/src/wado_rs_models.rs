@@ -14,13 +14,6 @@ pub struct SubSeriesMeta {
     pub study_uid: String,
     #[serde(rename = "series_uid")]
     pub series_uid: String,
-    #[serde(rename = "study_uid_hash")]
-    pub study_uid_hash: String,
-    #[serde(rename = "series_uid_hash")]
-    pub series_uid_hash: String,
-    #[serde(rename = "study_date_origin")]
-    pub study_date_origin: String,
-
     #[serde(rename = "patient_name")]
     pub patient_name: Option<String>,
     #[serde(rename = "patient_sex")]
@@ -69,10 +62,7 @@ impl SubSeriesMeta {
             tenant_id: dicom_state_meta.tenant_id.to_string(),
             patient_id: dicom_state_meta.patient_id.to_string(),
             study_uid: dicom_state_meta.study_uid.to_string(),
-            series_uid: dicom_state_meta.series_uid.to_string(),
-            study_uid_hash: dicom_state_meta.study_uid_hash.to_string(),
-            series_uid_hash: dicom_state_meta.series_uid_hash.to_string(),
-            study_date_origin: dicom_state_meta.study_date_origin.to_string(),
+            series_uid: dicom_state_meta.series_uid.to_string(), 
             patient_name: dicom_state_meta
                 .patient_name
                 .clone()
