@@ -1,5 +1,6 @@
 use crate::common_utils::generate_series_json;
 use crate::constants::WADO_RS_TAG;
+use crate::wado_rs_models::SubSeriesMeta;
 use crate::{AppState, common_utils};
 use actix_web::http::header::ACCEPT;
 use actix_web::{HttpRequest, HttpResponse, Responder, get, web, web::Path};
@@ -14,7 +15,6 @@ use dicom_dictionary_std::tags;
 use dicom_object::OpenFileOptions;
 use slog::info;
 use std::path::PathBuf;
-use crate::wado_rs_models::SubSeriesMeta;
 
 static ACCEPT_DICOM_JSON_TYPE: &str = "application/dicom+json";
 static ACCEPT_JSON_TYPE: &str = "application/json";
@@ -74,6 +74,8 @@ async fn get_study_info_with_cache(
 
     params(
         ("study_instance_uid" = String, Path, description = "Study Instance UID"),
+        ("x-tenant" = String, Header, description = "Tenant ID from request header"),
+        ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
     responses(
         (status = 200, description = "Study metadata retrieved successfully", content_type = "application/dicom+json"),
@@ -170,18 +172,19 @@ async fn retrieve_study_metadata(
         )),
     }
 }
-#[utoipa::path( // <--- 添加整个宏
+#[utoipa::path(
     get,
-
     params(
         ("study_instance_uid" = String, Path, description = "Study Instance UID"),
+        ("x-tenant" = String, Header, description = "Tenant ID from request header"),
+        ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
     responses(
         (status = 200, description = "Study subseries retrieved successfully", content_type = "application/dicom+json", body=[SubSeriesMeta]),
         (status = 404, description = "Study not found"),
         (status = 500, description = "Internal server error")
     ),
-     tag =  WADO_RS_TAG,
+    tag =  WADO_RS_TAG,
     description = "Retrieve Study Sub-Series in DICOM JSON format",
 )]
 #[get("/studies/{study_instance_uid}/subseries")]
@@ -223,9 +226,7 @@ async fn retrieve_study_subseries(
     }
     let items: Vec<SubSeriesMeta> = study_info
         .iter()
-        .map(|s| {
-            SubSeriesMeta::new(s)   .into()
-        })
+        .map(|s| SubSeriesMeta::new(s).into())
         .collect::<Vec<_>>();
 
     match serde_json::to_string(&items) {
@@ -245,6 +246,9 @@ async fn retrieve_study_subseries(
     params(
         ("study_instance_uid" = String, Path, description = "Study Instance UID"),
         ("series_instance_uid" = String, Path, description = "Series Instance UID"),
+        ("x-tenant" = String, Header, description = "Tenant ID from request header"),
+        ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
+
     ),
     responses(
         (status = 200, description = "Series metadata retrieved successfully", content_type = "application/dicom+json"),
@@ -363,6 +367,8 @@ async fn retrieve_series_metadata(
         ("study_instance_uid" = String, Path, description = "Study Instance UID"),
         ("series_instance_uid" = String, Path, description = "Series Instance UID"),
         ("sop_instance_uid" = String, Path, description = "SOP Instance UID"),
+        ("x-tenant" = String, Header, description = "Tenant ID from request header"),
+         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
     responses(
         (status = 200, description = "Instance retrieved successfully", content_type = "application/octet-stream"),
@@ -390,6 +396,8 @@ async fn retrieve_instance(
         ("series_instance_uid" = String, Path, description = "Series Instance UID"),
         ("sop_instance_uid" = String, Path, description = "SOP Instance UID"),
         ("frame_number" = u32, Path, description = "Frame Number"),
+        ("x-tenant" = String, Header, description = "Tenant ID from request header"),
+         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
     responses(
         (status = 200, description = "Instance frame retrieved successfully"),

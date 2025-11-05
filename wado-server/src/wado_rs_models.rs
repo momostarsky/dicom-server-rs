@@ -1,5 +1,5 @@
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use database::dicom_dbtype::{BoundedString, DicomDateString};
+use chrono::{NaiveDate, NaiveTime};
+use database::dicom_dbtype::BoundedString;
 use database::dicom_meta::DicomStateMeta;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -62,7 +62,7 @@ impl SubSeriesMeta {
             tenant_id: dicom_state_meta.tenant_id.to_string(),
             patient_id: dicom_state_meta.patient_id.to_string(),
             study_uid: dicom_state_meta.study_uid.to_string(),
-            series_uid: dicom_state_meta.series_uid.to_string(), 
+            series_uid: dicom_state_meta.series_uid.to_string(),
             patient_name: dicom_state_meta
                 .patient_name
                 .clone()

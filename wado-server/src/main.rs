@@ -1,5 +1,6 @@
 pub mod common_utils;
 
+mod auth_middleware;
 mod background;
 mod constants;
 mod wado_rs_controller;
@@ -28,6 +29,8 @@ use utoipa::{
 };
 use utoipa_actix_web::{AppExt, scope};
 use utoipa_swagger_ui::SwaggerUi;
+
+use crate::auth_middleware::AuthMiddleware;
 // 将原来的简单结构体定义替换为完整的 OpenApi 配置
 
 fn configure_log() -> Logger {
@@ -232,13 +235,14 @@ async fn main() -> std::io::Result<()> {
                 scope::scope(WADO_RS_CONTEXT_PATH)
                     .service(
                         scope::scope("/v1")
+                            .wrap(AuthMiddleware::new("lklklklk;x".to_string()))
                             .service(retrieve_study_metadata)
                             .service(retrieve_study_subseries)
                             .service(retrieve_series_metadata)
                             .service(retrieve_instance)
-                            .service(retrieve_instance_frames)
-                            .service(echo_v1),
+                            .service(retrieve_instance_frames),
                     )
+                    .service(scope::scope("/v1").service(echo_v1))
                     .service(scope::scope("/v2").service(echo_v2)),
             )
             .split_for_parts();
