@@ -18,7 +18,8 @@ use std::path::PathBuf;
 
 static ACCEPT_DICOM_JSON_TYPE: &str = "application/dicom+json";
 static ACCEPT_JSON_TYPE: &str = "application/json";
-//static ACCEPT_DICOM_TYPE: &str = "application/dicom";
+
+static ACCEPT_DICOM_TYPE: &str = "application/dicom";
 static ACCEPT_OCTET_STREAM: &str = "application/octet-stream";
 //static MULIPART_ACCEPT_OCTET_STREAM: &str = "multipart/related; type=application/octet-stream";
 
@@ -80,6 +81,7 @@ async fn get_study_info_with_cache(
     responses(
         (status = 200, description = "Study metadata retrieved successfully", content_type = "application/dicom+json"),
         (status = 404, description = "Study not found"),
+        (status = 406, description = " Accept header must be application/dicom+json or application/json"),
         (status = 500, description = "Internal server error")
     ),
     tag =  WADO_RS_TAG,
@@ -110,14 +112,24 @@ async fn retrieve_study_metadata(
             tenant_id, study_uid
         ));
     }
-    // let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
+    // 检查 Accept 头
+    let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
 
-    // if accept != Some(ACCEPT_DICOM_JSON_TYPE) {
-    //     return HttpResponse::NotAcceptable().body(format!(
-    //         "retrieve_study_metadata Accept header must be {}",
-    //         ACCEPT_DICOM_JSON_TYPE
-    //     ));
-    // }
+    if let Some(accept_str) = accept {
+        if !is_accept_type_supported(accept_str, ACCEPT_DICOM_JSON_TYPE)
+            && !is_accept_type_supported(accept_str, ACCEPT_JSON_TYPE)
+        {
+            return HttpResponse::NotAcceptable().body(format!(
+                "retrieve_study_metadata Accept header must be {} or {}",
+                ACCEPT_DICOM_JSON_TYPE, ACCEPT_JSON_TYPE
+            ));
+        }
+    } else {
+        return HttpResponse::NotAcceptable().body(format!(
+            "retrieve_study_metadata Accept header must be {} or {}",
+            ACCEPT_DICOM_JSON_TYPE, ACCEPT_JSON_TYPE
+        ));
+    }
 
     //  从缓存中加载study_info
     let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state, true).await
@@ -182,6 +194,7 @@ async fn retrieve_study_metadata(
     responses(
         (status = 200, description = "Study subseries retrieved successfully", content_type = "application/dicom+json", body=[SubSeriesMeta]),
         (status = 404, description = "Study not found"),
+        (status = 406, description = " Accept header must be application/dicom+json or application/json"),
         (status = 500, description = "Internal server error")
     ),
     tag =  WADO_RS_TAG,
@@ -200,7 +213,24 @@ async fn retrieve_study_subseries(
         log,
         "retrieve_study_metadata Tenant ID: {}  and StudyUID:{} ", tenant_id, study_uid
     );
+    // 检查 Accept 头
+    let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
 
+    if let Some(accept_str) = accept {
+        if !is_accept_type_supported(accept_str, ACCEPT_DICOM_JSON_TYPE)
+            && !is_accept_type_supported(accept_str, ACCEPT_JSON_TYPE)
+        {
+            return HttpResponse::NotAcceptable().body(format!(
+                "retrieve_study_metadata Accept header must be {} or {}",
+                ACCEPT_DICOM_JSON_TYPE, ACCEPT_JSON_TYPE
+            ));
+        }
+    } else {
+        return HttpResponse::NotAcceptable().body(format!(
+            "retrieve_study_metadata Accept header must be {} or {}",
+            ACCEPT_DICOM_JSON_TYPE, ACCEPT_JSON_TYPE
+        ));
+    }
     // 首先尝试从 Redis 缓存中获取数据
     let rh = &app_state.redis_helper;
     // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
@@ -253,6 +283,7 @@ async fn retrieve_study_subseries(
     responses(
         (status = 200, description = "Series metadata retrieved successfully", content_type = "application/dicom+json"),
         (status = 404, description = "Series or Study not found"),
+        (status = 406, description = " Accept header must be application/dicom+json or application/json"),
         (status = 500, description = "Internal server error")
     ),
      tag =  WADO_RS_TAG,
@@ -282,14 +313,14 @@ async fn retrieve_series_metadata(
             && !is_accept_type_supported(accept_str, ACCEPT_JSON_TYPE)
         {
             return HttpResponse::NotAcceptable().body(format!(
-                "retrieve_study_metadata Accept header must be {} and {}",
+                "retrieve_study_metadata Accept header must be {} or {}",
                 ACCEPT_DICOM_JSON_TYPE, ACCEPT_JSON_TYPE
             ));
         }
     } else {
         return HttpResponse::NotAcceptable().body(format!(
-            "retrieve_study_metadata Accept header must be {}",
-            ACCEPT_DICOM_JSON_TYPE
+            "retrieve_study_metadata Accept header must be {} or {}",
+            ACCEPT_DICOM_JSON_TYPE, ACCEPT_JSON_TYPE
         ));
     }
     // 首先尝试从 Redis 缓存中获取数据
@@ -397,15 +428,16 @@ async fn retrieve_instance(
         ("sop_instance_uid" = String, Path, description = "SOP Instance UID"),
         ("frame_number" = u32, Path, description = "Frame Number"),
         ("x-tenant" = String, Header, description = "Tenant ID from request header"),
-         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
+        ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
     responses(
         (status = 200, description = "Instance frame retrieved successfully"),
         (status = 404, description = "Instance frame not found"),
-        (status = 500, description = "Internal server error")
+        (status = 500, description = "Internal server error"),
+        (status = 501, description = "Not implemented")
     ),
-     tag =  WADO_RS_TAG,
-        description = "Retrieve Instance Frame Pixel Data in Octet Stream format"
+    tag =  WADO_RS_TAG,
+    description = "Retrieve Instance Frame Pixel Data in Octet Stream format"
 )]
 #[get(
     "/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}/frames/{frames}"
@@ -444,6 +476,24 @@ async fn retrieve_instance_impl(
         series_uid,
         sop_uid
     );
+    // 检查 Accept 头
+    let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
+
+    if let Some(accept_str) = accept {
+        if !is_accept_type_supported(accept_str, ACCEPT_OCTET_STREAM)
+            && !is_accept_type_supported(accept_str, ACCEPT_DICOM_TYPE)
+        {
+            return HttpResponse::NotAcceptable().body(format!(
+                "retrieve_study_metadata Accept header must be {} or {}",
+                ACCEPT_OCTET_STREAM, ACCEPT_DICOM_TYPE
+            ));
+        }
+    } else {
+        return HttpResponse::NotAcceptable().body(format!(
+            "retrieve_study_metadata Accept header must be {} or {}",
+            ACCEPT_OCTET_STREAM, ACCEPT_DICOM_TYPE
+        ));
+    }
     // 获取series_info (使用提取的函数)
     let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state, true).await
     {
@@ -512,4 +562,3 @@ async fn retrieve_instance_impl(
 async fn echo_v1() -> impl Responder {
     HttpResponse::Ok().body("Success")
 }
-
