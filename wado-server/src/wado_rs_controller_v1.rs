@@ -76,6 +76,7 @@ async fn get_study_info_with_cache(
     params(
         ("study_instance_uid" = String, Path, description = "Study Instance UID"),
         ("x-tenant" = String, Header, description = "Tenant ID from request header"),
+        ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom+json or application/json"),
         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
     responses(
@@ -189,6 +190,7 @@ async fn retrieve_study_metadata(
     params(
         ("study_instance_uid" = String, Path, description = "Study Instance UID"),
         ("x-tenant" = String, Header, description = "Tenant ID from request header"),
+        ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom+json or application/json"),
         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
     responses(
@@ -277,6 +279,7 @@ async fn retrieve_study_subseries(
         ("study_instance_uid" = String, Path, description = "Study Instance UID"),
         ("series_instance_uid" = String, Path, description = "Series Instance UID"),
         ("x-tenant" = String, Header, description = "Tenant ID from request header"),
+        ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom+json or application/json"),
         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
 
     ),
@@ -399,7 +402,8 @@ async fn retrieve_series_metadata(
         ("series_instance_uid" = String, Path, description = "Series Instance UID"),
         ("sop_instance_uid" = String, Path, description = "SOP Instance UID"),
         ("x-tenant" = String, Header, description = "Tenant ID from request header"),
-         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
+        ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom  or application/octet-stream"),
+        ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
     responses(
         (status = 200, description = "Instance retrieved successfully", content_type = "application/octet-stream"),
@@ -428,6 +432,7 @@ async fn retrieve_instance(
         ("sop_instance_uid" = String, Path, description = "SOP Instance UID"),
         ("frame_number" = u32, Path, description = "Frame Number"),
         ("x-tenant" = String, Header, description = "Tenant ID from request header"),
+        ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom  or application/octet-stream"),
         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
     responses(
