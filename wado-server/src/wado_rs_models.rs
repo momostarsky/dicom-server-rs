@@ -50,6 +50,8 @@ pub struct SubSeriesMeta {
     pub series_time: Option<NaiveTime>,
     #[serde(rename = "series_description")]
     pub series_description: Option<String>,
+    #[serde(rename = "series_related_instances")]
+    pub series_related_instances: Option<i32>,
     #[serde(rename = "body_part_examined")]
     pub body_part_examined: Option<String>,
     #[serde(rename = "protocol_name")]
@@ -83,6 +85,7 @@ impl SubSeriesMeta {
                 .study_description
                 .clone()
                 .map(|s| s.to_string()),
+            series_related_instances: dicom_state_meta.series_related_instances,
             modality: dicom_state_meta.modality.clone().map(|s| s.to_string()),
             series_number: dicom_state_meta.series_number,
             series_date: dicom_state_meta.series_date,

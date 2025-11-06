@@ -513,15 +513,3 @@ async fn echo_v1() -> impl Responder {
     HttpResponse::Ok().body("Success")
 }
 
-#[utoipa::path(
-    get,
-    responses(
-        (status = 200, description = "Echo Yes"),
-    ),
-    tag =  WADO_RS_TAG,
-    description = "Echo endpoint version 2"
-)]
-#[get("/echo")]
-async fn echo_v2() -> impl Responder {
-    HttpResponse::Ok().body("Yes")
-}
