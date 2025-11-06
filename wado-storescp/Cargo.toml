@@ -19,7 +19,6 @@ tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
 rdkafka = { workspace = true }
 serde = { workspace = true }
-sqlx = { workspace = true }
 serde_json = { workspace = true }
 config = { workspace = true }
 dotenv = { workspace = true }
@@ -30,5 +29,6 @@ slog-term = { workspace = true }
 slog-async = { workspace = true }
 openssl = { workspace = true }
 chrono = { workspace = true }
+database = { path = "../database" }
 common = { path = "../common" }
 

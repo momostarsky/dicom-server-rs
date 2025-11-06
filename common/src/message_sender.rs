@@ -1,14 +1,9 @@
-
 use async_trait::async_trait;
-use crate::dicom_object_meta::{DicomImageMeta, DicomStateMeta, DicomStoreMeta};
+use database::dicom_meta::{DicomImageMeta, DicomStateMeta, DicomStoreMeta};
 
 #[async_trait]
-pub trait MessagePublisher:Sync + Send  {
-    async fn send_message(
-        &self,
-        msg: &DicomStoreMeta,
-    ) -> Result<(), Box<dyn std::error::Error>>;
-
+pub trait MessagePublisher: Sync + Send {
+    async fn send_message(&self, msg: &DicomStoreMeta) -> Result<(), Box<dyn std::error::Error>>;
 
     async fn send_batch_messages(
         &self,

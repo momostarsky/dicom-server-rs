@@ -1,21 +1,33 @@
 pub mod common_utils;
-mod redis_helper;
-mod wado_rs_controller;
 
-use crate::wado_rs_controller::{
-    echo, manual_hello, retrieve_instance, retrieve_instance_frames, retrieve_series_metadata,
-    retrieve_study_metadata,
-};
+mod auth_middleware;
+mod background;
+mod constants;
+mod wado_rs_controller_v1;
+mod wado_rs_models;
+
+// use crate::wado_rs_controller_v1::{
+//     echo_v1, retrieve_instance, retrieve_instance_frames, retrieve_series_metadata,
+//     retrieve_study_metadata, retrieve_study_subseries,
+// };
 use actix_cors::Cors;
-use actix_web::{App, HttpServer, middleware, web};
-use common::database_provider::DbProvider;
+use actix_web::{App, HttpResponse, HttpServer, Responder, middleware, web};
+
+use crate::constants::WADO_RS_CONTEXT_PATH;
 use common::license_manager::validate_client_certificate;
+use common::redis_key::RedisHelper;
 use common::server_config::AppConfig;
 use common::utils::setup_logging;
 use common::{database_factory, server_config};
+use database::dicom_dbprovider::DbProvider;
 use slog;
-use slog::{ Logger, error, info};
+use slog::{Logger, error, info};
 use std::sync::Arc;
+use utoipa_actix_web::{AppExt, scope};
+use utoipa_swagger_ui::SwaggerUi;
+
+// use crate::auth_middleware::AuthMiddleware;
+// 将原来的简单结构体定义替换为完整的 OpenApi 配置
 
 fn configure_log() -> Logger {
     // let decorator = slog_term::TermDecorator::new().build();
@@ -31,12 +43,26 @@ fn configure_log() -> Logger {
     log.clone()
 }
 // 定义应用状态
-
+// #[derive(OpenApi)]
+// #[openapi(
+//     tags((name = "WADO-RS", description = "WADO-RS API接口")),
+//     paths(
+//         wado_rs_controller::retrieve_study_metadata,
+//         wado_rs_controller::retrieve_study_subseries,
+//         wado_rs_controller::retrieve_series_metadata,
+//         wado_rs_controller::retrieve_instance,
+//         wado_rs_controller::retrieve_instance_frames,
+//         wado_rs_controller::echo_v1,
+//         wado_rs_controller::echo_v2,
+//     )
+// )]
+// struct ApiDoc;
 #[derive(Clone)]
 struct AppState {
     log: Logger,
     db: Arc<dyn DbProvider + Send + Sync>,
     config: AppConfig,
+    redis_helper: RedisHelper,
     // 可以添加其他配置
 }
 
@@ -139,7 +165,7 @@ async fn main() -> std::io::Result<()> {
         ));
     }
 
-    let db_provider =match database_factory::create_db_instance(&config.main_database).await{
+    let db_provider = match database_factory::create_db_instance(&config.main_database).await {
         Ok(db_provider) => db_provider,
         Err(e) => {
             error!(log, "create_db_instance error: {:?}", e);
@@ -154,16 +180,24 @@ async fn main() -> std::io::Result<()> {
     let server_config = config.server;
     let local_storage_config = config.local_storage;
     info!(log, "LocalStorage Config is: {:?}", local_storage_config);
+    let reids_conn = g_config.redis.clone();
 
     let app_state = AppState {
         log: log.clone(),
         db: db_provider as Arc<dyn DbProvider + Send + Sync>, // 正确的类型转换
         config: g_config,
+        redis_helper: RedisHelper::new(reids_conn),
     };
+    // 启动后台任务管理器
+    let background_app_state = app_state.clone();
+    tokio::spawn(async move {
+        background::background_task_manager(background_app_state).await;
+    });
     info!(
         log,
         "Starting the server at {}:{}", server_config.host, server_config.port
     );
+
     HttpServer::new(move || {
         let mut cors = Cors::default()
             .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
@@ -188,19 +222,36 @@ async fn main() -> std::io::Result<()> {
             });
         }
 
-        App::new()
-            // 使用.wrap()方法添加Compress中间件
-            .wrap(middleware::Compress::default())
+        // let mut doc = ApiDoc::openapi();
+        // doc.info.title = String::from("WADO-RS Api");
+
+        let (app, mut api) = App::new()
+            .into_utoipa_app()
+            .service(
+                scope::scope(WADO_RS_CONTEXT_PATH)
+                    .service(
+                        scope::scope("/v1")
+                            // .wrap(AuthMiddleware::new("lklklklk;x".to_string()))
+                            .service(wado_rs_controller_v1::retrieve_study_metadata)
+                            .service(wado_rs_controller_v1::retrieve_study_subseries)
+                            .service(wado_rs_controller_v1::retrieve_series_metadata)
+                            .service(wado_rs_controller_v1::retrieve_instance)
+                            .service(wado_rs_controller_v1::retrieve_instance_frames),
+                    )
+                    .service(scope::scope("/v1").service(wado_rs_controller_v1::echo_v1)),
+            )
+            .split_for_parts();
+        api.info.title = "WADO API".to_string();
+        app.wrap(middleware::Compress::default())
             .wrap(cors)
             .app_data(web::Data::new(app_state.clone()))
-            .service(retrieve_study_metadata)
-            .service(retrieve_series_metadata)
-            .service(retrieve_instance)
-            .service(retrieve_instance_frames)
-            .service(echo)
+            .service(SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-docs/openapi.json", api))
             .route("/hey", web::get().to(manual_hello))
     })
     .bind((server_config.host, server_config.port))?
     .run()
     .await
+}
+pub(crate) async fn manual_hello() -> impl Responder {
+    HttpResponse::Ok().body("Hey there!")
 }

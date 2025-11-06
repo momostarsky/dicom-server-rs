@@ -1,9 +1,12 @@
 use chrono::NaiveDate;
-use common::dicom_object_meta::{DicomStoreMeta, TransferStatus};
+
 use common::dicom_utils::get_tag_value;
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
+use common::server_config::hash_uid;
 use common::utils::get_logger;
+use database::dicom_dbtype::{BoundedString, FixedLengthString};
+use database::dicom_meta::{DicomStoreMeta, TransferStatus};
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu::{ResultExt, Whatever};
 use dicom_encoding::TransferSyntaxIndex;
@@ -190,12 +193,14 @@ pub(crate) async fn process_dicom_file(
         .whatever_context("failed to build DICOM meta file information")?;
     let mut file_obj = obj.with_exact_meta(file_meta);
 
-    let (study_uid_hash_v, series_uid_hash_v, dir_path) =
-        server_config::dicom_series_dir(tenant_id, &study_date, &study_uid, &series_uid, true)
+    let dir_path =
+        server_config::make_series_dicom_dir(tenant_id, &study_date, &study_uid, &series_uid, true)
             .whatever_context(format!(
         "failed to get dicom series dir: tenant_id={}, study_date={}, study_uid={}, series_uid={}",
         tenant_id, study_date, study_uid, series_uid
     ))?;
+    let study_uid_hash_v = hash_uid(study_uid.as_str());
+    let series_uid_hash_v = hash_uid(series_uid.as_str());
 
     let file_path = server_config::dicom_file_path(&dir_path, sop_instance_uid);
 
@@ -239,28 +244,27 @@ pub(crate) async fn process_dicom_file(
                                          // 修改为
     let cdate = chrono::Local::now().naive_local();
     Ok(DicomStoreMeta {
-        trace_id: common::string_ext::FixedLengthString::<36>::try_from(trace_uid)
+        trace_id: FixedLengthString::<36>::from_string(&trace_uid)
             .with_whatever_context(|err| format!("Failed to create trace_id: {}", err))?,
-        worker_node_id: common::string_ext::BoundedString::try_from("DICOM_STORE_SCP")
+        worker_node_id: BoundedString::<64>::try_from("DICOM_STORE_SCP")
             .with_whatever_context(|err| format!("Failed to create worker_node_id: {}", err))?,
-        tenant_id: common::string_ext::BoundedString::try_from(tenant_id)
+        tenant_id: BoundedString::<64>::from_string(&tenant_id)
             .with_whatever_context(|err| format!("Failed to create tenant_id: {}", err))?,
-        patient_id: common::string_ext::BoundedString::try_from(pat_id)
+        patient_id: BoundedString::<64>::from_string(&pat_id)
             .with_whatever_context(|err| format!("Failed to create patient_id: {}", err))?,
-        study_uid: common::string_ext::BoundedString::<64>::try_from(study_uid)
+        study_uid: BoundedString::<64>::try_from(study_uid)
             .with_whatever_context(|err| format!("Failed to create study_uid: {}", err))?,
-        series_uid: common::string_ext::BoundedString::<64>::try_from(series_uid)
+        series_uid: BoundedString::<64>::try_from(series_uid)
             .with_whatever_context(|err| format!("Failed to create series_uid: {}", err))?,
-        sop_uid: common::string_ext::BoundedString::<64>::try_from(sop_instance_uid)
+        sop_uid: BoundedString::<64>::from_string(&sop_instance_uid)
             .with_whatever_context(|err| format!("Failed to create sop_uid: {}", err))?,
-        file_path: common::string_ext::BoundedString::try_from(saved_path.to_str().unwrap())
+        file_path: BoundedString::try_from(saved_path.to_str().unwrap())
             .with_whatever_context(|err| format!("Failed to create file_path: {}", err))?,
         file_size: fsize as u32,
-        transfer_syntax_uid: common::string_ext::BoundedString::<64>::try_from(ts)
-            .with_whatever_context(|err| {
-                format!("Failed to create transfer_syntax_uid: {}", err)
-            })?,
-        target_ts: common::string_ext::BoundedString::<64>::try_from(final_ts)
+        transfer_syntax_uid: BoundedString::<64>::from_string(ts).with_whatever_context(|err| {
+            format!("Failed to create transfer_syntax_uid: {}", err)
+        })?,
+        target_ts: BoundedString::<64>::try_from(final_ts)
             .with_whatever_context(|err| format!("Failed to create target_ts: {}", err))?,
         study_date: NaiveDate::parse_from_str(study_date.as_str(), "%Y%m%d")
             .with_whatever_context(|err| format!("Failed to create study_date: {}", err))?,
@@ -268,13 +272,13 @@ pub(crate) async fn process_dicom_file(
         transfer_status: transcode_status,
         number_of_frames: frames,
         created_time: cdate,
-        series_uid_hash: series_uid_hash_v,
-        study_uid_hash: study_uid_hash_v,
-        accession_number: common::string_ext::BoundedString::try_from(accession_number)
+        series_uid_hash: series_uid_hash_v.into(),
+        study_uid_hash: study_uid_hash_v.into(),
+        accession_number: BoundedString::try_from(accession_number)
             .with_whatever_context(|err| format!("Failed to create accession_number: {}", err))?,
-        source_ip: common::string_ext::BoundedString::try_from(ip)
+        source_ip: BoundedString::try_from(ip)
             .with_whatever_context(|err| format!("Failed to create source_ip: {}", err))?,
-        source_ae: common::string_ext::BoundedString::try_from(client_ae)
+        source_ae: BoundedString::try_from(client_ae)
             .with_whatever_context(|err| format!("Failed to create source_ae: {}", err))?,
     })
 }

@@ -1,84 +1,13 @@
 use crate::dicom_utils;
-use crate::string_ext::{BoundedString, DicomDateString, FixedLengthString};
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+
+use crate::server_config::hash_uid;
+use chrono::{NaiveDate, NaiveTime};
+use database::dicom_dbtype::{BoundedString, DicomDateString};
+use database::dicom_meta::{DicomImageMeta, DicomStateMeta};
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
 use serde::{Deserialize, Serialize};
-use std::hash::{Hash, Hasher};
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[non_exhaustive]
-pub enum TransferStatus {
-    NoNeedTransfer,
-    Success,
-    Failed,
-}
-
-/// DicomStoreMeta 用于DICOM-CStoreSCP服务记录收图日志.
-/// 包含了所有必要的元数据字段.每一个DicomStoreMeta实例标识接收一个DICOM文件.并成功写入磁盘.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DicomStoreMeta {
-    #[serde(rename = "trace_id")]
-    pub trace_id: FixedLengthString<36>,
-    #[serde(rename = "worker_node_id")]
-    pub worker_node_id: BoundedString<64>,
-    #[serde(rename = "tenant_id")]
-    pub tenant_id: BoundedString<64>,
-    #[serde(rename = "patient_id")]
-    pub patient_id: BoundedString<64>,
-    #[serde(rename = "study_uid")]
-    pub study_uid: BoundedString<64>,
-    #[serde(rename = "series_uid")]
-    pub series_uid: BoundedString<64>,
-    #[serde(rename = "sop_uid")]
-    pub sop_uid: BoundedString<64>,
-    #[serde(rename = "file_size")]
-    pub file_size: u32,
-    #[serde(rename = "file_path")]
-    pub file_path: BoundedString<512>,
-    #[serde(rename = "transfer_syntax_uid")]
-    pub transfer_syntax_uid: BoundedString<64>,
-    #[serde(rename = "number_of_frames")]
-    pub number_of_frames: i32,
-    #[serde(rename = "created_time")]
-    pub created_time: NaiveDateTime,
-    #[serde(rename = "series_uid_hash")]
-    pub series_uid_hash: BoundedString<20>,
-    #[serde(rename = "study_uid_hash")]
-    pub study_uid_hash: BoundedString<20>,
-    #[serde(rename = "accession_number")]
-    pub accession_number: BoundedString<16>,
-    #[serde(rename = "target_ts")]
-    pub target_ts: BoundedString<64>,
-    #[serde(rename = "study_date")]
-    pub study_date: NaiveDate,
-    #[serde(rename = "transfer_status")]
-    pub transfer_status: TransferStatus,
-    #[serde(rename = "source_ip")]
-    pub source_ip: BoundedString<24>,
-    #[serde(rename = "source_ae")]
-    pub source_ae: BoundedString<64>,
-}
-// 为 DicomObjectMeta 实现 Hash trait 以便可以在 HashSet 中使用
-impl Hash for DicomStoreMeta {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.tenant_id.hash(state);
-        self.patient_id.hash(state);
-        self.study_uid.hash(state);
-        self.series_uid.hash(state);
-        self.sop_uid.hash(state);
-    }
-}
-impl PartialEq for DicomStoreMeta {
-    fn eq(&self, other: &Self) -> bool {
-        self.tenant_id == other.tenant_id
-            && self.patient_id == other.patient_id
-            && self.study_uid == other.study_uid
-            && self.series_uid == other.series_uid
-            && self.sop_uid == other.sop_uid
-    }
-}
-impl Eq for DicomStoreMeta {}
+use x509_parser::nom::Parser;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -94,196 +23,6 @@ pub enum DicomParseError {
     // 可以根据需要添加其他错误类型
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DicomStateMeta {
-    #[serde(rename = "tenant_id")]
-    pub tenant_id: BoundedString<64>,
-    #[serde(rename = "patient_id")]
-    pub patient_id: BoundedString<64>,
-    #[serde(rename = "study_uid")]
-    pub study_uid: BoundedString<64>,
-    #[serde(rename = "series_uid")]
-    pub series_uid: BoundedString<64>,
-    #[serde(rename = "study_uid_hash")]
-    pub study_uid_hash: BoundedString<20>,
-    #[serde(rename = "series_uid_hash")]
-    pub series_uid_hash: BoundedString<20>,
-    #[serde(rename = "study_date_origin")]
-    pub study_date_origin: DicomDateString,
-
-    #[serde(rename = "patient_name")]
-    pub patient_name: Option<BoundedString<64>>,
-    #[serde(rename = "patient_sex")]
-    pub patient_sex: Option<BoundedString<1>>,
-    #[serde(rename = "patient_birth_date")]
-    pub patient_birth_date: Option<NaiveDate>,
-    #[serde(rename = "patient_birth_time")]
-    pub patient_birth_time: Option<NaiveTime>,
-    #[serde(rename = "patient_age")]
-    pub patient_age: Option<BoundedString<16>>,
-    #[serde(rename = "patient_size")]
-    pub patient_size: Option<f64>,
-    #[serde(rename = "patient_weight")]
-    pub patient_weight: Option<f64>,
-
-    #[serde(rename = "study_date")]
-    pub study_date: NaiveDate,
-    #[serde(rename = "study_time")]
-    pub study_time: Option<NaiveTime>,
-    #[serde(rename = "accession_number")]
-    pub accession_number: BoundedString<16>,
-    #[serde(rename = "study_id")]
-    pub study_id: Option<BoundedString<16>>,
-    #[serde(rename = "study_description")]
-    pub study_description: Option<BoundedString<64>>,
-
-    #[serde(rename = "modality")]
-    pub modality: Option<BoundedString<16>>,
-    #[serde(rename = "series_number")]
-    pub series_number: Option<i32>,
-    #[serde(rename = "series_date")]
-    pub series_date: Option<NaiveDate>,
-    #[serde(rename = "series_time")]
-    pub series_time: Option<NaiveTime>,
-    #[serde(rename = "series_description")]
-    pub series_description: Option<BoundedString<256>>,
-    #[serde(rename = "body_part_examined")]
-    pub body_part_examined: Option<BoundedString<64>>,
-    #[serde(rename = "protocol_name")]
-    pub protocol_name: Option<BoundedString<64>>,
-    #[serde(rename = "series_related_instances")]
-    pub series_related_instances: Option<i32>,
-    #[serde(rename = "created_time")]
-    pub created_time: NaiveDateTime,
-    #[serde(rename = "updated_time")]
-    pub updated_time: NaiveDateTime,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DicomImageMeta {
-    #[serde(rename = "tenant_id")]
-    pub tenant_id: BoundedString<64>,
-
-    #[serde(rename = "patient_id")]
-    pub patient_id: BoundedString<64>,
-
-    #[serde(rename = "study_uid")]
-    pub study_uid: BoundedString<64>,
-
-    #[serde(rename = "series_uid")]
-    pub series_uid: BoundedString<64>,
-
-    #[serde(rename = "sop_uid")]
-    pub sop_uid: BoundedString<64>,
-
-    #[serde(rename = "study_uid_hash")]
-    pub study_uid_hash: BoundedString<20>,
-
-    #[serde(rename = "series_uid_hash")]
-    pub series_uid_hash: BoundedString<20>,
-
-    #[serde(rename = "instance_number")]
-    pub instance_number: Option<i32>,
-
-    #[serde(rename = "content_date")]
-    pub content_date: Option<DicomDateString>,
-
-    #[serde(rename = "content_time")]
-    pub content_time: Option<NaiveTime>,
-
-    #[serde(rename = "image_type")]
-    pub image_type: Option<BoundedString<128>>,
-
-    #[serde(rename = "image_orientation_patient")]
-    pub image_orientation_patient: Option<BoundedString<128>>,
-
-    #[serde(rename = "image_position_patient")]
-    pub image_position_patient: Option<BoundedString<64>>,
-
-    #[serde(rename = "slice_thickness")]
-    pub slice_thickness: Option<f64>,
-
-    #[serde(rename = "spacing_between_slices")]
-    pub spacing_between_slices: Option<f64>,
-
-    #[serde(rename = "slice_location")]
-    pub slice_location: Option<f64>,
-
-    #[serde(rename = "samples_per_pixel")]
-    pub samples_per_pixel: Option<i32>,
-
-    #[serde(rename = "photometric_interpretation")]
-    pub photometric_interpretation: Option<BoundedString<32>>,
-
-    #[serde(rename = "width")]
-    pub width: Option<i32>,
-
-    #[serde(rename = "columns")]
-    pub columns: Option<i32>,
-
-    #[serde(rename = "bits_allocated")]
-    pub bits_allocated: Option<i32>,
-
-    #[serde(rename = "bits_stored")]
-    pub bits_stored: Option<i32>,
-
-    #[serde(rename = "high_bit")]
-    pub high_bit: Option<i32>,
-
-    #[serde(rename = "pixel_representation")]
-    pub pixel_representation: Option<i32>,
-
-    #[serde(rename = "rescale_intercept")]
-    pub rescale_intercept: Option<f64>,
-
-    #[serde(rename = "rescale_slope")]
-    pub rescale_slope: Option<f64>,
-
-    #[serde(rename = "rescale_type")]
-    pub rescale_type: Option<BoundedString<64>>,
-
-    #[serde(rename = "window_center")]
-    pub window_center: Option<BoundedString<64>>,
-
-    #[serde(rename = "window_width")]
-    pub window_width: Option<BoundedString<64>>,
-
-    #[serde(rename = "transfer_syntax_uid")]
-    pub transfer_syntax_uid: BoundedString<64>,
-
-    #[serde(rename = "pixel_data_location")]
-    pub pixel_data_location: Option<BoundedString<512>>,
-
-    #[serde(rename = "thumbnail_location")]
-    pub thumbnail_location: Option<BoundedString<512>>,
-
-    #[serde(rename = "sop_class_uid")]
-    pub sop_class_uid: BoundedString<64>,
-
-    #[serde(rename = "image_status")]
-    pub image_status: Option<BoundedString<32>>,
-
-    #[serde(rename = "space_size")]
-    pub space_size: Option<u32>,
-
-    #[serde(rename = "created_time")]
-    pub created_time: Option<NaiveDateTime>,
-
-    #[serde(rename = "updated_time")]
-    pub updated_time: Option<NaiveDateTime>,
-}
-
-impl DicomStateMeta {
-    /// 基于 tenant_id, patient_id, study_uid, series_uid 创建唯一标识符
-    pub fn unique_key(&self) -> (String, String, String, String) {
-        (
-            self.tenant_id.as_str().to_string(),
-            self.patient_id.as_str().to_string(),
-            self.study_uid.as_str().to_string(),
-            self.series_uid.as_str().to_string(),
-        )
-    }
-}
 struct DicomCommonMeta {
     patient_id: String,
     study_uid: String,
@@ -298,47 +37,46 @@ impl DicomCommonMeta {
         // 提取 patient_id
         let patient_id_str = dicom_utils::get_text_value(dicom_obj, tags::PATIENT_ID)
             .filter(|v| !v.is_empty() && v.len() <= 64)
-            .ok_or_else(|| DicomParseError::MissingRequiredField("Patient ID".to_string()))?;
+            .ok_or_else(|| DicomParseError::MissingRequiredField("PATIENT_ID".to_string()))?;
 
         // 提取 study_uid
         let study_uid = dicom_utils::get_text_value(dicom_obj, tags::STUDY_INSTANCE_UID)
             .filter(|v| !v.is_empty() && v.len() <= 64)
             .ok_or_else(|| {
-                DicomParseError::MissingRequiredField("Study Instance UID".to_string())
+                DicomParseError::MissingRequiredField("STUDY_INSTANCE_UID".to_string())
             })?;
 
         // 提取 series_uid
         let series_uid = dicom_utils::get_text_value(dicom_obj, tags::SERIES_INSTANCE_UID)
             .filter(|v| !v.is_empty() && v.len() <= 64)
             .ok_or_else(|| {
-                DicomParseError::MissingRequiredField("Series Instance UID".to_string())
+                DicomParseError::MissingRequiredField("SERIES_INSTANCE_UID".to_string())
             })?;
 
         // 提取 sop_uid (仅对 DicomImageMeta 需要)
         let sop_uid = dicom_utils::get_text_value(dicom_obj, tags::SOP_INSTANCE_UID)
             .filter(|v| !v.is_empty() && v.len() <= 64)
-            .ok_or_else(|| DicomParseError::MissingRequiredField("SOP Instance UID".to_string()))?;
+            .ok_or_else(|| DicomParseError::MissingRequiredField("SOP_INSTANCE_UID".to_string()))?;
 
         // 提取 study_date_str
-        let study_date_str =
-            dicom_utils::get_text_value(dicom_obj, tags::STUDY_DATE).ok_or_else(|| {
-                DicomParseError::MissingRequiredField("Study Date text value".to_string())
-            })?;
-
-        // 验证 study_date_str 格式
-        if study_date_str.len() != 8 || !study_date_str.chars().all(|c| c.is_ascii_digit()) {
-            return Err(DicomParseError::InvalidDateFormat(format!(
-                "Study Date must be in YYYYMMDD format, got: {}",
-                study_date_str
-            )));
-        }
+        let study_date_str = dicom_utils::get_text_value(dicom_obj, tags::STUDY_DATE)
+            .ok_or_else(|| DicomParseError::MissingRequiredField("STUDY_DATE".to_string()))?;
+        let study_date_v = match NaiveDate::parse_from_str(&study_date_str, "%Y%m%d") {
+            Ok(date) => date,
+            Err(_) => {
+                return Err(DicomParseError::InvalidDateFormat(format!(
+                    "Study Date must be in YYYYMMDD format, got: {}",
+                    study_date_str
+                )));
+            }
+        };
 
         Ok(DicomCommonMeta {
             patient_id: patient_id_str,
             study_uid,
             series_uid,
             sop_uid,
-            study_date: NaiveDate::parse_from_str(&study_date_str, "%Y%m%d").unwrap(),
+            study_date: study_date_v,
             study_date_str,
         })
     }
@@ -466,8 +204,8 @@ pub fn make_image_info(
     );
 
     // 计算哈希值
-    let study_uid_hash = BoundedString::<20>::make_from_db(common_meta.study_uid.to_string());
-    let series_uid_hash = BoundedString::<20>::make_from_db(common_meta.series_uid.to_string());
+    let study_uid_hash = hash_uid(&common_meta.study_uid).into();
+    let series_uid_hash = hash_uid(&common_meta.series_uid).into();
 
     // 时间戳
     let now = chrono::Local::now().naive_local();
@@ -479,13 +217,13 @@ pub fn make_image_info(
         patient_id: BoundedString::<64>::try_from(common_meta.patient_id).map_err(|_| {
             DicomParseError::ConversionError("Failed to convert patient ID".to_string())
         })?,
-        study_uid: BoundedString::<64>::try_from(&common_meta.study_uid).map_err(|_| {
+        study_uid: BoundedString::<64>::from_str(&common_meta.study_uid).map_err(|_| {
             DicomParseError::ConversionError("Failed to convert study UID".to_string())
         })?,
-        series_uid: BoundedString::<64>::try_from(&common_meta.series_uid).map_err(|_| {
+        series_uid: BoundedString::<64>::from_str(&common_meta.series_uid).map_err(|_| {
             DicomParseError::ConversionError("Failed to convert series UID".to_string())
         })?,
-        sop_uid: BoundedString::<64>::try_from(&common_meta.sop_uid).map_err(|_| {
+        sop_uid: BoundedString::<64>::from_str(&common_meta.sop_uid).map_err(|_| {
             DicomParseError::ConversionError("Failed to convert SOP UID".to_string())
         })?,
         study_uid_hash,
@@ -746,18 +484,18 @@ pub fn make_state_info(
         dicom_utils::get_int_value(dicom_obj, tags::NUMBER_OF_SERIES_RELATED_INSTANCES);
 
     // 计算哈希值
-    let study_uid_hash = BoundedString::<20>::make_from_db(common_meta.study_uid.to_string());
-    let series_uid_hash = BoundedString::<20>::make_from_db(common_meta.series_uid.to_string());
+    let study_uid_hash = hash_uid(&common_meta.study_uid).into();
+    let series_uid_hash = hash_uid(&common_meta.series_uid).into();
 
     // 时间戳
     let now = chrono::Local::now().naive_local();
     let study_date_origin = DicomDateString::try_from(&common_meta.study_date_str).unwrap();
 
     let tenant_id = BoundedString::<64>::try_from(tenant_id.to_string()).unwrap();
-    let patient_id = BoundedString::<64>::try_from(&common_meta.patient_id).unwrap();
-    let study_uid = BoundedString::<64>::try_from(&common_meta.study_uid).unwrap();
-    let series_uid = BoundedString::<64>::try_from(&common_meta.series_uid).unwrap();
-    let accession_number = BoundedString::<16>::try_from(acc_num).unwrap();
+    let patient_id = BoundedString::<64>::from_str(&common_meta.patient_id).unwrap();
+    let study_uid = BoundedString::<64>::from_str(&common_meta.study_uid).unwrap();
+    let series_uid = BoundedString::<64>::from_str(&common_meta.series_uid).unwrap();
+    let accession_number = BoundedString::<16>::from_str(acc_num.as_str()).unwrap();
 
     Ok(DicomStateMeta {
         tenant_id,

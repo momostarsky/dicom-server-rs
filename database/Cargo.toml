@@ -1,5 +1,5 @@
 [package]
-name = "common"
+name = "database"
 version = "0.1.0"
 edition = "2024"
 
@@ -7,7 +7,7 @@ edition = "2024"
 md5 = { workspace = true }
 const-crc32 = { workspace = true }
 snafu = { workspace = true }
-uuid = { workspace = true }
+uuid = { workspace = true, features = ["v4", "v7", "fast-rng"] }
 serde_json = "1.0.145"
 serde = { workspace = true, features = ["derive"] }
 config = { workspace = true }  # 配置文件解析
@@ -22,7 +22,6 @@ dicom-dictionary-std = { workspace = true }
 dicom-transfer-syntax-registry = { workspace = true }
 seahash = { workspace = true }
 async-trait = { workspace = true }
-redis = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 urlencoding = { workspace = true }
@@ -50,6 +49,7 @@ regex = { workspace = true }
 lazy_static = { workspace = true }
 tempfile = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
+
 aes-gcm = { workspace = true }
 rand = { workspace = true }
 base64 = { workspace = true }
@@ -57,4 +57,6 @@ cipher = "0.4.4"
 salsa20 = "0.10.2"
 generic-array = "0.14.7"
 chrono-tz = "0.10.4"
-database = { path = "../database" }
+tokio-postgres = { version = "0.7.15", features = ["default", "with-time-0_3", "with-uuid-1", "with-chrono-0_4"] }
+postgres-types = "0.2.11"
+mysql = { version = "26.0.1", default-features = false, features = ["minimal-rust", "rustls-tls","chrono","time"] }

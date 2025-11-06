@@ -6,14 +6,33 @@ use base64::Engine;
 use base64::engine::general_purpose;
 
 pub trait EncryptHelper {
+    /// 加密字符串, return base64 encoded string
     fn encrypt_string(&self, plain_text: &str) -> Result<String, Box<dyn std::error::Error>>;
+    /// 解密字符串,input is base64 encoded string and  return utf8 encoded text
     fn decrypt_string(&self, encrypted_text: &str) -> Result<String, Box<dyn std::error::Error>>;
 }
 const ENCRYPT_KEY: [u8; 32] = *b"UbwehJpq0cJDTxdEbNZ0v2Yzl#P*x92j";
 const AES_GCM_NONCE: [u8; 12] = *b"lXyl!6o3A*j3";
 
 static SALSA20_KEY_ONE: [u8; 8] = *b"1X3h0C6h";
-pub struct AesGcmEncryptor;
+pub struct AesGcmEncryptor {
+    key: [u8; 32],
+    nonce: [u8; 12],
+    version: [u8; 4],
+}
+
+impl AesGcmEncryptor {
+    pub fn new() -> Self {
+        AesGcmEncryptor {
+            key: ENCRYPT_KEY,
+            nonce: AES_GCM_NONCE,
+            version: *b"V001",
+        }
+    }
+    pub fn version(&self) -> [u8; 4] {
+        self.version
+    }
+}
 impl EncryptHelper for AesGcmEncryptor {
     fn encrypt_string(&self, plain_text: &str) -> Result<String, Box<dyn std::error::Error>> {
         let cipher = Aes256Gcm::new(&ENCRYPT_KEY.into());
@@ -75,7 +94,24 @@ use salsa20::{
     cipher::{KeyIvInit, StreamCipher},
 };
 
-pub struct Salsa20Encryptor;
+pub struct Salsa20Encryptor {
+    key: [u8; 32],
+    nonce: [u8; 8],
+    version: [u8; 4],
+}
+
+impl Salsa20Encryptor {
+    pub fn new() -> Self {
+        Salsa20Encryptor {
+            key: ENCRYPT_KEY,
+            nonce: SALSA20_KEY_ONE,
+            version: *b"V002",
+        }
+    }
+    pub fn version(&self) -> [u8; 4] {
+        self.version
+    }
+}
 impl EncryptHelper for Salsa20Encryptor {
     fn encrypt_string(&self, plain_text: &str) -> Result<String, Box<dyn std::error::Error>> {
         let mut data = plain_text.as_bytes().to_vec();
@@ -87,7 +123,7 @@ impl EncryptHelper for Salsa20Encryptor {
 
         // 添加版本号
         let mut result = Vec::new();
-        result.extend_from_slice(b"V002");
+        result.extend_from_slice(self.version().as_slice());
         result.extend_from_slice(&data);
         Ok(general_purpose::STANDARD.encode(&result))
     }
@@ -102,7 +138,7 @@ impl EncryptHelper for Salsa20Encryptor {
 
         // 检查版本号
         let version = &data[0..4];
-        if version != b"V002" {
+        if version != self.version() {
             return Err(format!(
                 "Unsupported encryption version: {:?}",
                 std::str::from_utf8(version).unwrap_or("invalid")
@@ -128,7 +164,7 @@ mod tests {
 
     #[test]
     fn test_aes_gcm_encrypt_decrypt() {
-        let encryptor = AesGcmEncryptor;
+        let encryptor = AesGcmEncryptor::new();
         let original_text = "Hello, World!";
         let encrypted = encryptor
             .encrypt_string(original_text)
@@ -142,7 +178,7 @@ mod tests {
 
     #[test]
     fn test_aes_gcm_encrypt_decrypt_empty_string() {
-        let encryptor = AesGcmEncryptor;
+        let encryptor = AesGcmEncryptor::new();
         let original_text = "";
         let encrypted = encryptor
             .encrypt_string(original_text)
@@ -156,7 +192,7 @@ mod tests {
 
     #[test]
     fn test_aes_gcm_encrypt_decrypt_chinese_string() {
-        let encryptor = AesGcmEncryptor;
+        let encryptor = AesGcmEncryptor::new();
         let original_text = "你好，世界！";
         let encrypted = encryptor
             .encrypt_string(original_text)
@@ -170,7 +206,7 @@ mod tests {
 
     #[test]
     fn test_aes_gcm_encrypt_decrypt_mixed_string() {
-        let encryptor = AesGcmEncryptor;
+        let encryptor = AesGcmEncryptor::new();
         let original_text = "Hello你好123!";
         let encrypted = encryptor
             .encrypt_string(original_text)
@@ -184,7 +220,7 @@ mod tests {
 
     #[test]
     fn test_aes_gcm_decrypt_invalid_version() {
-        let encryptor = AesGcmEncryptor;
+        let encryptor = AesGcmEncryptor::new();
         // 创建一个带有无效版本号的加密数据
         let mut invalid_data = Vec::new();
         invalid_data.extend_from_slice(b"V002"); // 无效版本号
@@ -204,7 +240,7 @@ mod tests {
 
     #[test]
     fn test_salsa20_encrypt_decrypt() {
-        let encryptor = Salsa20Encryptor;
+        let encryptor = Salsa20Encryptor::new();
         let original_text = "Hello, World!";
         let encrypted = encryptor
             .encrypt_string(original_text)
@@ -218,7 +254,7 @@ mod tests {
 
     #[test]
     fn test_salsa20_encrypt_decrypt_empty_string() {
-        let encryptor = Salsa20Encryptor;
+        let encryptor = Salsa20Encryptor::new();
         let original_text = "";
         let encrypted = encryptor
             .encrypt_string(original_text)
@@ -232,7 +268,7 @@ mod tests {
 
     #[test]
     fn test_salsa20_encrypt_decrypt_chinese_string() {
-        let encryptor = Salsa20Encryptor;
+        let encryptor = Salsa20Encryptor::new();
         let original_text = "你好，世界！";
         let encrypted = encryptor
             .encrypt_string(original_text)
@@ -246,7 +282,7 @@ mod tests {
 
     #[test]
     fn test_salsa20_encrypt_decrypt_mixed_string() {
-        let encryptor = Salsa20Encryptor;
+        let encryptor = Salsa20Encryptor::new();
         let original_text = "Hello你好123!";
         let encrypted = encryptor
             .encrypt_string(original_text)
@@ -260,7 +296,7 @@ mod tests {
 
     #[test]
     fn test_salsa20_decrypt_invalid_version() {
-        let encryptor = Salsa20Encryptor;
+        let encryptor = Salsa20Encryptor::new();
         // 创建一个带有无效版本号的加密数据
         let mut invalid_data = Vec::new();
         invalid_data.extend_from_slice(b"V001"); // 无效版本号
@@ -280,8 +316,8 @@ mod tests {
 
     #[test]
     fn test_encryptor_trait_objects() {
-        let aes_encryptor: Box<dyn EncryptHelper> = Box::new(AesGcmEncryptor);
-        let salsa_encryptor: Box<dyn EncryptHelper> = Box::new(Salsa20Encryptor);
+        let aes_encryptor: Box<dyn EncryptHelper> = Box::new(AesGcmEncryptor::new());
+        let salsa_encryptor: Box<dyn EncryptHelper> = Box::new(Salsa20Encryptor::new());
 
         let original_text = "Test with trait objects";
 
@@ -306,8 +342,8 @@ mod tests {
 
     #[test]
     fn test_both_encryptors_with_same_data() {
-        let aes_encryptor = AesGcmEncryptor;
-        let salsa_encryptor = Salsa20Encryptor;
+        let aes_encryptor = AesGcmEncryptor::new();
+        let salsa_encryptor = Salsa20Encryptor::new();
 
         let original_text = "Same data, different algorithms";
 
