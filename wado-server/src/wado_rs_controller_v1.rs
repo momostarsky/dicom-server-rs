@@ -196,7 +196,7 @@ async fn retrieve_study_metadata(
     responses(
         (status = 200, description = "Study subseries retrieved successfully", content_type = "application/dicom+json", body=[SubSeriesMeta]),
         (status = 404, description = "Study not found"),
-        (status = 406, description = " Accept header must be application/dicom+json or application/json"),
+        (status = 406, description = "Accept header must be application/dicom+json or application/json"),
         (status = 500, description = "Internal server error")
     ),
     tag =  WADO_RS_TAG,
@@ -286,7 +286,7 @@ async fn retrieve_study_subseries(
     responses(
         (status = 200, description = "Series metadata retrieved successfully", content_type = "application/dicom+json"),
         (status = 404, description = "Series or Study not found"),
-        (status = 406, description = " Accept header must be application/dicom+json or application/json"),
+        (status = 406, description = "Accept header must be application/dicom+json or application/json"),
         (status = 500, description = "Internal server error")
     ),
      tag =  WADO_RS_TAG,
@@ -408,6 +408,7 @@ async fn retrieve_series_metadata(
     responses(
         (status = 200, description = "Instance retrieved successfully", content_type = "application/octet-stream"),
         (status = 404, description = "Instance, Series or Study not found"),
+       (status = 406, description = "Accept header must be application/dicom or application/octet-stream"),
         (status = 500, description = "Internal server error")
     ),
      tag =  WADO_RS_TAG,
@@ -438,6 +439,7 @@ async fn retrieve_instance(
     responses(
         (status = 200, description = "Instance frame retrieved successfully"),
         (status = 404, description = "Instance frame not found"),
+        (status = 406, description = "Accept header must be application/dicom or application/octet-stream"),
         (status = 500, description = "Internal server error"),
         (status = 501, description = "Not implemented")
     ),
