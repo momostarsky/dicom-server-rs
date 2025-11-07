@@ -228,7 +228,7 @@ async fn main() -> std::io::Result<()> {
 
         // let mut doc = ApiDoc::openapi();
         // doc.info.title = String::from("WADO-RS Api");
-        let wado_rs = Cors::default()
+        let mut wado_rs = Cors::default()
             .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
             .allowed_headers(vec![
                 http::header::AUTHORIZATION,
@@ -238,9 +238,23 @@ async fn main() -> std::io::Result<()> {
                 http::header::USER_AGENT,
                 http::header::HeaderName::from_static("x-tenant"), // 添加自定义头
             ])
-            .allow_any_origin()
             .supports_credentials() // 支持凭证
             .max_age(3600);
+        if !server_config.allow_origin.is_empty() {
+            for origin in &server_config.allow_origin {
+                if origin == "*" {
+                    wado_rs = wado_rs.allow_any_origin();
+                    break;
+                } else {
+                    wado_rs = wado_rs.allowed_origin(origin);
+                }
+            }
+        } else {
+            // 如果没有配置，则默认只允许localhost（保持原有行为）
+            wado_rs = wado_rs.allowed_origin_fn(|origin, _req_head| {
+                origin.as_bytes().starts_with(b"http://localhost")
+            });
+        }
         let (app, mut api) = App::new()
             .into_utoipa_app()
             .service(
