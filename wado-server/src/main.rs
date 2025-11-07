@@ -199,67 +199,51 @@ async fn main() -> std::io::Result<()> {
     );
 
     HttpServer::new(move || {
-        let mut cors = Cors::default()
-            .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
-            .allowed_headers(vec![
-                http::header::AUTHORIZATION,
-                http::header::ACCEPT,
-                http::header::CONTENT_TYPE,
-                http::header::HeaderName::from_static("x-tenant"), // 添加自定义头
-            ])
-            .supports_credentials() // 支持凭证
-            .max_age(3600);
-        // 根据配置设置允许的origin
-        if !server_config.allow_origin.is_empty() {
-            for origin in &server_config.allow_origin {
-                if origin == "*" {
-                    cors = cors.allow_any_origin();
-                    break;
-                } else {
-                    cors = cors.allowed_origin(origin);
-                }
-            }
-        } else {
-            // 如果没有配置，则默认只允许localhost（保持原有行为）
-            cors = cors.allowed_origin_fn(|origin, _req_head| {
-                origin.as_bytes().starts_with(b"http://localhost")
-            });
-        }
+        // 创建统一的 CORS 配置
+        let cors_config = || {
+            Cors::default()
+                .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
+                .allowed_headers(vec![
+                    http::header::AUTHORIZATION,
+                    http::header::ACCEPT,
+                    http::header::CONTENT_TYPE,
+                    http::header::REFERER,
+                    http::header::USER_AGENT,
+                    http::header::HeaderName::from_static("x-tenant"),
+                ])
+                .supports_credentials()
+                .max_age(3600)
+        };
 
-        // let mut doc = ApiDoc::openapi();
-        // doc.info.title = String::from("WADO-RS Api");
-        let mut wado_rs = Cors::default()
-            .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
-            .allowed_headers(vec![
-                http::header::AUTHORIZATION,
-                http::header::ACCEPT,
-                http::header::CONTENT_TYPE,
-                http::header::REFERER,
-                http::header::USER_AGENT,
-                http::header::HeaderName::from_static("x-tenant"), // 添加自定义头
-            ])
-            .supports_credentials() // 支持凭证
-            .max_age(3600);
-        if !server_config.allow_origin.is_empty() {
-            for origin in &server_config.allow_origin {
-                if origin == "*" {
-                    wado_rs = wado_rs.allow_any_origin();
-                    break;
-                } else {
-                    wado_rs = wado_rs.allowed_origin(origin);
+        // 根据配置设置允许的 origin
+        let configure_origin = |cors: Cors| -> Cors {
+            if !server_config.allow_origin.is_empty() {
+                let mut cors = cors;
+                for origin in &server_config.allow_origin {
+                    if origin == "*" {
+                        cors = cors.allow_any_origin();
+                        break;
+                    } else {
+                        cors = cors.allowed_origin(origin);
+                    }
                 }
+                cors
+            } else {
+                cors.allowed_origin_fn(|origin, _req_head| {
+                    origin.as_bytes().starts_with(b"http://localhost")
+                        || origin.as_bytes().starts_with(b"http://127.0.0.1")
+                })
             }
-        } else {
-            // 如果没有配置，则默认只允许localhost（保持原有行为）
-            wado_rs = wado_rs.allowed_origin_fn(|origin, _req_head| {
-                origin.as_bytes().starts_with(b"http://localhost")
-            });
-        }
+        };
+
+        let cors = configure_origin(cors_config());
+        let wado_rs_cors = configure_origin(cors_config());
+
         let (app, mut api) = App::new()
             .into_utoipa_app()
             .service(
                 scope::scope(WADO_RS_CONTEXT_PATH)
-                    .wrap(wado_rs)
+                    .wrap(wado_rs_cors)
                     .service(
                         scope::scope("/v1")
                             // .wrap(AuthMiddleware::new("lklklklk;x".to_string()))
