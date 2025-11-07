@@ -1,9 +1,6 @@
 // auth_middleware_keycloak
 use actix_web::body::{EitherBody, MessageBody};
-use actix_web::{
-    Error, HttpResponse,
-    dev::{Service, ServiceRequest, ServiceResponse, Transform},
-};
+use actix_web::{Error, HttpResponse, dev::{Service, ServiceRequest, ServiceResponse, Transform}, HttpMessage};
 
 use futures_util::future::LocalBoxFuture;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
@@ -14,26 +11,26 @@ use std::future::{Ready, ready};
 use std::rc::Rc;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct Claims {
+pub(crate) struct Claims {
     iss: String,
     aud: serde_json::Value,
     exp: usize,
     // 添加更多权限相关字段
     sub: Option<String>,               // 用户标识
-    realm_access: Option<RealmAccess>, // realm 级别权限
-    resource_access: Option<std::collections::HashMap<String, ResourceAccess>>, // 资源级别权限
-    scope: Option<String>,             // 权限范围
+    pub(crate) realm_access: Option<RealmAccess>, // realm 级别权限
+    pub(crate) resource_access: Option<std::collections::HashMap<String, ResourceAccess>>, // 资源级别权限
+    pub(crate) scope: Option<String>,             // 权限范围
                                        // 其他可能的字段
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct RealmAccess {
-    roles: Option<Vec<String>>, // realm 角色
+pub(crate) struct RealmAccess {
+    pub(crate) roles: Option<Vec<String>>, // realm 角色
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct ResourceAccess {
-    roles: Option<Vec<String>>, // 资源角色
+pub(crate) struct ResourceAccess {
+    pub(crate) roles: Option<Vec<String>>, // 资源角色
 }
 
 // #[derive(Debug, thiserror::Error)]
@@ -263,7 +260,8 @@ where
                 Ok(token_data) => {
                     // Token有效（包括未过期），继续处理请求
                     let claims = token_data.claims;
-
+                    // 将用户信息存储在请求扩展中，供后续权限检查使用
+                    req.extensions_mut().insert(claims.clone());
                     // 解析 realm 级别角色
                     if let Some(realm_access) = &claims.realm_access {
                         if let Some(roles) = &realm_access.roles {

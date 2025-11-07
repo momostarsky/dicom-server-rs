@@ -43,3 +43,4 @@ utoipa-swagger-ui = { version = "9", features = ["actix-web"] }
 utoipa-actix-web =  { version = "0.1.2"  }
 jsonwebtoken = {  version =  "10.1.0", features = ["rust_crypto" ] }
 thiserror = "1.0.69"
+permission-macros = { path = "../permission-macros" }

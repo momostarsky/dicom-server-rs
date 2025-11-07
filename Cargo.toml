@@ -5,7 +5,7 @@ members = [
     "common",
     "wado-consumer",
     "mysql-demo",
-    "wado-license", "database", "wado-utils"]
+    "wado-license", "database", "wado-utils", "permission-macros"]
 
 # use edition 2021 resolver
 resolver = "2"

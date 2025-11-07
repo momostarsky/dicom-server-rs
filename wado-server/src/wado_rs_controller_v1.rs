@@ -3,7 +3,7 @@ use crate::constants::WADO_RS_TAG;
 use crate::wado_rs_models::SubSeriesMeta;
 use crate::{AppState, common_utils};
 use actix_web::http::header::ACCEPT;
-use actix_web::{HttpRequest, HttpResponse, Responder, get, web, web::Path};
+use actix_web::{HttpMessage, HttpRequest, HttpResponse, Responder, get, web, web::Path};
 use common::dicom_json_helper;
 use common::redis_key::RedisHelper;
 use common::server_config::{
@@ -13,9 +13,9 @@ use common::server_config::{
 use database::dicom_meta::DicomStateMeta;
 use dicom_dictionary_std::tags;
 use dicom_object::OpenFileOptions;
+use permission_macros::permission_required;
 use slog::info;
 use std::path::PathBuf;
-
 static ACCEPT_DICOM_JSON_TYPE: &str = "application/dicom+json";
 static ACCEPT_JSON_TYPE: &str = "application/json";
 
@@ -89,10 +89,11 @@ async fn get_study_info_with_cache(
     description = "Retrieve Study Metadata in DICOM JSON format",
 )]
 #[get("/studies/{study_instance_uid}/metadata")]
+#[permission_required(roles = ["doctor", "manager"], permissions = ["Read"], resource_id = "wado-rs-api")]
 async fn retrieve_study_metadata(
-    study_instance_uid: Path<String>,
     req: HttpRequest,
     app_state: web::Data<AppState>,
+    study_instance_uid: Path<String>,
 ) -> impl Responder {
     let log = app_state.log.clone();
     let study_uid = study_instance_uid.into_inner();
@@ -203,10 +204,11 @@ async fn retrieve_study_metadata(
     description = "Retrieve Study Sub-Series in DICOM JSON format",
 )]
 #[get("/studies/{study_instance_uid}/subseries")]
+#[permission_required(roles = ["doctor", "manager"], permissions = ["Read"], resource_id = "wado-rs-api")]
 async fn retrieve_study_subseries(
-    study_instance_uid: Path<String>,
     req: HttpRequest,
     app_state: web::Data<AppState>,
+    study_instance_uid: Path<String>,
 ) -> impl Responder {
     let log = app_state.log.clone();
     let study_uid = study_instance_uid.into_inner();
@@ -294,9 +296,9 @@ async fn retrieve_study_subseries(
 )]
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}/metadata")]
 async fn retrieve_series_metadata(
-    path: Path<(String, String)>,
     req: HttpRequest,
     app_state: web::Data<AppState>,
+    path: Path<(String, String)>,
 ) -> impl Responder {
     let log = app_state.log.clone();
     let (study_uid, series_uid) = path.into_inner();
@@ -416,9 +418,9 @@ async fn retrieve_series_metadata(
 )]
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}")]
 async fn retrieve_instance(
-    path: Path<(String, String, String)>,
     req: HttpRequest,
     app_state: web::Data<AppState>,
+    path: Path<(String, String, String)>,
 ) -> impl Responder {
     let (study_uid, series_uid, sop_uid) = path.into_inner();
     retrieve_instance_impl(study_uid, series_uid, sop_uid, 1, req, app_state).await
@@ -450,9 +452,9 @@ async fn retrieve_instance(
     "/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}/frames/{frames}"
 )]
 async fn retrieve_instance_frames(
-    path: Path<(String, String, String, u32)>,
     req: HttpRequest,
     app_state: web::Data<AppState>,
+    path: Path<(String, String, String, u32)>,
 ) -> impl Responder {
     let (study_uid, series_uid, sop_uid, frames) = path.into_inner();
     retrieve_instance_impl(study_uid, series_uid, sop_uid, frames, req, app_state).await
@@ -568,4 +570,146 @@ async fn retrieve_instance_impl(
 #[get("/echo")]
 async fn echo_v1() -> impl Responder {
     HttpResponse::Ok().body("Success")
+}
+
+use crate::auth_middleware_kc::Claims; // 确保能访问Claims结构
+
+// 权限检查函数
+fn check_user_permissions(
+    req: &HttpRequest,
+    required_roles: &[&str],
+    required_permissions: &[&str],
+    resource_id: Option<&str>, // 新增参数
+) -> bool {
+    // 从请求扩展中获取用户信息
+    let extensions = req.extensions(); // 先绑定到一个变量
+    let claims = match extensions.get::<Claims>() {
+        Some(claims) => claims,
+        None => return false, // 没有找到用户信息
+    };
+
+    println!("check_user_permissions: {:?}", &claims);
+
+    // https://www.jwt.io/ claims 示例
+    //{
+    //   "exp": 1762506440,
+    //   "iat": 1762506140,
+    //   "jti": "trrtcc:05ce0ed4-a94d-8344-4cc2-8b86f0b3469b",
+    //   "iss": "https://keycloak.medical.org:8443/realms/dicom-org-cn",
+    //   "aud": [
+    //     "wado-rs-api",
+    //     "account"
+    //   ],
+    //   "sub": "ac901127-ee57-4e88-89a3-fed70d4eb429",
+    //   "typ": "Bearer",
+    //   "azp": "wado-rs-api",
+    //   "acr": "1",
+    //   "allowed-origins": [
+    //     "/*"
+    //   ],
+    //   "realm_access": {
+    //     "roles": [
+    //       "offline_access",
+    //       "default-roles-dicom-org-cn",
+    //       "uma_authorization"
+    //     ]
+    //   },
+    //   "resource_access": {
+    //     "wado-rs-api": {
+    //       "roles": [
+    //         "uma_protection"
+    //       ]
+    //     },
+    //     "account": {
+    //       "roles": [
+    //         "manage-account",
+    //         "manage-account-links",
+    //         "view-profile"
+    //       ]
+    //     }
+    //   },
+    //   "scope": "profile email",
+    //   "email_verified": false,
+    //   "clientHost": "172.26.0.1",
+    //   "preferred_username": "service-account-wado-rs-api",
+    //   "clientAddress": "172.26.0.1",
+    //   "client_id": "wado-rs-api"
+    // }
+    //
+
+    // 检查角色
+    if !required_roles.is_empty() {
+        // let has_required_role = required_roles.iter().any(|&required_role| {
+        //     // 检查realm级别角色
+        //     if let Some(realm_access) = &claims.realm_access {
+        //         if let Some(roles) = &realm_access.roles {
+        //             return roles.iter().any(|user_role| user_role == required_role);
+        //         }
+        //     }
+        //
+        //     // 检查资源级别角色
+        //     if let Some(resource_access) = &claims.resource_access {
+        //         for (_, access) in resource_access {
+        //             if let Some(roles) = &access.roles {
+        //                 if roles.iter().any(|user_role| user_role == required_role) {
+        //                     return true;
+        //                 }
+        //             }
+        //         }
+        //     }
+        //     false
+        // });
+        let has_required_role = required_roles.iter().any(|&required_role| {
+            // 如果指定了 resource_id，则只检查该 resource 下的角色
+            if let Some(resource_key) = resource_id {
+                if let Some(resource_access) = &claims.resource_access {
+                    if let Some(access) = resource_access.get(resource_key) {
+                        if let Some(roles) = &access.roles {
+                            return roles.iter().any(|user_role| user_role == required_role);
+                        }
+                    }
+                }
+            } else {
+                // 检查realm级别角色
+                if let Some(realm_access) = &claims.realm_access {
+                    if let Some(roles) = &realm_access.roles {
+                        return roles.iter().any(|user_role| user_role == required_role);
+                    }
+                }
+
+                // 检查所有资源级别角色
+                if let Some(resource_access) = &claims.resource_access {
+                    for (_, access) in resource_access {
+                        if let Some(roles) = &access.roles {
+                            if roles.iter().any(|user_role| user_role == required_role) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            false
+        });
+        if !has_required_role {
+            return false;
+        }
+    }
+
+    // 检查权限范围
+    if !required_permissions.is_empty() {
+        if let Some(scope) = &claims.scope {
+            let user_scopes: Vec<&str> = scope.split_whitespace().collect();
+            let has_required_permission = required_permissions
+                .iter()
+                .any(|&required_perm| user_scopes.contains(&required_perm));
+
+            if !has_required_permission {
+                return false;
+            }
+        } else {
+            return false; // 用户没有权限范围信息
+        }
+    }
+
+    true
 }
