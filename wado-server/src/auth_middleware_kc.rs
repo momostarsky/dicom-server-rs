@@ -16,9 +16,24 @@ use std::rc::Rc;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Claims {
     iss: String,
-    aud: serde_json::Value, // 可能是字符串或数组
+    aud: serde_json::Value,
     exp: usize,
-    // 其他字段可选
+    // 添加更多权限相关字段
+    sub: Option<String>,               // 用户标识
+    realm_access: Option<RealmAccess>, // realm 级别权限
+    resource_access: Option<std::collections::HashMap<String, ResourceAccess>>, // 资源级别权限
+    scope: Option<String>,             // 权限范围
+                                       // 其他可能的字段
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct RealmAccess {
+    roles: Option<Vec<String>>, // realm 角色
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct ResourceAccess {
+    roles: Option<Vec<String>>, // 资源角色
 }
 
 // #[derive(Debug, thiserror::Error)]
@@ -113,7 +128,6 @@ where
     actix_web::dev::forward_ready!(service);
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
-
         let service = self.service.clone();
         let log = self.log.clone();
         let gconfig = self.gconfig.clone();
@@ -246,13 +260,39 @@ where
             validation.set_audience(&[audience]);
 
             match decode::<Claims>(token, &decoding_key, &validation) {
-                Ok(_) => {
-                    // Token有效，继续处理请求
+                Ok(token_data) => {
+                    // Token有效（包括未过期），继续处理请求
+                    let claims = token_data.claims;
+
+                    // 解析 realm 级别角色
+                    if let Some(realm_access) = &claims.realm_access {
+                        if let Some(roles) = &realm_access.roles {
+                            info!(log, "User realm roles: {:?}", roles);
+                            // 可以在这里检查用户是否具有特定角色
+                            // 例如: if roles.contains(&"admin".to_string()) { ... }
+                        }
+                    }
+
+                    // 解析资源级别角色
+                    if let Some(resource_access) = &claims.resource_access {
+                        for (resource, access) in resource_access {
+                            if let Some(roles) = &access.roles {
+                                info!(log, "Resource '{}' roles: {:?}", resource, roles);
+                            }
+                        }
+                    }
+
+                    // 解析权限范围
+                    if let Some(scope) = &claims.scope {
+                        info!(log, "User scopes: {}", scope);
+                        // 可以按空格分割获取各个 scope
+                        let scopes: Vec<&str> = scope.split_whitespace().collect();
+                    }
                     let res = service.call(req).await.map_err(actix_web::Error::from)?;
                     Ok(res.map_into_left_body())
                 }
                 Err(_) => {
-                    // Token无效
+                    // Token无效（可能包括过期、签名错误等）
                     let response = HttpResponse::Unauthorized().body("Invalid token");
                     let res =
                         req.into_response(response.map_into_boxed_body().map_into_right_body());

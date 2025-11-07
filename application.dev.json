@@ -27,7 +27,7 @@
   },
   "local_storage": {
     "type": "DISK",
-    "dicm_store_path": "/media/dhz/DCP/dcm",
+    "dicm_store_path": "/media/dhz/DCP/xdcm",
     "json_store_path": "/media/dhz/DCP/json"
   },
   "dicom_store_scp": {
