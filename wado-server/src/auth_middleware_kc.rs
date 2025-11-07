@@ -1,13 +1,12 @@
-// auth_middleware.rs
+// auth_middleware_keycloak
 use actix_web::body::{EitherBody, MessageBody};
 use actix_web::{
-    Error, HttpResponse, ResponseError,
+    Error, HttpResponse,
     dev::{Service, ServiceRequest, ServiceResponse, Transform},
 };
 
 use futures_util::future::LocalBoxFuture;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
-use redis::RedisError;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, error, info};
@@ -131,7 +130,7 @@ where
         let issuer_url = cfg.issuer_url;
         let audience = cfg.audience;
         // 修改为模式匹配方式：
-        let jwks_uri = match redis_helper.get_jwks_url_content() {
+        let jwks_uri_content = match redis_helper.get_jwks_url_content() {
             Ok(content) => {
                 info!(log, "get_jwks_url_content success");
                 info!(log, "Received jwk_urs_content: {}", content);
@@ -186,7 +185,7 @@ where
             let token = &auth_str[7..];
             info!(log, "Received AccessToken:{}", token);
 
-            let jwks: serde_json::Value = match serde_json::from_str(&jwks_uri) {
+            let jwks: serde_json::Value = match serde_json::from_str(&jwks_uri_content) {
                 Ok(jwks) => jwks,
                 Err(_) => {
                     info!(log, "Invalid JWKS format");
@@ -196,6 +195,7 @@ where
                     return Ok(res);
                 }
             };
+            info!(log, "JWKS loaded:{}", jwks);
 
             let n = match jwks["keys"][0]["n"].as_str() {
                 Some(n) => n,
@@ -232,8 +232,15 @@ where
                     return Ok(res);
                 }
             };
-
-            let mut validation = Validation::new(Algorithm::RS256);
+            let expected_alg = jwks["keys"][0]["alg"].as_str().unwrap_or("RS256");
+            let algorithm = match expected_alg {
+                "RS256" => Algorithm::RS256,
+                "RS384" => Algorithm::RS384,
+                "RS512" => Algorithm::RS512,
+                _ => Algorithm::RS256,
+            };
+            let mut validation = Validation::new(algorithm);
+            // let mut validation = Validation::new(Algorithm::RS256);
             validation.set_issuer(&[issuer_url]);
             validation.set_audience(&[audience]);
 

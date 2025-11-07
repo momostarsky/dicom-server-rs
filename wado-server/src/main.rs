@@ -1,6 +1,6 @@
 pub mod common_utils;
 
-mod auth_middleware;
+mod auth_middleware_kc;
 mod background;
 mod constants;
 mod wado_rs_controller_v1;
@@ -13,7 +13,7 @@ mod wado_rs_models;
 use actix_cors::Cors;
 use actix_web::{App, HttpResponse, HttpServer, Responder, middleware, web};
 
-use crate::auth_middleware::{AuthMiddleware, update_jwks_task};
+use crate::auth_middleware_kc::{AuthMiddleware, update_jwks_task};
 use crate::constants::WADO_RS_CONTEXT_PATH;
 use common::license_manager::validate_client_certificate;
 use common::redis_key::RedisHelper;
