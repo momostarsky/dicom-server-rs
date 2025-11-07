@@ -113,7 +113,7 @@ where
     actix_web::dev::forward_ready!(service);
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
-        let redis_helper = self.redis_helper.clone();
+
         let service = self.service.clone();
         let log = self.log.clone();
         let gconfig = self.gconfig.clone();
@@ -126,6 +126,7 @@ where
                 Ok(res.map_into_left_body())
             });
         }
+        let redis_helper = self.redis_helper.clone();
         let cfg = gconfig.wado_oauth2.unwrap().clone();
         let issuer_url = cfg.issuer_url;
         let audience = cfg.audience;
