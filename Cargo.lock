@@ -6089,6 +6089,7 @@ dependencies = [
  "slog-async",
  "slog-term",
  "sysinfo",
+ "thiserror 1.0.69",
  "tokio",
  "url",
  "urlencoding",

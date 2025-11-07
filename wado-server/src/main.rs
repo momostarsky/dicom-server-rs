@@ -13,6 +13,7 @@ mod wado_rs_models;
 use actix_cors::Cors;
 use actix_web::{App, HttpResponse, HttpServer, Responder, middleware, web};
 
+use crate::auth_middleware::{AuthMiddleware, update_jwks_task};
 use crate::constants::WADO_RS_CONTEXT_PATH;
 use common::license_manager::validate_client_certificate;
 use common::redis_key::RedisHelper;
@@ -20,12 +21,12 @@ use common::server_config::AppConfig;
 use common::utils::setup_logging;
 use common::{database_factory, server_config};
 use database::dicom_dbprovider::DbProvider;
+use reqwest::Client;
 use slog;
 use slog::{Logger, error, info};
 use std::sync::Arc;
 use utoipa_actix_web::{AppExt, scope};
 use utoipa_swagger_ui::SwaggerUi;
-
 // use crate::auth_middleware::AuthMiddleware;
 // 将原来的简单结构体定义替换为完整的 OpenApi 配置
 
@@ -188,11 +189,17 @@ async fn main() -> std::io::Result<()> {
         config: g_config,
         redis_helper: RedisHelper::new(reids_conn),
     };
-    // 启动后台任务管理器
+    // 在创建app_state之后，启动服务器之前添加以下代码
     let background_app_state = app_state.clone();
     tokio::spawn(async move {
-        background::background_task_manager(background_app_state).await;
+        update_jwks_task(background_app_state.redis_helper, background_app_state.log).await;
     });
+
+    // // 启动后台任务管理器
+    // let background_app_state = app_state.clone();
+    // tokio::spawn(async move {
+    //     background::background_task_manager(background_app_state).await;
+    // });
     info!(
         log,
         "Starting the server at {}:{}", server_config.host, server_config.port
@@ -231,7 +238,9 @@ async fn main() -> std::io::Result<()> {
                 scope::scope(WADO_RS_CONTEXT_PATH)
                     .service(
                         scope::scope("/v1")
-                            // .wrap(AuthMiddleware::new("lklklklk;x".to_string()))
+                            .wrap(AuthMiddleware {
+                                redis: app_state.redis_helper.clone(),
+                            })
                             .service(wado_rs_controller_v1::retrieve_study_metadata)
                             .service(wado_rs_controller_v1::retrieve_study_subseries)
                             .service(wado_rs_controller_v1::retrieve_series_metadata)

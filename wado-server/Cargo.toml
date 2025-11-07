@@ -33,7 +33,7 @@ chrono = { workspace = true }
 redis = { workspace = true }
 url = { workspace = true }
 gdcm_conv = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, version = "1.0.0", features = ["native-tls"] }
 openssl = { workspace = true }
 sysinfo = "0.29"
 database = { path = "../database" }
@@ -42,3 +42,4 @@ utoipa = { version = "5.4.0", features = ["actix_extras", "non_strict_integers",
 utoipa-swagger-ui = { version = "9", features = ["actix-web"] }
 utoipa-actix-web =  { version = "0.1.2"  }
 jsonwebtoken = {  version =  "10.1.0", features = ["rust_crypto" ] }
+thiserror = "1.0.69"

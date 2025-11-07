@@ -189,9 +189,9 @@ async fn retrieve_study_metadata(
     get,
     params(
         ("study_instance_uid" = String, Path, description = "Study Instance UID"),
-        ("x-tenant" = String, Header, description = "Tenant ID from request header"),
-        ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom+json or application/json"),
-        ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
+        ("x-tenant" = String, Header, example="1234567890",  description = "Tenant ID from request header"),
+        ("Accept" =  String, Header,  example="application/json", description = "Accept Content Type: application/dicom+json or application/json"),
+        ("Authorization" = String, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
     responses(
         (status = 200, description = "Study subseries retrieved successfully", content_type = "application/dicom+json", body=[SubSeriesMeta]),
