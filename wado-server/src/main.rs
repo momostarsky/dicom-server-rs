@@ -21,7 +21,6 @@ use common::server_config::AppConfig;
 use common::utils::setup_logging;
 use common::{database_factory, server_config};
 use database::dicom_dbprovider::DbProvider;
-use reqwest::Client;
 use slog;
 use slog::{Logger, error, info};
 use std::sync::Arc;
@@ -181,6 +180,7 @@ async fn main() -> std::io::Result<()> {
     let server_config = config.server;
     let local_storage_config = config.local_storage;
     info!(log, "LocalStorage Config is: {:?}", local_storage_config);
+    let oauth_config = config.wado_oauth2;
     let reids_conn = g_config.redis.clone();
 
     let app_state = AppState {
@@ -189,11 +189,14 @@ async fn main() -> std::io::Result<()> {
         config: g_config,
         redis_helper: RedisHelper::new(reids_conn),
     };
+
     // 在创建app_state之后，启动服务器之前添加以下代码
-    let background_app_state = app_state.clone();
-    tokio::spawn(async move {
-        update_jwks_task(background_app_state.redis_helper, background_app_state.log).await;
-    });
+    if oauth_config.is_some() {
+        let background_app_state = app_state.clone();
+        tokio::spawn(async move {
+            update_jwks_task(background_app_state).await;
+        });
+    }
 
     // // 启动后台任务管理器
     // let background_app_state = app_state.clone();
@@ -239,7 +242,9 @@ async fn main() -> std::io::Result<()> {
                     .service(
                         scope::scope("/v1")
                             .wrap(AuthMiddleware {
+                                logger: app_state.log.clone(),
                                 redis: app_state.redis_helper.clone(),
+                                config: app_state.config.clone(),
                             })
                             .service(wado_rs_controller_v1::retrieve_study_metadata)
                             .service(wado_rs_controller_v1::retrieve_study_subseries)
