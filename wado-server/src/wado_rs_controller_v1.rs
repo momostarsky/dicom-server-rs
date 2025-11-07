@@ -1,3 +1,4 @@
+use crate::slog::Error;
 use crate::common_utils::generate_series_json;
 use crate::constants::WADO_RS_TAG;
 use crate::wado_rs_models::SubSeriesMeta;
@@ -89,7 +90,7 @@ async fn get_study_info_with_cache(
     description = "Retrieve Study Metadata in DICOM JSON format",
 )]
 #[get("/studies/{study_instance_uid}/metadata")]
-#[permission_required(roles = ["doctor", "manager"], permissions = ["Read"], resource_id = "wado-rs-api")]
+#[permission_required(roles = ["doctor", "manager"], permissions = ["Read"], resource_id =["wado-rs-api"])]
 async fn retrieve_study_metadata(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -204,7 +205,7 @@ async fn retrieve_study_metadata(
     description = "Retrieve Study Sub-Series in DICOM JSON format",
 )]
 #[get("/studies/{study_instance_uid}/subseries")]
-#[permission_required(roles = ["doctor", "manager"], permissions = ["Read"], resource_id = "wado-rs-api")]
+#[permission_required(roles = ["doctor", "manager"], permissions = ["Read"], resource_id = ["wado-rs-api"])]
 async fn retrieve_study_subseries(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -579,7 +580,7 @@ fn check_user_permissions(
     req: &HttpRequest,
     required_roles: &[&str],
     required_permissions: &[&str],
-    resource_id: Option<&str>, // 新增参数
+    resource_id: &[&str], // 新增参数
 ) -> bool {
     // 从请求扩展中获取用户信息
     let extensions = req.extensions(); // 先绑定到一个变量
@@ -661,11 +662,16 @@ fn check_user_permissions(
         // });
         let has_required_role = required_roles.iter().any(|&required_role| {
             // 如果指定了 resource_id，则只检查该 resource 下的角色
-            if let Some(resource_key) = resource_id {
+            if !resource_id.is_empty() {
                 if let Some(resource_access) = &claims.resource_access {
-                    if let Some(access) = resource_access.get(resource_key) {
-                        if let Some(roles) = &access.roles {
-                            return roles.iter().any(|user_role| user_role == required_role);
+                    // 遍历所有指定的资源ID
+                    for &resource_key in resource_id {
+                        if let Some(access) = resource_access.get(resource_key) {
+                            if let Some(roles) = &access.roles {
+                                if roles.iter().any(|user_role| user_role == required_role) {
+                                    return true;
+                                }
+                            }
                         }
                     }
                 }
