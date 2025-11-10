@@ -5,22 +5,26 @@ use aes_gcm::{
 use base64::Engine;
 use base64::engine::general_purpose;
 
+#[allow(dead_code)]
 pub trait EncryptHelper {
     /// 加密字符串, return base64 encoded string
     fn encrypt_string(&self, plain_text: &str) -> Result<String, Box<dyn std::error::Error>>;
     /// 解密字符串,input is base64 encoded string and  return utf8 encoded text
     fn decrypt_string(&self, encrypted_text: &str) -> Result<String, Box<dyn std::error::Error>>;
 }
+#[allow(dead_code)]
 const ENCRYPT_KEY: [u8; 32] = *b"UbwehJpq0cJDTxdEbNZ0v2Yzl#P*x92j";
+#[allow(dead_code)]
 const AES_GCM_NONCE: [u8; 12] = *b"lXyl!6o3A*j3";
-
+#[allow(dead_code)]
 static SALSA20_KEY_ONE: [u8; 8] = *b"1X3h0C6h";
+#[allow(dead_code)]
 pub struct AesGcmEncryptor {
     key: [u8; 32],
     nonce: [u8; 12],
     version: [u8; 4],
 }
-
+#[allow(dead_code)]
 impl AesGcmEncryptor {
     pub fn new() -> Self {
         AesGcmEncryptor {
@@ -93,14 +97,16 @@ use salsa20::{
     Salsa20,
     cipher::{KeyIvInit, StreamCipher},
 };
-
+#[allow(dead_code)]
 pub struct Salsa20Encryptor {
     key: [u8; 32],
     nonce: [u8; 8],
     version: [u8; 4],
 }
 
+#[warn(unused_mut)]
 impl Salsa20Encryptor {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Salsa20Encryptor {
             key: ENCRYPT_KEY,
@@ -108,6 +114,7 @@ impl Salsa20Encryptor {
             version: *b"V002",
         }
     }
+    #[allow(dead_code)]
     pub fn version(&self) -> [u8; 4] {
         self.version
     }

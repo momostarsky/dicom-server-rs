@@ -5,7 +5,7 @@ members = [
     "common",
     "wado-consumer",
     "mysql-demo",
-    "wado-license", "database", "wado-utils"]
+    "wado-license", "database", "wado-utils", "permission-macros"]
 
 # use edition 2021 resolver
 resolver = "2"
@@ -52,7 +52,7 @@ rstest = { version = "0.26.1" }
 
 
 tempfile = "3.22.0"
-reqwest = { version = "0.11.27", features = ["json"] }
+reqwest = { version = "0.12.24", features = ["json"] }
 tracing-subscriber = { version = "0.3.20" }
 actix-web = "4.11.0"
 actix-cors = "0.7.1"

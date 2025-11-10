@@ -67,6 +67,25 @@ impl RedisHelper {
         }
     }
 
+    pub fn set_jwks_url_content(&self, txt: String, expire_seconds: u64) {
+        let client = self.make_client();
+        if !client.is_ok() {
+            return;
+        }
+        let key = "jwksurl:8e646686-9d36-480b-95ea-1718b24c1c98".to_string();
+        let mut cl = client.unwrap();
+        let _: Result<String, _> = cl.set_ex(key, txt, expire_seconds);
+    }
+
+    pub fn get_jwks_url_content(&self) -> Result<String, redis::RedisError> {
+        let mut client = match self.make_client() {
+            Ok(client) => client,
+            Err(e) => return Err(e),
+        };
+        let key = "jwksurl:8e646686-9d36-480b-95ea-1718b24c1c98".to_string();
+        client.get::<String, String>(key)
+    }
+
     pub fn del_study_metadata(&self, tenant_id: &str, study_uid: &str) {
         let key = self.key_for_study_metadata(tenant_id, study_uid);
         let client = self.make_client();

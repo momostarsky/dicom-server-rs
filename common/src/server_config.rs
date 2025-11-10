@@ -1,5 +1,4 @@
 use config::{Config, ConfigError, Environment, File};
-use database::dicom_dbtype::BoundedString;
 use database::dicom_meta::DicomStateMeta;
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
@@ -10,9 +9,9 @@ use std::sync::Once;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct RedisConfig {
-    pub url: String,            //连接地址
+    pub url: String,              //连接地址
     pub password: Option<String>, //密码
-    pub is_lts: Option<bool>,   //是否启动TLS
+    pub is_lts: Option<bool>,     //是否启动TLS
 }
 
 // 定义配置结构体
@@ -32,11 +31,7 @@ pub struct ServerConfig {
     pub host: String,
     pub allow_origin: Vec<String>,
 }
-// "local_storage":{
-// "type": "DISK",
-// "dicm_store_path": "/home/dhz/jpdata/CDSS",
-// "json_store_path": "/home/dhz/jpdata/CDSS/store"
-// }
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct LocalStorageConfig {
     pub dicm_store_path: String,
@@ -82,6 +77,19 @@ pub struct LicenseServerConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct OAuth2Config {
+    pub issuer_url: String,
+    pub audience: String,
+    pub jwks_url: String,
+}
+
+// "wado_oauth2": {
+// "issuer_url": "https://keycloak.medical.org:8443/realms/dicom-org-cn",
+// "audience": "wado-rs-api",
+// "jwks_url": "https://keycloak.medical.org:8443/realms/dicom-org-cn/protocol/openid-connect/certs"
+// }
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
     pub redis: RedisConfig,
     pub kafka: KafkaConfig,
@@ -92,6 +100,7 @@ pub struct AppConfig {
     pub dicom_store_scp: DicomStoreScpConfig,
     pub message_queue: MessageQueueConfig,
     pub dicom_license_server: Option<LicenseServerConfig>,
+    pub wado_oauth2: Option<OAuth2Config>,
 }
 
 static APP_ENV: &str = "APP_ENV";
@@ -120,6 +129,11 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
             };
             // 2. 从 .env 获取当前环境 (默认 dev)
             let env = env::var(APP_ENV).unwrap_or_else(|_| "dev".into());
+
+            // ISSUER_URL=https://keycloak.medical.org:8443/realms/dicom-org-cn
+            //     AUDIENCE=wado-rs-api
+            // SERVER_PORT=8080
+            // JWKS_URL: "https://keycloak.medical.org:8443/realms/dicom-org-cn/protocol/openid-connect/certs",
 
             // 3. 动态加载配置文件 (如 application.dev.json)
             let config_path = format!("{}/application.{}.json", cdir.display(), env);
@@ -375,6 +389,11 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
                     license_server.license_key
                 );
             }
+            if let Some(oa2) = app_config.wado_oauth2.as_ref() {
+                println!("wado_oauth2:issuer_url {:?}", oa2.issuer_url);
+                println!("wado_oauth2:audience {:?}", oa2.audience);
+                println!("wado_oauth2:jwks_url {:?}", oa2.jwks_url);
+            }
 
             CONFIG = Some(app_config);
         });
@@ -487,7 +506,7 @@ pub fn dicom_study_dir(
             )
         })?;
     }
-    Ok((study_dir))
+    Ok(study_dir)
 }
 
 pub fn dicom_series_dir(
@@ -517,7 +536,7 @@ pub fn dicom_series_dir(
             )
         })?;
     }
-    Ok((study_dir))
+    Ok(study_dir)
 }
 
 pub fn make_series_dicom_dir(
@@ -535,18 +554,21 @@ pub fn make_series_dicom_dir(
     })?;
     let dicom_store_path = &app_config.local_storage.dicm_store_path;
     let study_dir = format!(
-        "{}/{}/{}/{}",
-        dicom_store_path, study_date, study_uid, series_uid
+        "{}/{}/{}/{}/{}",
+        dicom_store_path, tenant_id, study_date, study_uid, series_uid
     );
     if create_not_exists {
         std::fs::create_dir_all(&study_dir).map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("create make_series_dicom_dir failed: {} with:'{}'", study_dir, e),
+                format!(
+                    "create make_series_dicom_dir failed: {} with:'{}'",
+                    study_dir, e
+                ),
             )
         })?;
     }
-    Ok((study_dir))
+    Ok(study_dir)
 }
 
 pub fn json_metadata_for_study(
@@ -575,7 +597,7 @@ pub fn json_metadata_for_study(
             )
         })?
     }
-    Ok((json_path))
+    Ok(json_path)
 }
 
 pub fn json_metadata_for_series(
@@ -607,7 +629,6 @@ pub fn json_metadata_for_series(
     }
     Ok(json_path)
 }
-
 
 pub fn dicom_file_path(dir: &str, sop_uid: &str) -> String {
     format!("{}/{}.dcm", dir, sop_uid)

@@ -1,9 +1,9 @@
 use crate::AppState;
-use database::dicom_dbprovider::{DbError, current_time};
-use database::dicom_meta::{DicomJsonMeta, DicomStateMeta};
+use database::dicom_dbprovider::{current_time};
+use database::dicom_meta::{DicomJsonMeta};
 use slog::{error, info};
 use std::ops::Sub;
-use sysinfo::{CpuExt, ProcessExt, System, SystemExt};
+use sysinfo::{CpuExt, System, SystemExt};
 use tokio::time::{Duration, interval};
 use crate::common_utils::generate_series_json;
 

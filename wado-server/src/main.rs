@@ -1,6 +1,6 @@
 pub mod common_utils;
 
-mod auth_middleware;
+mod auth_middleware_kc;
 mod background;
 mod constants;
 mod wado_rs_controller_v1;
@@ -13,6 +13,8 @@ mod wado_rs_models;
 use actix_cors::Cors;
 use actix_web::{App, HttpResponse, HttpServer, Responder, middleware, web};
 
+// use crate::auth_middleware_kc::AuthMiddleware;
+use crate::auth_middleware_kc::update_jwks_task;
 use crate::constants::WADO_RS_CONTEXT_PATH;
 use common::license_manager::validate_client_certificate;
 use common::redis_key::RedisHelper;
@@ -180,6 +182,7 @@ async fn main() -> std::io::Result<()> {
     let server_config = config.server;
     let local_storage_config = config.local_storage;
     info!(log, "LocalStorage Config is: {:?}", local_storage_config);
+    let oauth_config = config.wado_oauth2;
     let reids_conn = g_config.redis.clone();
 
     let app_state = AppState {
@@ -188,10 +191,20 @@ async fn main() -> std::io::Result<()> {
         config: g_config,
         redis_helper: RedisHelper::new(reids_conn),
     };
-    // 启动后台任务管理器
-    let background_app_state = app_state.clone();
+
+    // 在创建app_state之后，启动服务器之前添加以下代码
+    if oauth_config.is_some() {
+        info!(log, "OAuth2 Config is: {:?}", oauth_config);
+        let oauth2_app_state = app_state.clone();
+        tokio::spawn(async move {
+            update_jwks_task(oauth2_app_state).await;
+        });
+    }
+
+    // // 启动生成JSON格式的Metadata后台任务
+    let metadata_app_state = app_state.clone();
     tokio::spawn(async move {
-        background::background_task_manager(background_app_state).await;
+        background::background_task_manager(metadata_app_state).await;
     });
     info!(
         log,
@@ -246,7 +259,12 @@ async fn main() -> std::io::Result<()> {
                     .wrap(wado_rs_cors)
                     .service(
                         scope::scope("/v1")
-                            // .wrap(AuthMiddleware::new("lklklklk;x".to_string()))
+                            // 关闭权限验证
+                            // .wrap(AuthMiddleware {
+                            //     logger: app_state.log.clone(),
+                            //     redis: app_state.redis_helper.clone(),
+                            //     config: app_state.config.clone(),
+                            // })
                             .service(wado_rs_controller_v1::retrieve_study_metadata)
                             .service(wado_rs_controller_v1::retrieve_study_subseries)
                             .service(wado_rs_controller_v1::retrieve_series_metadata)

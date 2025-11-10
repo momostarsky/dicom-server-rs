@@ -1,0 +1,61 @@
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4.2
+    container_name: keycloak-medical
+    command:
+      - start-dev
+      # 医疗系统关键参数
+      - --features=token-exchange,admin-fine-grained-authz,docker,par,step-up-authentication
+      - --https-certificate-file=/certs/tls.crt
+      - --https-certificate-key-file=/certs/tls.key
+      - --db=postgres
+      - --db-url=jdbc:postgresql://postgres:5432/keycloak
+      - --db-username=keycloak
+      - --db-password=${KC_DB_PASSWORD}
+      - --hostname-strict=true
+      - --hostname=keycloak.medical.org
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+      # 医疗系统安全强化
+      KC_FEATURES: token-exchange,admin-fine-grained-authz,docker,par,step-up-authentication
+      KC_SPI_RECOVERY_CODES_CODE_LENGTH: "8"
+      KC_SPI_RECOVERY_CODES_NUM_CODES: "10"
+      KC_TOKEN_SIGNATURE_ALG: "RS384"  # 医疗级签名算法
+      KC_SAML_SIGNATURE_ALG: "RSA_SHA512"
+      # 审计合规
+      KC_SPI_LOGIN_OTP_POLICY_CODE_REUSABILITY_WINDOW_SECONDS: "300"
+      KC_SPI_BRUTE_FORCE_PROTECTION_MAX_LOGIN_FAILURES: "5"
+      KC_SPI_DATASTORE_HIBERNATE_ENABLE_DB_LOCKING: "false"
+    volumes:
+      - ./certs:/certs:ro 
+    ports:
+      - "8443:8443"
+    depends_on:
+      - postgres
+    networks:
+      - medical-net
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: keycloak-postgres
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KC_DB_PASSWORD}
+      # 医疗数据加密
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=md5
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - medical-net
+
+volumes:
+  pgdata:
+    driver: local
+
+networks:
+  medical-net:
+    driver: bridge

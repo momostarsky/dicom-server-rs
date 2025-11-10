@@ -1,9 +1,12 @@
 use crate::common_utils::generate_series_json;
+// use crate::constants::WADO_RS_PERMISSONS_IMAGE_READER;
+// use crate::constants::WADO_RS_ID;
+// use crate::constants::WADO_RS_ROLES;
 use crate::constants::WADO_RS_TAG;
 use crate::wado_rs_models::SubSeriesMeta;
 use crate::{AppState, common_utils};
 use actix_web::http::header::ACCEPT;
-use actix_web::{HttpRequest, HttpResponse, Responder, get, web, web::Path};
+use actix_web::{HttpMessage, HttpRequest, HttpResponse, Responder, get, web, web::Path};
 use common::dicom_json_helper;
 use common::redis_key::RedisHelper;
 use common::server_config::{
@@ -13,12 +16,14 @@ use common::server_config::{
 use database::dicom_meta::DicomStateMeta;
 use dicom_dictionary_std::tags;
 use dicom_object::OpenFileOptions;
+// use permission_macros::permission_required;
 use slog::info;
 use std::path::PathBuf;
 
 static ACCEPT_DICOM_JSON_TYPE: &str = "application/dicom+json";
 static ACCEPT_JSON_TYPE: &str = "application/json";
-//static ACCEPT_DICOM_TYPE: &str = "application/dicom";
+
+static ACCEPT_DICOM_TYPE: &str = "application/dicom";
 static ACCEPT_OCTET_STREAM: &str = "application/octet-stream";
 //static MULIPART_ACCEPT_OCTET_STREAM: &str = "multipart/related; type=application/octet-stream";
 
@@ -75,21 +80,24 @@ async fn get_study_info_with_cache(
     params(
         ("study_instance_uid" = String, Path, description = "Study Instance UID"),
         ("x-tenant" = String, Header, description = "Tenant ID from request header"),
+        ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom+json or application/json"),
         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
     responses(
         (status = 200, description = "Study metadata retrieved successfully", content_type = "application/dicom+json"),
         (status = 404, description = "Study not found"),
+        (status = 406, description = " Accept header must be application/dicom+json or application/json"),
         (status = 500, description = "Internal server error")
     ),
     tag =  WADO_RS_TAG,
     description = "Retrieve Study Metadata in DICOM JSON format",
 )]
 #[get("/studies/{study_instance_uid}/metadata")]
+// #[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER ], resource_id=[ WADO_RS_ID ])]
 async fn retrieve_study_metadata(
-    study_instance_uid: Path<String>,
     req: HttpRequest,
     app_state: web::Data<AppState>,
+    study_instance_uid: Path<String>,
 ) -> impl Responder {
     let log = app_state.log.clone();
     let study_uid = study_instance_uid.into_inner();
@@ -110,14 +118,24 @@ async fn retrieve_study_metadata(
             tenant_id, study_uid
         ));
     }
-    // let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
+    // 检查 Accept 头
+    let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
 
-    // if accept != Some(ACCEPT_DICOM_JSON_TYPE) {
-    //     return HttpResponse::NotAcceptable().body(format!(
-    //         "retrieve_study_metadata Accept header must be {}",
-    //         ACCEPT_DICOM_JSON_TYPE
-    //     ));
-    // }
+    if let Some(accept_str) = accept {
+        if !is_accept_type_supported(accept_str, ACCEPT_DICOM_JSON_TYPE)
+            && !is_accept_type_supported(accept_str, ACCEPT_JSON_TYPE)
+        {
+            return HttpResponse::NotAcceptable().body(format!(
+                "retrieve_study_metadata Accept header must be {} or {}",
+                ACCEPT_DICOM_JSON_TYPE, ACCEPT_JSON_TYPE
+            ));
+        }
+    } else {
+        return HttpResponse::NotAcceptable().body(format!(
+            "retrieve_study_metadata Accept header must be {} or {}",
+            ACCEPT_DICOM_JSON_TYPE, ACCEPT_JSON_TYPE
+        ));
+    }
 
     //  从缓存中加载study_info
     let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state, true).await
@@ -176,22 +194,25 @@ async fn retrieve_study_metadata(
     get,
     params(
         ("study_instance_uid" = String, Path, description = "Study Instance UID"),
-        ("x-tenant" = String, Header, description = "Tenant ID from request header"),
-        ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
+        ("x-tenant" = String, Header, example="1234567890",  description = "Tenant ID from request header"),
+        ("Accept" =  String, Header,  example="application/json", description = "Accept Content Type: application/dicom+json or application/json"),
+        ("Authorization" = String, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
     responses(
         (status = 200, description = "Study subseries retrieved successfully", content_type = "application/dicom+json", body=[SubSeriesMeta]),
         (status = 404, description = "Study not found"),
+        (status = 406, description = "Accept header must be application/dicom+json or application/json"),
         (status = 500, description = "Internal server error")
     ),
     tag =  WADO_RS_TAG,
     description = "Retrieve Study Sub-Series in DICOM JSON format",
 )]
 #[get("/studies/{study_instance_uid}/subseries")]
+// #[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER ], resource_id=[ WADO_RS_ID ])]
 async fn retrieve_study_subseries(
-    study_instance_uid: Path<String>,
     req: HttpRequest,
     app_state: web::Data<AppState>,
+    study_instance_uid: Path<String>,
 ) -> impl Responder {
     let log = app_state.log.clone();
     let study_uid = study_instance_uid.into_inner();
@@ -200,7 +221,24 @@ async fn retrieve_study_subseries(
         log,
         "retrieve_study_metadata Tenant ID: {}  and StudyUID:{} ", tenant_id, study_uid
     );
+    // 检查 Accept 头
+    let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
 
+    if let Some(accept_str) = accept {
+        if !is_accept_type_supported(accept_str, ACCEPT_DICOM_JSON_TYPE)
+            && !is_accept_type_supported(accept_str, ACCEPT_JSON_TYPE)
+        {
+            return HttpResponse::NotAcceptable().body(format!(
+                "retrieve_study_metadata Accept header must be {} or {}",
+                ACCEPT_DICOM_JSON_TYPE, ACCEPT_JSON_TYPE
+            ));
+        }
+    } else {
+        return HttpResponse::NotAcceptable().body(format!(
+            "retrieve_study_metadata Accept header must be {} or {}",
+            ACCEPT_DICOM_JSON_TYPE, ACCEPT_JSON_TYPE
+        ));
+    }
     // 首先尝试从 Redis 缓存中获取数据
     let rh = &app_state.redis_helper;
     // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
@@ -247,22 +285,25 @@ async fn retrieve_study_subseries(
         ("study_instance_uid" = String, Path, description = "Study Instance UID"),
         ("series_instance_uid" = String, Path, description = "Series Instance UID"),
         ("x-tenant" = String, Header, description = "Tenant ID from request header"),
+        ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom+json or application/json"),
         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
 
     ),
     responses(
         (status = 200, description = "Series metadata retrieved successfully", content_type = "application/dicom+json"),
         (status = 404, description = "Series or Study not found"),
+        (status = 406, description = "Accept header must be application/dicom+json or application/json"),
         (status = 500, description = "Internal server error")
     ),
      tag =  WADO_RS_TAG,
     description = "Retrieve Series Metadata in DICOM JSON format"
 )]
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}/metadata")]
+// #[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER ], resource_id=[ WADO_RS_ID ])]
 async fn retrieve_series_metadata(
-    path: Path<(String, String)>,
     req: HttpRequest,
     app_state: web::Data<AppState>,
+    path: Path<(String, String)>,
 ) -> impl Responder {
     let log = app_state.log.clone();
     let (study_uid, series_uid) = path.into_inner();
@@ -282,14 +323,14 @@ async fn retrieve_series_metadata(
             && !is_accept_type_supported(accept_str, ACCEPT_JSON_TYPE)
         {
             return HttpResponse::NotAcceptable().body(format!(
-                "retrieve_study_metadata Accept header must be {} and {}",
+                "retrieve_study_metadata Accept header must be {} or {}",
                 ACCEPT_DICOM_JSON_TYPE, ACCEPT_JSON_TYPE
             ));
         }
     } else {
         return HttpResponse::NotAcceptable().body(format!(
-            "retrieve_study_metadata Accept header must be {}",
-            ACCEPT_DICOM_JSON_TYPE
+            "retrieve_study_metadata Accept header must be {} or {}",
+            ACCEPT_DICOM_JSON_TYPE, ACCEPT_JSON_TYPE
         ));
     }
     // 首先尝试从 Redis 缓存中获取数据
@@ -368,21 +409,24 @@ async fn retrieve_series_metadata(
         ("series_instance_uid" = String, Path, description = "Series Instance UID"),
         ("sop_instance_uid" = String, Path, description = "SOP Instance UID"),
         ("x-tenant" = String, Header, description = "Tenant ID from request header"),
-         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
+        ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom  or application/octet-stream"),
+        ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
     responses(
         (status = 200, description = "Instance retrieved successfully", content_type = "application/octet-stream"),
         (status = 404, description = "Instance, Series or Study not found"),
+       (status = 406, description = "Accept header must be application/dicom or application/octet-stream"),
         (status = 500, description = "Internal server error")
     ),
      tag =  WADO_RS_TAG,
      description = "Retrieve Instance Pixel Data in Octet Stream format"
 )]
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}")]
+// #[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER ], resource_id=[ WADO_RS_ID ])]
 async fn retrieve_instance(
-    path: Path<(String, String, String)>,
     req: HttpRequest,
     app_state: web::Data<AppState>,
+    path: Path<(String, String, String)>,
 ) -> impl Responder {
     let (study_uid, series_uid, sop_uid) = path.into_inner();
     retrieve_instance_impl(study_uid, series_uid, sop_uid, 1, req, app_state).await
@@ -397,23 +441,27 @@ async fn retrieve_instance(
         ("sop_instance_uid" = String, Path, description = "SOP Instance UID"),
         ("frame_number" = u32, Path, description = "Frame Number"),
         ("x-tenant" = String, Header, description = "Tenant ID from request header"),
-         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
+        ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom  or application/octet-stream"),
+        ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
     responses(
         (status = 200, description = "Instance frame retrieved successfully"),
         (status = 404, description = "Instance frame not found"),
-        (status = 500, description = "Internal server error")
+        (status = 406, description = "Accept header must be application/dicom or application/octet-stream"),
+        (status = 500, description = "Internal server error"),
+        (status = 501, description = "Not implemented")
     ),
-     tag =  WADO_RS_TAG,
-        description = "Retrieve Instance Frame Pixel Data in Octet Stream format"
+    tag =  WADO_RS_TAG,
+    description = "Retrieve Instance Frame Pixel Data in Octet Stream format"
 )]
 #[get(
     "/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}/frames/{frames}"
 )]
+// #[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER  ], resource_id=[ WADO_RS_ID ])]
 async fn retrieve_instance_frames(
-    path: Path<(String, String, String, u32)>,
     req: HttpRequest,
     app_state: web::Data<AppState>,
+    path: Path<(String, String, String, u32)>,
 ) -> impl Responder {
     let (study_uid, series_uid, sop_uid, frames) = path.into_inner();
     retrieve_instance_impl(study_uid, series_uid, sop_uid, frames, req, app_state).await
@@ -444,6 +492,24 @@ async fn retrieve_instance_impl(
         series_uid,
         sop_uid
     );
+    // 检查 Accept 头
+    let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
+
+    if let Some(accept_str) = accept {
+        if !is_accept_type_supported(accept_str, ACCEPT_OCTET_STREAM)
+            && !is_accept_type_supported(accept_str, ACCEPT_DICOM_TYPE)
+        {
+            return HttpResponse::NotAcceptable().body(format!(
+                "retrieve_study_metadata Accept header must be {} or {}",
+                ACCEPT_OCTET_STREAM, ACCEPT_DICOM_TYPE
+            ));
+        }
+    } else {
+        return HttpResponse::NotAcceptable().body(format!(
+            "retrieve_study_metadata Accept header must be {} or {}",
+            ACCEPT_OCTET_STREAM, ACCEPT_DICOM_TYPE
+        ));
+    }
     // 获取series_info (使用提取的函数)
     let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state, true).await
     {
@@ -513,3 +579,133 @@ async fn echo_v1() -> impl Responder {
     HttpResponse::Ok().body("Success")
 }
 
+use crate::auth_middleware_kc::Claims; // 确保能访问Claims结构
+
+#[allow(dead_code)]
+/// 用户权限检查函数
+/// realm_roles: 角色列表, Realm级别到的角色, 例如"doctor", "manager", patient", "admin" 用于标示用户类别, 表示你是谁?
+/// resource_roles_or_permissions: 资源级别的角色或权限列表, 例如 "Read", "Write", "Delete" 用于标示用户权限, 表示你能做什么?
+/// resource_ids: 资源ID列表, 例如 "wado-rs-api", "account", 用于指定检查哪些资源下的角色
+/// 身份判断：realm_access.roles.contains("role_patient")
+/// 权限判断：resource_access['wado-rs-api'].roles.contains('study_viewer'')
+/// *** 不要用 scope 字段做权限控制***
+fn check_user_permissions(
+    req: &HttpRequest,
+    realm_roles: &[&str],
+    resource_roles_or_permissions: &[&str],
+    resource_ids: &[&str], // 新增参数
+) -> bool {
+    // 从请求扩展中获取用户信息
+    let extensions = req.extensions(); // 先绑定到一个变量
+    let claims = match extensions.get::<Claims>() {
+        Some(claims) => claims,
+        None => return false, // 没有找到用户信息
+    };
+    // https://www.jwt.io/ claims 示例
+    //{
+    //   "exp": 1762506440,
+    //   "iat": 1762506140,
+    //   "jti": "trrtcc:05ce0ed4-a94d-8344-4cc2-8b86f0b3469b",
+    //   "iss": "https://keycloak.medical.org:8443/realms/dicom-org-cn",
+    //   "aud": [
+    //     "wado-rs-api",
+    //     "account"
+    //   ],
+    //   "sub": "ac901127-ee57-4e88-89a3-fed70d4eb429",
+    //   "typ": "Bearer",
+    //   "azp": "wado-rs-api",
+    //   "acr": "1",
+    //   "allowed-origins": [
+    //     "/*"
+    //   ],
+    //   "realm_access": {
+    //     "roles": [
+    //       "offline_access",
+    //       "default-roles-dicom-org-cn",
+    //       "uma_authorization"
+    //     ]
+    //   },
+    //   "resource_access": {
+    //     "wado-rs-api": {
+    //       "roles": [
+    //         "uma_protection"
+    //       ]
+    //     },
+    //     "account": {
+    //       "roles": [
+    //         "manage-account",
+    //         "manage-account-links",
+    //         "view-profile"
+    //       ]
+    //     }
+    //   },
+    //   "scope": "profile email",
+    //   "email_verified": false,
+    //   "clientHost": "172.26.0.1",
+    //   "preferred_username": "service-account-wado-rs-api",
+    //   "clientAddress": "172.26.0.1",
+    //   "client_id": "wado-rs-api"
+    // }
+    //
+
+    // 检查角色
+    if !realm_roles.is_empty() {
+        let has_required_role = realm_roles.iter().any(|&required_role| {
+            // 检查realm级别角色
+            if let Some(realm_access) = &claims.realm_access {
+                if let Some(roles) = &realm_access.roles {
+                    return roles.iter().any(|user_role| user_role == required_role);
+                }
+            }
+            false
+        });
+        if !has_required_role {
+            return false;
+        }
+    }
+    if resource_ids.is_empty() {
+        // 检查所有资源的权限是否在 resource_roles_or_permissions 中
+        if !resource_roles_or_permissions.is_empty() {
+            let has_required_permission = if let Some(resource_access) = &claims.resource_access {
+                resource_access.values().any(|access| {
+                    if let Some(roles) = &access.roles {
+                        roles
+                            .iter()
+                            .any(|role| resource_roles_or_permissions.contains(&role.as_str()))
+                    } else {
+                        false
+                    }
+                })
+            } else {
+                false
+            };
+
+            if !has_required_permission {
+                return false;
+            }
+        }
+    } else {
+        // 检查指定资源的权限
+
+        // 检查指定资源的权限是否在 resource_roles_or_permissions 中
+        if !resource_roles_or_permissions.is_empty() {
+            let has_required_permission = resource_ids.iter().any(|&resource_id| {
+                if let Some(resource_access) = &claims.resource_access {
+                    if let Some(access) = resource_access.get(resource_id) {
+                        if let Some(roles) = &access.roles {
+                            return roles.iter().any(|role| {
+                                resource_roles_or_permissions.contains(&role.as_str())
+                            });
+                        }
+                    }
+                }
+                false
+            });
+
+            if !has_required_permission {
+                return false;
+            }
+        }
+    }
+    true
+}

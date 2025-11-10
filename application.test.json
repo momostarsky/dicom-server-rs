@@ -59,5 +59,10 @@
   "dicom_license_server": {
     "client_id": "HZXS100020261231",
     "license_key": "c417aa4802b3441d931c135cbdaab367"
+  },
+  "wado_oauth2": {
+    "issuer_url": "https://keycloak.medical.org:8443/realms/dicom-org-cn",
+    "audience": "wado-rs-api",
+    "jwks_url": "https://keycloak.medical.org:8443/realms/dicom-org-cn/protocol/openid-connect/certs"
   }
 }
