@@ -5,6 +5,7 @@ use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dotenv::dotenv;
 use serde::Deserialize;
 use std::env;
+use std::fs::Permissions;
 use std::sync::Once;
 
 #[derive(Debug, Deserialize, Clone)]
@@ -76,14 +77,24 @@ pub struct LicenseServerConfig {
     pub license_key: String,
 }
 
+// --- 配置结构 ---
+#[derive(Debug, Clone, Deserialize)]
+pub struct RoleRule {
+    #[serde(rename = "from")]
+    pub json_path: String,
+    #[serde(rename = "values")]
+    pub required_values: Vec<String>,
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct OAuth2Config {
     pub issuer_url: String,
     pub audience: String,
     pub jwks_url: String,
-    pub realm_roles: Vec<String>,
-    pub resource_id: Vec<String>,
-    pub resource_roles: Vec<String>,
+    #[serde(default)]
+    pub roles: Option<RoleRule>,
+    #[serde(default)]
+    pub permissions: Option<RoleRule>,
 }
 
 // "wado_oauth2": {
@@ -396,9 +407,8 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
                 println!("wado_oauth2:issuer_url {:?}", oa2.issuer_url);
                 println!("wado_oauth2:audience {:?}", oa2.audience);
                 println!("wado_oauth2:jwks_url {:?}", oa2.jwks_url);
-                println!("wado_oauth2:realm_roles {:?}", oa2.realm_roles);
-                println!("wado_oauth2:resource_id {:?}", oa2.resource_id);
-                println!("wado_oauth2:resource_roles {:?}", oa2.resource_roles);
+                println!("wado_oauth2:roles {:?}", oa2.roles);
+                println!("wado_oauth2:permissions {:?}", oa2.permissions);
             }
 
             CONFIG = Some(app_config);

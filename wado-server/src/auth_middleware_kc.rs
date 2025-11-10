@@ -6,6 +6,8 @@ use actix_web::{
 };
 
 use futures_util::future::LocalBoxFuture;
+use jsonpath_rust::JsonPath;
+use jsonpath_rust::query::QueryRef;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -148,9 +150,10 @@ where
         let cfg = gconfig.wado_oauth2.unwrap().clone();
         let issuer_url = cfg.issuer_url;
         let audience = cfg.audience;
-        let realm_roels = cfg.realm_roles;
-        let resource_roles = cfg.resource_roles;
-        let resource_id = cfg.resource_id;
+
+        let role_mapping = cfg.roles.unwrap().clone();
+        let permission_mapping = cfg.permissions.unwrap().clone();
+
         // 修改为模式匹配方式：
         let jwks_uri_content = match redis_helper.get_jwks_url_content() {
             Ok(content) => {
@@ -284,7 +287,10 @@ where
                     info!(log, "Claims email:{:?}", claims.email);
                     info!(log, "Claims name:{:?}", claims.name);
                     info!(log, "Claims username:{:?}", claims.username);
-                    info!(log, "Claims preferred_username:{:?}", claims.preferred_username);
+                    info!(
+                        log,
+                        "Claims preferred_username:{:?}", claims.preferred_username
+                    );
                     info!(log, "Claims given_name:{:?}", claims.given_name);
                     info!(log, "Claims family_name:{:?}", claims.family_name);
                     // 解析 realm 级别角色
@@ -298,40 +304,12 @@ where
                         }
                     }
 
-                    // 解析资源级别角色
-                    if let Some(resource_access) = &claims.resource_access {
-                        for (resource, access) in resource_access {
-                            if let Some(roles) = &access.roles {
-                                let realm_roles_str = roles.join("\n\t");
-                                info!(
-                                    log,
-                                    "Resource [{}] Roles:  [\n\t{}\n]", resource, realm_roles_str
-                                );
-                            }
-                        }
-                    }
-
-                    // 解析权限范围
-                    if let Some(scope) = &claims.scope {
-                        // 可以按空格分割获取各个 scope
-                        let scopes: Vec<&str> = scope.split_whitespace().collect();
-                        let scopes_str = scopes.join("\n\t");
-                        info!(log, "User Scopes:  [\n\t{}\n]", scopes_str);
-                    }
-                    // 在调用 validate_user_permissions 之前进行转换
-                    let realm_roles_refs: Vec<&str> =
-                        realm_roels.iter().map(|s| s.as_str()).collect();
-                    let resource_roles_refs: Vec<&str> =
-                        resource_roles.iter().map(|s| s.as_str()).collect();
-                    let resource_id_refs: Vec<&str> =
-                        resource_id.iter().map(|s| s.as_str()).collect();
-
                     // 在调用 validate_user_permissions 时使用转换后的变量
                     if !validate_user_permissions(
                         &req,
-                        &realm_roles_refs,
-                        &resource_roles_refs,
-                        &resource_id_refs,
+                        &role_mapping,
+                        &permission_mapping,
+                        &log,
                     ) {
                         let response = HttpResponse::Forbidden().body("Insufficient permissions");
                         let res =
@@ -356,7 +334,7 @@ where
 
 use crate::AppState;
 use common::redis_key::RedisHelper;
-use common::server_config::AppConfig;
+use common::server_config::{AppConfig, RoleRule};
 use tokio::time::{Duration, interval};
 
 pub(crate) async fn update_jwks_task(app_state: AppState) {
@@ -421,121 +399,96 @@ async fn fetch_and_store_jwks(
 
 fn validate_user_permissions(
     req: &ServiceRequest,
-    realm_roles: &[&str],
-    resource_roles_or_permissions: &[&str],
-    resource_ids: &[&str], // 新增参数
+    role_mapping: &RoleRule,
+    permission_mapping: &RoleRule,
+    log: &Logger,
 ) -> bool {
     // 从请求扩展中获取用户信息
     let extensions = req.extensions(); // 先绑定到一个变量
-    let claims = match extensions.get::<Claims>() {
+    let user_claims = match extensions.get::<Claims>() {
         Some(claims) => claims,
         None => return false, // 没有找到用户信息
     };
-    // https://www.jwt.io/ claims 示例
-    //{
-    //   "exp": 1762506440,
-    //   "iat": 1762506140,
-    //   "jti": "trrtcc:05ce0ed4-a94d-8344-4cc2-8b86f0b3469b",
-    //   "iss": "https://keycloak.medical.org:8443/realms/dicom-org-cn",
-    //   "aud": [
-    //     "wado-rs-api",
-    //     "account"
-    //   ],
-    //   "sub": "ac901127-ee57-4e88-89a3-fed70d4eb429",
-    //   "typ": "Bearer",
-    //   "azp": "wado-rs-api",
-    //   "acr": "1",
-    //   "allowed-origins": [
-    //     "/*"
-    //   ],
-    //   "realm_access": {
-    //     "roles": [
-    //       "offline_access",
-    //       "default-roles-dicom-org-cn",
-    //       "uma_authorization"
-    //     ]
-    //   },
-    //   "resource_access": {
-    //     "wado-rs-api": {
-    //       "roles": [
-    //         "uma_protection"
-    //       ]
-    //     },
-    //     "account": {
-    //       "roles": [
-    //         "manage-account",
-    //         "manage-account-links",
-    //         "view-profile"
-    //       ]
-    //     }
-    //   },
-    //   "scope": "profile email",
-    //   "email_verified": false,
-    //   "clientHost": "172.26.0.1",
-    //   "preferred_username": "service-account-wado-rs-api",
-    //   "clientAddress": "172.26.0.1",
-    //   "client_id": "wado-rs-api"
-    // }
-    //
+    // 将Claims序列化为JSON值以便使用JSONPath查询
+    let claims_json = match serde_json::to_value(user_claims) {
+        Ok(json) => json,
+        Err(_) => return false,
+    };
+    info!(log, "Claims JSON:{}", claims_json);
 
-    // 检查角色
-    if !realm_roles.is_empty() {
-        let has_required_role = realm_roles.iter().any(|&required_role| {
-            // 检查realm级别角色
-            if let Some(realm_access) = &claims.realm_access {
-                if let Some(roles) = &realm_access.roles {
-                    return roles.iter().any(|user_role| user_role == required_role);
-                }
-            }
-            false
-        });
-        if !has_required_role {
-            return false;
-        }
+    // 验证角色映射
+    if !validate_role_or_permission(&claims_json, role_mapping,log) {
+        return false;
     }
-    if resource_ids.is_empty() {
-        // 检查所有资源的权限是否在 resource_roles_or_permissions 中
-        if !resource_roles_or_permissions.is_empty() {
-            let has_required_permission = if let Some(resource_access) = &claims.resource_access {
-                resource_access.values().any(|access| {
-                    if let Some(roles) = &access.roles {
-                        roles
-                            .iter()
-                            .any(|role| resource_roles_or_permissions.contains(&role.as_str()))
-                    } else {
-                        false
-                    }
-                })
-            } else {
-                false
-            };
 
-            if !has_required_permission {
-                return false;
-            }
-        }
-    } else {
-        // 检查指定资源的权限
+    // 验证权限映射
+    if !validate_role_or_permission(&claims_json, permission_mapping,log ) {
+        return false;
+    }
 
-        // 检查指定资源的权限是否在 resource_roles_or_permissions 中
-        if !resource_roles_or_permissions.is_empty() {
-            let has_required_permission = resource_ids.iter().any(|&resource_id| {
-                if let Some(resource_access) = &claims.resource_access {
-                    if let Some(access) = resource_access.get(resource_id) {
-                        if let Some(roles) = &access.roles {
-                            return roles.iter().any(|role| {
-                                resource_roles_or_permissions.contains(&role.as_str())
-                            });
+    true
+}
+
+use serde_json::{Value as JsonValue, Value};
+
+fn validate_role_or_permission(claims: &Value, rule: &RoleRule,logger: &Logger) -> bool {
+
+    path_values_intersect(
+        &claims,
+        rule.json_path.as_str(),
+        rule.required_values.as_slice(),
+        &logger
+    )
+}
+
+use std::collections::HashSet;
+
+
+/// Extract values (as strings) from `claims_json` using `json_path`.
+/// Returns a Vec\<String\> of all extracted scalar/array items converted to strings.
+pub fn extract_values_as_strings(claims_json: &JsonValue, json_path: &str) -> Vec<String> {
+
+    match jsonpath_lib::select(claims_json, json_path) {
+        Ok(nodes) => {
+            let mut out = Vec::new();
+            for node in nodes {
+                match node {
+                    JsonValue::String(s) => out.push(s.clone()),
+                    JsonValue::Array(arr) => {
+                        for v in arr {
+                            match v {
+                                JsonValue::String(s) => out.push(s.clone()),
+                                // convert other scalar types to string representation
+                                JsonValue::Number(_) | JsonValue::Bool(_) | JsonValue::Null => {
+                                    out.push(v.to_string())
+                                }
+                                // for nested objects/arrays push their JSON text
+                                _ => out.push(v.to_string()),
+                            }
                         }
                     }
+                    // numbers, bool, null and objects -> use their JSON text
+                    _ => out.push(node.to_string()),
                 }
-                false
-            });
-
-            if !has_required_permission {
-                return false;
             }
+            out
         }
+        Err(_) => Vec::new(),
     }
-    true
+}
+
+/// Check whether `rule_values` has any intersection with the array extracted by `json_path`.
+pub fn path_values_intersect(
+    claims_json: &JsonValue,
+    json_path: &str,
+    rule_values: &[String],
+    logger: &Logger
+) -> bool {
+    let extracted = extract_values_as_strings(claims_json, json_path);
+    info!(logger,"path: {}  and extracted: {:?}", json_path, extracted);
+    if extracted.is_empty() || rule_values.is_empty() {
+        return false;
+    }
+    let extracted_set: HashSet<String> = extracted.into_iter().collect();
+    rule_values.iter().any(|v| extracted_set.contains(v))
 }

@@ -65,12 +65,13 @@
     "issuer_url": "https://keycloak.medical.org:8443/realms/dicom-org-cn",
     "audience": "wado-rs-api",
     "jwks_url": "https://keycloak.medical.org:8443/realms/dicom-org-cn/protocol/openid-connect/certs",
-    "realm_roles": [
-      "role_patients"
-    ],
-    "resource_id": ["wado-rs-api"],
-    "resource_roles": [
-      "image_reader"
-    ]
+    "roles": {
+      "from": "$.realm_access.roles",
+      "values": ["role_patients"]
+    },
+    "permissions": {
+      "from": "$.resource_access['wado-rs-api'].roles",
+      "values": ["image_reader"]
+    }
   }
 }
