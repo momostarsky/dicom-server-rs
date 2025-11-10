@@ -6,8 +6,6 @@ use actix_web::{
 };
 
 use futures_util::future::LocalBoxFuture;
-use jsonpath_rust::JsonPath;
-use jsonpath_rust::query::QueryRef;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -27,9 +25,9 @@ pub(crate) struct Claims {
     preferred_username: Option<String>,
     given_name: Option<String>,
     family_name: Option<String>,
-    pub(crate) realm_access: Option<RealmAccess>, // realm 级别权限
-    pub(crate) resource_access: Option<std::collections::HashMap<String, ResourceAccess>>, // 资源级别权限
-    pub(crate) scope: Option<String>, // 权限范围
+    // // pub(crate) realm_access: Option<RealmAccess>, // realm 级别权限
+    // // pub(crate) resource_access: Option<std::collections::HashMap<String, ResourceAccess>>, // 资源级别权限
+    // pub(crate) scope: Option<String>, // 权限范围
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

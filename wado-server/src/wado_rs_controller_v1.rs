@@ -93,7 +93,7 @@ async fn get_study_info_with_cache(
     description = "Retrieve Study Metadata in DICOM JSON format",
 )]
 #[get("/studies/{study_instance_uid}/metadata")]
- 
+
 async fn retrieve_study_metadata(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -208,7 +208,7 @@ async fn retrieve_study_metadata(
     description = "Retrieve Study Sub-Series in DICOM JSON format",
 )]
 #[get("/studies/{study_instance_uid}/subseries")]
- 
+
 async fn retrieve_study_subseries(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -299,7 +299,7 @@ async fn retrieve_study_subseries(
     description = "Retrieve Series Metadata in DICOM JSON format"
 )]
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}/metadata")]
- 
+
 async fn retrieve_series_metadata(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -422,7 +422,7 @@ async fn retrieve_series_metadata(
      description = "Retrieve Instance Pixel Data in Octet Stream format"
 )]
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}")]
- 
+
 async fn retrieve_instance(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -457,7 +457,7 @@ async fn retrieve_instance(
 #[get(
     "/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}/frames/{frames}"
 )]
- 
+
 async fn retrieve_instance_frames(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -648,64 +648,5 @@ fn check_user_permissions(
     // }
     //
 
-    // 检查角色
-    if !realm_roles.is_empty() {
-        let has_required_role = realm_roles.iter().any(|&required_role| {
-            // 检查realm级别角色
-            if let Some(realm_access) = &claims.realm_access {
-                if let Some(roles) = &realm_access.roles {
-                    return roles.iter().any(|user_role| user_role == required_role);
-                }
-            }
-            false
-        });
-        if !has_required_role {
-            return false;
-        }
-    }
-    if resource_ids.is_empty() {
-        // 检查所有资源的权限是否在 resource_roles_or_permissions 中
-        if !resource_roles_or_permissions.is_empty() {
-            let has_required_permission = if let Some(resource_access) = &claims.resource_access {
-                resource_access.values().any(|access| {
-                    if let Some(roles) = &access.roles {
-                        roles
-                            .iter()
-                            .any(|role| resource_roles_or_permissions.contains(&role.as_str()))
-                    } else {
-                        false
-                    }
-                })
-            } else {
-                false
-            };
-
-            if !has_required_permission {
-                return false;
-            }
-        }
-    } else {
-        // 检查指定资源的权限
-
-        // 检查指定资源的权限是否在 resource_roles_or_permissions 中
-        if !resource_roles_or_permissions.is_empty() {
-            let has_required_permission = resource_ids.iter().any(|&resource_id| {
-                if let Some(resource_access) = &claims.resource_access {
-                    if let Some(access) = resource_access.get(resource_id) {
-                        if let Some(roles) = &access.roles {
-                            return roles.iter().any(|role| {
-                                resource_roles_or_permissions.contains(&role.as_str())
-                            });
-                        }
-                    }
-                }
-                false
-            });
-
-            if !has_required_permission {
-                return false;
-            }
-        }
-    }
     true
 }
