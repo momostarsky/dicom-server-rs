@@ -77,7 +77,7 @@ pub(crate) struct ResourceAccess {
 // const SERVER_PORT: u16 = 8080;
 // // const JWKS_URL: &str =    "https://keycloak.medical.org:8443/realms/dicom-org-cn/protocol/openid-connect/certs";
 // const JWKS_URL: &str = "https://127.0.0.1:8443/realms/dicom-org-cn/protocol/openid-connect/certs";
-
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct AuthMiddleware {
     pub(crate) logger: Logger,

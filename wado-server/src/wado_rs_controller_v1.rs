@@ -1,7 +1,7 @@
-use crate::constants::WADO_RS_PERMISSONS_IMAGE_READER;
 use crate::common_utils::generate_series_json;
-use crate::constants::WADO_RS_ID;
-use crate::constants::WADO_RS_ROLES;
+// use crate::constants::WADO_RS_PERMISSONS_IMAGE_READER;
+// use crate::constants::WADO_RS_ID;
+// use crate::constants::WADO_RS_ROLES;
 use crate::constants::WADO_RS_TAG;
 use crate::wado_rs_models::SubSeriesMeta;
 use crate::{AppState, common_utils};
@@ -16,7 +16,7 @@ use common::server_config::{
 use database::dicom_meta::DicomStateMeta;
 use dicom_dictionary_std::tags;
 use dicom_object::OpenFileOptions;
-use permission_macros::permission_required;
+// use permission_macros::permission_required;
 use slog::info;
 use std::path::PathBuf;
 
@@ -93,7 +93,7 @@ async fn get_study_info_with_cache(
     description = "Retrieve Study Metadata in DICOM JSON format",
 )]
 #[get("/studies/{study_instance_uid}/metadata")]
-#[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER ], resource_id=[ WADO_RS_ID ])]
+// #[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER ], resource_id=[ WADO_RS_ID ])]
 async fn retrieve_study_metadata(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -208,7 +208,7 @@ async fn retrieve_study_metadata(
     description = "Retrieve Study Sub-Series in DICOM JSON format",
 )]
 #[get("/studies/{study_instance_uid}/subseries")]
-#[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER ], resource_id=[ WADO_RS_ID ])]
+// #[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER ], resource_id=[ WADO_RS_ID ])]
 async fn retrieve_study_subseries(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -299,7 +299,7 @@ async fn retrieve_study_subseries(
     description = "Retrieve Series Metadata in DICOM JSON format"
 )]
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}/metadata")]
-#[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER ], resource_id=[ WADO_RS_ID ])]
+// #[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER ], resource_id=[ WADO_RS_ID ])]
 async fn retrieve_series_metadata(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -422,7 +422,7 @@ async fn retrieve_series_metadata(
      description = "Retrieve Instance Pixel Data in Octet Stream format"
 )]
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}")]
-#[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER ], resource_id=[ WADO_RS_ID ])]
+// #[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER ], resource_id=[ WADO_RS_ID ])]
 async fn retrieve_instance(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -457,7 +457,7 @@ async fn retrieve_instance(
 #[get(
     "/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}/frames/{frames}"
 )]
-#[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER  ], resource_id=[ WADO_RS_ID ])]
+// #[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER  ], resource_id=[ WADO_RS_ID ])]
 async fn retrieve_instance_frames(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -581,6 +581,7 @@ async fn echo_v1() -> impl Responder {
 
 use crate::auth_middleware_kc::Claims; // 确保能访问Claims结构
 
+#[allow(dead_code)]
 /// 用户权限检查函数
 /// realm_roles: 角色列表, Realm级别到的角色, 例如"doctor", "manager", patient", "admin" 用于标示用户类别, 表示你是谁?
 /// resource_roles_or_permissions: 资源级别的角色或权限列表, 例如 "Read", "Write", "Delete" 用于标示用户权限, 表示你能做什么?

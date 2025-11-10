@@ -13,7 +13,8 @@ mod wado_rs_models;
 use actix_cors::Cors;
 use actix_web::{App, HttpResponse, HttpServer, Responder, middleware, web};
 
-use crate::auth_middleware_kc::{AuthMiddleware, update_jwks_task};
+// use crate::auth_middleware_kc::AuthMiddleware;
+use crate::auth_middleware_kc::update_jwks_task;
 use crate::constants::WADO_RS_CONTEXT_PATH;
 use common::license_manager::validate_client_certificate;
 use common::redis_key::RedisHelper;
@@ -193,16 +194,17 @@ async fn main() -> std::io::Result<()> {
 
     // 在创建app_state之后，启动服务器之前添加以下代码
     if oauth_config.is_some() {
-        let background_app_state = app_state.clone();
+        info!(log, "OAuth2 Config is: {:?}", oauth_config);
+        let oauth2_app_state = app_state.clone();
         tokio::spawn(async move {
-            update_jwks_task(background_app_state).await;
+            update_jwks_task(oauth2_app_state).await;
         });
     }
 
-    // // 启动后台任务管理器
-    let background_app_state = app_state.clone();
+    // // 启动生成JSON格式的Metadata后台任务
+    let metadata_app_state = app_state.clone();
     tokio::spawn(async move {
-        background::background_task_manager(background_app_state).await;
+        background::background_task_manager(metadata_app_state).await;
     });
     info!(
         log,
@@ -257,11 +259,12 @@ async fn main() -> std::io::Result<()> {
                     .wrap(wado_rs_cors)
                     .service(
                         scope::scope("/v1")
-                            .wrap(AuthMiddleware {
-                                logger: app_state.log.clone(),
-                                redis: app_state.redis_helper.clone(),
-                                config: app_state.config.clone(),
-                            })
+                            // 关闭权限验证
+                            // .wrap(AuthMiddleware {
+                            //     logger: app_state.log.clone(),
+                            //     redis: app_state.redis_helper.clone(),
+                            //     config: app_state.config.clone(),
+                            // })
                             .service(wado_rs_controller_v1::retrieve_study_metadata)
                             .service(wado_rs_controller_v1::retrieve_study_subseries)
                             .service(wado_rs_controller_v1::retrieve_series_metadata)
