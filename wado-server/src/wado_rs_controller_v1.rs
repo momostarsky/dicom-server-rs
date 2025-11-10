@@ -1,19 +1,21 @@
-use std::path::PathBuf;
 use crate::common_utils::generate_series_json;
 use crate::constants::WADO_RS_TAG;
-use crate::constants::{WADO_RS_ID, WADO_RS_PERMISSONS, WADO_RS_ROLES};
 use crate::wado_rs_models::SubSeriesMeta;
 use crate::{AppState, common_utils};
 use actix_web::http::header::ACCEPT;
 use actix_web::{HttpMessage, HttpRequest, HttpResponse, Responder, get, web, web::Path};
+use common::dicom_json_helper;
 use common::redis_key::RedisHelper;
-use common::server_config::{dicom_file_path, dicom_series_dir, dicom_study_dir, json_metadata_for_series, json_metadata_for_study};
+use common::server_config::{
+    dicom_file_path, dicom_series_dir, dicom_study_dir, json_metadata_for_series,
+    json_metadata_for_study,
+};
 use database::dicom_meta::DicomStateMeta;
 use dicom_dictionary_std::tags;
 use dicom_object::OpenFileOptions;
 use permission_macros::permission_required;
 use slog::info;
-use common::dicom_json_helper;
+use std::path::PathBuf;
 
 static ACCEPT_DICOM_JSON_TYPE: &str = "application/dicom+json";
 static ACCEPT_JSON_TYPE: &str = "application/json";
@@ -88,7 +90,7 @@ async fn get_study_info_with_cache(
     description = "Retrieve Study Metadata in DICOM JSON format",
 )]
 #[get("/studies/{study_instance_uid}/metadata")]
-#[permission_required(roles = [ "role_patients" ], permissions =[ "image_reader"], resource_id = [ "wado-rs-api"] ) ]
+#[permission_required(roles = [ "role_patients" ], permissions =[ "image_reader"] ) ]
 async fn retrieve_study_metadata(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -203,7 +205,7 @@ async fn retrieve_study_metadata(
     description = "Retrieve Study Sub-Series in DICOM JSON format",
 )]
 #[get("/studies/{study_instance_uid}/subseries")]
-#[permission_required(roles = [ "role_patients" ], permissions =[ "image_reader"], resource_id = [ "wado-rs-api"] ) ]
+#[permission_required(roles = [ "role_patients" ], permissions =[ "image_reader"] ) ]
 async fn retrieve_study_subseries(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -294,6 +296,7 @@ async fn retrieve_study_subseries(
     description = "Retrieve Series Metadata in DICOM JSON format"
 )]
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}/metadata")]
+#[permission_required(roles = [ "role_patients" ], permissions =[ "image_reader"] ) ]
 async fn retrieve_series_metadata(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -416,6 +419,7 @@ async fn retrieve_series_metadata(
      description = "Retrieve Instance Pixel Data in Octet Stream format"
 )]
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}")]
+#[permission_required(roles = [ "role_patients" ], permissions =[ "image_reader"] ) ]
 async fn retrieve_instance(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -450,6 +454,7 @@ async fn retrieve_instance(
 #[get(
     "/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}/frames/{frames}"
 )]
+#[permission_required(roles = [ "role_patients" ], permissions =[ "image_reader"] ) ]
 async fn retrieve_instance_frames(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -655,7 +660,6 @@ fn check_user_permissions(
         }
     }
     if resource_ids.is_empty() {
-
         // 检查所有资源的权限是否在 resource_roles_or_permissions 中
         if !resource_roles_or_permissions.is_empty() {
             let has_required_permission = if let Some(resource_access) = &claims.resource_access {
