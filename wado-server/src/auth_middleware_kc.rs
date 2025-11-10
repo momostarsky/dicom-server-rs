@@ -15,11 +15,16 @@ use std::rc::Rc;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct Claims {
-    iss: String,
-    aud: serde_json::Value,
-    exp: usize,
-    // 添加更多权限相关字段
-    sub: Option<String>,                          // 用户标识
+    iss: String,            //签发方（issuer），明确这个 JWT 是哪个认证系统生成的	必须（标准）
+    sub: Option<String>,    //主题（subject），指用户唯一标识（通常为用户 ID）	必须（标准）
+    aud: serde_json::Value, //受众（audience），JWT 颁发给哪个客户端/应用	必须（强烈建议)
+    exp: usize,             //过期时间（expiration），用于 token 有效期控制	必须（强烈建议）
+    email: Option<String>,
+    name: Option<String>,
+    username: Option<String>,
+    preferred_username: Option<String>,
+    given_name: Option<String>,
+    family_name: Option<String>,
     pub(crate) realm_access: Option<RealmAccess>, // realm 级别权限
     pub(crate) resource_access: Option<std::collections::HashMap<String, ResourceAccess>>, // 资源级别权限
     pub(crate) scope: Option<String>, // 权限范围
@@ -276,6 +281,12 @@ where
 
                     info!(log, "Claims iss:{}", claims.iss);
                     info!(log, "Claims sub:{:?}", claims.sub);
+                    info!(log, "Claims email:{:?}", claims.email);
+                    info!(log, "Claims name:{:?}", claims.name);
+                    info!(log, "Claims username:{:?}", claims.username);
+                    info!(log, "Claims preferred_username:{:?}", claims.preferred_username);
+                    info!(log, "Claims given_name:{:?}", claims.given_name);
+                    info!(log, "Claims family_name:{:?}", claims.family_name);
                     // 解析 realm 级别角色
                     if let Some(realm_access) = &claims.realm_access {
                         if let Some(roles) = &realm_access.roles {

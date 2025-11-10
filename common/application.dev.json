@@ -67,7 +67,9 @@
     "realm_roles": [
       "role_patients"
     ],
-    "resource_id": ["wado-rs-api"],
+    "resource_id": [
+      "wado-rs-api"
+    ],
     "resource_roles": [
       "image_reader"
     ]
