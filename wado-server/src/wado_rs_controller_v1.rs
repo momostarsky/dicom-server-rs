@@ -655,7 +655,7 @@ fn check_user_permissions(
         }
     }
     if resource_ids.is_empty() {
-        // todo!("TODO:检查所有资源的权限  是否在 resource_roles_or_permissions 中") ;
+
         // 检查所有资源的权限是否在 resource_roles_or_permissions 中
         if !resource_roles_or_permissions.is_empty() {
             let has_required_permission = if let Some(resource_access) = &claims.resource_access {
@@ -678,7 +678,7 @@ fn check_user_permissions(
         }
     } else {
         // 检查指定资源的权限
-        // todo!("TODO:检查指定资源的权限 是否在 resource_roles_or_permissions 中") ;
+
         // 检查指定资源的权限是否在 resource_roles_or_permissions 中
         if !resource_roles_or_permissions.is_empty() {
             let has_required_permission = resource_ids.iter().any(|&resource_id| {
