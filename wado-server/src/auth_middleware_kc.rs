@@ -1,6 +1,9 @@
 // auth_middleware_keycloak
 use actix_web::body::{EitherBody, MessageBody};
-use actix_web::{Error, HttpResponse, dev::{Service, ServiceRequest, ServiceResponse, Transform}, HttpMessage};
+use actix_web::{
+    Error, HttpMessage, HttpResponse,
+    dev::{Service, ServiceRequest, ServiceResponse, Transform},
+};
 
 use futures_util::future::LocalBoxFuture;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
@@ -16,11 +19,10 @@ pub(crate) struct Claims {
     aud: serde_json::Value,
     exp: usize,
     // 添加更多权限相关字段
-    sub: Option<String>,               // 用户标识
+    sub: Option<String>,                          // 用户标识
     pub(crate) realm_access: Option<RealmAccess>, // realm 级别权限
     pub(crate) resource_access: Option<std::collections::HashMap<String, ResourceAccess>>, // 资源级别权限
-    pub(crate) scope: Option<String>,             // 权限范围
-                                       // 其他可能的字段
+    pub(crate) scope: Option<String>, // 权限范围
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -256,16 +258,27 @@ where
             validation.set_issuer(&[issuer_url]);
             validation.set_audience(&[audience]);
 
+            info!(log, "系统策略");
+            info!(log, "用 Realm Roles 表达“身份”（Who you are）");
+            info!(
+                log,
+                "用 Client Roles 表达“权限”（What you can do in this app）"
+            );
             match decode::<Claims>(token, &decoding_key, &validation) {
                 Ok(token_data) => {
                     // Token有效（包括未过期），继续处理请求
                     let claims = token_data.claims;
                     // 将用户信息存储在请求扩展中，供后续权限检查使用
                     req.extensions_mut().insert(claims.clone());
+
+                    info!(log, "Claims iss:{}", claims.iss);
                     // 解析 realm 级别角色
                     if let Some(realm_access) = &claims.realm_access {
                         if let Some(roles) = &realm_access.roles {
-                            info!(log, "User realm roles: {:?}", roles);
+
+                            let realm_roles_str = roles.join("\n\t");
+                            info!(log, "Realm Roles:  [\n\t{}\n]", realm_roles_str);
+
                             // 可以在这里检查用户是否具有特定角色
                             // 例如: if roles.contains(&"admin".to_string()) { ... }
                         }
@@ -275,16 +288,21 @@ where
                     if let Some(resource_access) = &claims.resource_access {
                         for (resource, access) in resource_access {
                             if let Some(roles) = &access.roles {
-                                info!(log, "Resource '{}' roles: {:?}", resource, roles);
+                                let realm_roles_str = roles.join("\n\t");
+                                info!(log, "Resource [{}] Roles:  [\n\t{}\n]",resource, realm_roles_str);
                             }
                         }
                     }
 
                     // 解析权限范围
                     if let Some(scope) = &claims.scope {
-                        info!(log, "User scopes: {}", scope);
+
                         // 可以按空格分割获取各个 scope
                         let scopes: Vec<&str> = scope.split_whitespace().collect();
+                        let scopes_str = scopes.join("\n\t");
+                        info!(log, "User Scopes:  [\n\t{}\n]", scopes_str);
+
+
                     }
                     let res = service.call(req).await.map_err(actix_web::Error::from)?;
                     Ok(res.map_into_left_body())

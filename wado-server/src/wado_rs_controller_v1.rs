@@ -1,22 +1,20 @@
-use crate::slog::Error;
+use std::path::PathBuf;
 use crate::common_utils::generate_series_json;
 use crate::constants::WADO_RS_TAG;
+use crate::constants::{WADO_RS_ID, WADO_RS_PERMISSONS, WADO_RS_ROLES};
 use crate::wado_rs_models::SubSeriesMeta;
 use crate::{AppState, common_utils};
 use actix_web::http::header::ACCEPT;
 use actix_web::{HttpMessage, HttpRequest, HttpResponse, Responder, get, web, web::Path};
-use common::dicom_json_helper;
 use common::redis_key::RedisHelper;
-use common::server_config::{
-    dicom_file_path, dicom_series_dir, dicom_study_dir, json_metadata_for_series,
-    json_metadata_for_study,
-};
+use common::server_config::{dicom_file_path, dicom_series_dir, dicom_study_dir, json_metadata_for_series, json_metadata_for_study};
 use database::dicom_meta::DicomStateMeta;
 use dicom_dictionary_std::tags;
 use dicom_object::OpenFileOptions;
 use permission_macros::permission_required;
 use slog::info;
-use std::path::PathBuf;
+use common::dicom_json_helper;
+
 static ACCEPT_DICOM_JSON_TYPE: &str = "application/dicom+json";
 static ACCEPT_JSON_TYPE: &str = "application/json";
 
@@ -90,7 +88,7 @@ async fn get_study_info_with_cache(
     description = "Retrieve Study Metadata in DICOM JSON format",
 )]
 #[get("/studies/{study_instance_uid}/metadata")]
-#[permission_required(roles = ["doctor", "manager"], permissions = ["Read"], resource_id =["wado-rs-api"])]
+#[permission_required(roles = [ "role_patients" ], permissions =[ "image_reader"], resource_id = [ "wado-rs-api"] ) ]
 async fn retrieve_study_metadata(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -205,7 +203,7 @@ async fn retrieve_study_metadata(
     description = "Retrieve Study Sub-Series in DICOM JSON format",
 )]
 #[get("/studies/{study_instance_uid}/subseries")]
-#[permission_required(roles = ["doctor", "manager"], permissions = ["Read"], resource_id = ["wado-rs-api"])]
+#[permission_required(roles = [ "role_patients" ], permissions =[ "image_reader"], resource_id = [ "wado-rs-api"] ) ]
 async fn retrieve_study_subseries(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -575,12 +573,18 @@ async fn echo_v1() -> impl Responder {
 
 use crate::auth_middleware_kc::Claims; // 确保能访问Claims结构
 
-// 权限检查函数
+/// 用户权限检查函数
+/// realm_roles: 角色列表, Realm级别到的角色, 例如"doctor", "manager", patient", "admin" 用于标示用户类别, 表示你是谁?
+/// resource_roles_or_permissions: 资源级别的角色或权限列表, 例如 "Read", "Write", "Delete" 用于标示用户权限, 表示你能做什么?
+/// resource_ids: 资源ID列表, 例如 "wado-rs-api", "account", 用于指定检查哪些资源下的角色
+/// 身份判断：realm_access.roles.contains("role_patient")
+/// 权限判断：resource_access['wado-rs-api'].roles.contains('study_viewer'')
+/// *** 不要用 scope 字段做权限控制***
 fn check_user_permissions(
     req: &HttpRequest,
-    required_roles: &[&str],
-    required_permissions: &[&str],
-    resource_id: &[&str], // 新增参数
+    realm_roles: &[&str],
+    resource_roles_or_permissions: &[&str],
+    resource_ids: &[&str], // 新增参数
 ) -> bool {
     // 从请求扩展中获取用户信息
     let extensions = req.extensions(); // 先绑定到一个变量
@@ -588,9 +592,6 @@ fn check_user_permissions(
         Some(claims) => claims,
         None => return false, // 没有找到用户信息
     };
-
-    println!("check_user_permissions: {:?}", &claims);
-
     // https://www.jwt.io/ claims 示例
     //{
     //   "exp": 1762506440,
@@ -639,59 +640,12 @@ fn check_user_permissions(
     //
 
     // 检查角色
-    if !required_roles.is_empty() {
-        // let has_required_role = required_roles.iter().any(|&required_role| {
-        //     // 检查realm级别角色
-        //     if let Some(realm_access) = &claims.realm_access {
-        //         if let Some(roles) = &realm_access.roles {
-        //             return roles.iter().any(|user_role| user_role == required_role);
-        //         }
-        //     }
-        //
-        //     // 检查资源级别角色
-        //     if let Some(resource_access) = &claims.resource_access {
-        //         for (_, access) in resource_access {
-        //             if let Some(roles) = &access.roles {
-        //                 if roles.iter().any(|user_role| user_role == required_role) {
-        //                     return true;
-        //                 }
-        //             }
-        //         }
-        //     }
-        //     false
-        // });
-        let has_required_role = required_roles.iter().any(|&required_role| {
-            // 如果指定了 resource_id，则只检查该 resource 下的角色
-            if !resource_id.is_empty() {
-                if let Some(resource_access) = &claims.resource_access {
-                    // 遍历所有指定的资源ID
-                    for &resource_key in resource_id {
-                        if let Some(access) = resource_access.get(resource_key) {
-                            if let Some(roles) = &access.roles {
-                                if roles.iter().any(|user_role| user_role == required_role) {
-                                    return true;
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                // 检查realm级别角色
-                if let Some(realm_access) = &claims.realm_access {
-                    if let Some(roles) = &realm_access.roles {
-                        return roles.iter().any(|user_role| user_role == required_role);
-                    }
-                }
-
-                // 检查所有资源级别角色
-                if let Some(resource_access) = &claims.resource_access {
-                    for (_, access) in resource_access {
-                        if let Some(roles) = &access.roles {
-                            if roles.iter().any(|user_role| user_role == required_role) {
-                                return true;
-                            }
-                        }
-                    }
+    if !realm_roles.is_empty() {
+        let has_required_role = realm_roles.iter().any(|&required_role| {
+            // 检查realm级别角色
+            if let Some(realm_access) = &claims.realm_access {
+                if let Some(roles) = &realm_access.roles {
+                    return roles.iter().any(|user_role| user_role == required_role);
                 }
             }
             false
@@ -700,22 +654,50 @@ fn check_user_permissions(
             return false;
         }
     }
-
-    // 检查权限范围
-    if !required_permissions.is_empty() {
-        if let Some(scope) = &claims.scope {
-            let user_scopes: Vec<&str> = scope.split_whitespace().collect();
-            let has_required_permission = required_permissions
-                .iter()
-                .any(|&required_perm| user_scopes.contains(&required_perm));
+    if resource_ids.is_empty() {
+        // todo!("TODO:检查所有资源的权限  是否在 resource_roles_or_permissions 中") ;
+        // 检查所有资源的权限是否在 resource_roles_or_permissions 中
+        if !resource_roles_or_permissions.is_empty() {
+            let has_required_permission = if let Some(resource_access) = &claims.resource_access {
+                resource_access.values().any(|access| {
+                    if let Some(roles) = &access.roles {
+                        roles
+                            .iter()
+                            .any(|role| resource_roles_or_permissions.contains(&role.as_str()))
+                    } else {
+                        false
+                    }
+                })
+            } else {
+                false
+            };
 
             if !has_required_permission {
                 return false;
             }
-        } else {
-            return false; // 用户没有权限范围信息
+        }
+    } else {
+        // 检查指定资源的权限
+        // todo!("TODO:检查指定资源的权限 是否在 resource_roles_or_permissions 中") ;
+        // 检查指定资源的权限是否在 resource_roles_or_permissions 中
+        if !resource_roles_or_permissions.is_empty() {
+            let has_required_permission = resource_ids.iter().any(|&resource_id| {
+                if let Some(resource_access) = &claims.resource_access {
+                    if let Some(access) = resource_access.get(resource_id) {
+                        if let Some(roles) = &access.roles {
+                            return roles.iter().any(|role| {
+                                resource_roles_or_permissions.contains(&role.as_str())
+                            });
+                        }
+                    }
+                }
+                false
+            });
+
+            if !has_required_permission {
+                return false;
+            }
         }
     }
-
     true
 }
