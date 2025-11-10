@@ -1,13 +1,12 @@
-use actix_web::{HttpRequest, HttpResponse};
+use actix_web::HttpRequest;
 use common::dicom_json_helper::walk_directory;
 use common::dicom_utils::get_tag_values;
 use common::server_config::{dicom_series_dir, json_metadata_for_series};
 use database::dicom_meta::DicomStateMeta;
 use dicom_dictionary_std::tags;
-use dicom_object::OpenFileOptions;
 use dicom_object::collector::CharacterSetOverride;
-use serde_json::{Map, json};
-use slog::{error, log};
+use dicom_object::OpenFileOptions;
+use serde_json::{json, Map};
 use std::collections::HashMap;
 use std::io::Error;
 use tokio::task;

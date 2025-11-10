@@ -33,7 +33,7 @@ chrono = { workspace = true }
 redis = { workspace = true }
 url = { workspace = true }
 gdcm_conv = { workspace = true }
-reqwest = { workspace = true, version = "0.12.24", features = ["native-tls"] }
+reqwest = { workspace = true,  features = ["native-tls"] }
 openssl = { workspace = true }
 sysinfo = "0.29"
 database = { path = "../database" }

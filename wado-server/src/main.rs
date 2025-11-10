@@ -200,10 +200,10 @@ async fn main() -> std::io::Result<()> {
     }
 
     // // 启动后台任务管理器
-    // let background_app_state = app_state.clone();
-    // tokio::spawn(async move {
-    //     background::background_task_manager(background_app_state).await;
-    // });
+    let background_app_state = app_state.clone();
+    tokio::spawn(async move {
+        background::background_task_manager(background_app_state).await;
+    });
     info!(
         log,
         "Starting the server at {}:{}", server_config.host, server_config.port

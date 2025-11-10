@@ -1,5 +1,4 @@
 use config::{Config, ConfigError, Environment, File};
-use database::dicom_dbtype::BoundedString;
 use database::dicom_meta::DicomStateMeta;
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
@@ -105,9 +104,6 @@ pub struct AppConfig {
 }
 
 static APP_ENV: &str = "APP_ENV";
-static ISSUER_URL: &str = "ISSUER_URL";
-static AUDIENCE: &str = "AUDIENCE";
-static JWKS_URL: &str = "JWKS_URL";
 static APP_PREFIX: &str = "DICOM";
 
 // 全局配置实例和初始化状态
@@ -510,7 +506,7 @@ pub fn dicom_study_dir(
             )
         })?;
     }
-    Ok((study_dir))
+    Ok(study_dir)
 }
 
 pub fn dicom_series_dir(
@@ -540,7 +536,7 @@ pub fn dicom_series_dir(
             )
         })?;
     }
-    Ok((study_dir))
+    Ok(study_dir)
 }
 
 pub fn make_series_dicom_dir(
@@ -558,8 +554,8 @@ pub fn make_series_dicom_dir(
     })?;
     let dicom_store_path = &app_config.local_storage.dicm_store_path;
     let study_dir = format!(
-        "{}/{}/{}/{}",
-        dicom_store_path, study_date, study_uid, series_uid
+        "{}/{}/{}/{}/{}",
+        dicom_store_path, tenant_id, study_date, study_uid, series_uid
     );
     if create_not_exists {
         std::fs::create_dir_all(&study_dir).map_err(|e| {
@@ -572,7 +568,7 @@ pub fn make_series_dicom_dir(
             )
         })?;
     }
-    Ok((study_dir))
+    Ok(study_dir)
 }
 
 pub fn json_metadata_for_study(
@@ -601,7 +597,7 @@ pub fn json_metadata_for_study(
             )
         })?
     }
-    Ok((json_path))
+    Ok(json_path)
 }
 
 pub fn json_metadata_for_series(

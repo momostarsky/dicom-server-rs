@@ -7,7 +7,7 @@ use database::dicom_meta::{DicomImageMeta, DicomStateMeta};
 use dicom_dictionary_std::tags;
 use dicom_object::InMemDicomObject;
 use serde::{Deserialize, Serialize};
-use x509_parser::nom::Parser;
+ 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[non_exhaustive]

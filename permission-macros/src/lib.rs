@@ -1,12 +1,12 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::punctuated::Punctuated;
-use syn::{Ident, ItemFn, LitStr, Token, parse::Parse, parse::ParseStream, parse_macro_input};
+use syn::{parse::Parse, parse::ParseStream, parse_macro_input, Expr, Ident, ItemFn, Token};
 
 struct PermissionArgs {
-    roles: Vec<String>,
-    permissions: Vec<String>,
-    resource_id: Vec<String>,
+    roles: Vec<Expr>,
+    permissions: Vec<Expr>,
+    resource_id: Vec<Expr>,
 }
 
 impl Parse for PermissionArgs {
@@ -23,14 +23,14 @@ impl Parse for PermissionArgs {
                 "roles" | "permissions" | "resource_id" => {
                     let content;
                     syn::bracketed!(content in input);
-                    let list = Punctuated::<LitStr, Token![,]>::parse_terminated(&content)?;
+                    let list = Punctuated::<Expr, Token![,]>::parse_terminated(&content)?;
 
                     if ident == "roles" {
-                        roles = list.iter().map(|s| s.value()).collect();
+                        roles = list.into_iter().collect();
                     } else if ident == "resource_id" {
-                        resource_id = list.iter().map(|s| s.value()).collect();
+                        resource_id = list.into_iter().collect();
                     } else {
-                        permissions = list.iter().map(|s| s.value()).collect();
+                        permissions = list.into_iter().collect();
                     }
                 }
                 _ => return Err(syn::Error::new_spanned(ident, "Unknown attribute")),
@@ -54,8 +54,7 @@ pub fn permission_required(args: TokenStream, input: TokenStream) -> TokenStream
     let args = parse_macro_input!(args as PermissionArgs);
     let input_fn = parse_macro_input!(input as ItemFn);
 
-    let fn_name = &input_fn.sig.ident;
-    let fn_vis = &input_fn.vis;
+     let fn_vis = &input_fn.vis;
     let fn_sig = &input_fn.sig;
     let fn_block = &input_fn.block;
 
