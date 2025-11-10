@@ -93,7 +93,7 @@ async fn get_study_info_with_cache(
     description = "Retrieve Study Metadata in DICOM JSON format",
 )]
 #[get("/studies/{study_instance_uid}/metadata")]
-// #[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER ], resource_id=[ WADO_RS_ID ])]
+ 
 async fn retrieve_study_metadata(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -208,7 +208,7 @@ async fn retrieve_study_metadata(
     description = "Retrieve Study Sub-Series in DICOM JSON format",
 )]
 #[get("/studies/{study_instance_uid}/subseries")]
-// #[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER ], resource_id=[ WADO_RS_ID ])]
+ 
 async fn retrieve_study_subseries(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -299,7 +299,7 @@ async fn retrieve_study_subseries(
     description = "Retrieve Series Metadata in DICOM JSON format"
 )]
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}/metadata")]
-// #[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER ], resource_id=[ WADO_RS_ID ])]
+ 
 async fn retrieve_series_metadata(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -422,7 +422,7 @@ async fn retrieve_series_metadata(
      description = "Retrieve Instance Pixel Data in Octet Stream format"
 )]
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}")]
-// #[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER ], resource_id=[ WADO_RS_ID ])]
+ 
 async fn retrieve_instance(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -457,7 +457,7 @@ async fn retrieve_instance(
 #[get(
     "/studies/{study_instance_uid}/series/{series_instance_uid}/instances/{sop_instance_uid}/frames/{frames}"
 )]
-// #[permission_required(roles = [  WADO_RS_ROLES ], permissions =[ WADO_RS_PERMISSONS_IMAGE_READER  ], resource_id=[ WADO_RS_ID ])]
+ 
 async fn retrieve_instance_frames(
     req: HttpRequest,
     app_state: web::Data<AppState>,

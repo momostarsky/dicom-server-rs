@@ -14,7 +14,7 @@ use actix_cors::Cors;
 use actix_web::{App, HttpResponse, HttpServer, Responder, middleware, web};
 
 // use crate::auth_middleware_kc::AuthMiddleware;
-use crate::auth_middleware_kc::update_jwks_task;
+use crate::auth_middleware_kc::{update_jwks_task, AuthMiddleware};
 use crate::constants::WADO_RS_CONTEXT_PATH;
 use common::license_manager::validate_client_certificate;
 use common::redis_key::RedisHelper;
@@ -260,11 +260,11 @@ async fn main() -> std::io::Result<()> {
                     .service(
                         scope::scope("/v1")
                             // 关闭权限验证
-                            // .wrap(AuthMiddleware {
-                            //     logger: app_state.log.clone(),
-                            //     redis: app_state.redis_helper.clone(),
-                            //     config: app_state.config.clone(),
-                            // })
+                            .wrap(AuthMiddleware {
+                                logger: app_state.log.clone(),
+                                redis: app_state.redis_helper.clone(),
+                                config: app_state.config.clone(),
+                            })
                             .service(wado_rs_controller_v1::retrieve_study_metadata)
                             .service(wado_rs_controller_v1::retrieve_study_subseries)
                             .service(wado_rs_controller_v1::retrieve_series_metadata)

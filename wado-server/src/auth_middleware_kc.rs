@@ -143,6 +143,9 @@ where
         let cfg = gconfig.wado_oauth2.unwrap().clone();
         let issuer_url = cfg.issuer_url;
         let audience = cfg.audience;
+        let realm_roels = cfg.realm_roles;
+        let resource_roles = cfg.resource_roles;
+        let resource_id = cfg.resource_id;
         // 修改为模式匹配方式：
         let jwks_uri_content = match redis_helper.get_jwks_url_content() {
             Ok(content) => {
@@ -272,10 +275,10 @@ where
                     req.extensions_mut().insert(claims.clone());
 
                     info!(log, "Claims iss:{}", claims.iss);
+                    info!(log, "Claims sub:{:?}", claims.sub);
                     // 解析 realm 级别角色
                     if let Some(realm_access) = &claims.realm_access {
                         if let Some(roles) = &realm_access.roles {
-
                             let realm_roles_str = roles.join("\n\t");
                             info!(log, "Realm Roles:  [\n\t{}\n]", realm_roles_str);
 
@@ -289,21 +292,42 @@ where
                         for (resource, access) in resource_access {
                             if let Some(roles) = &access.roles {
                                 let realm_roles_str = roles.join("\n\t");
-                                info!(log, "Resource [{}] Roles:  [\n\t{}\n]",resource, realm_roles_str);
+                                info!(
+                                    log,
+                                    "Resource [{}] Roles:  [\n\t{}\n]", resource, realm_roles_str
+                                );
                             }
                         }
                     }
 
                     // 解析权限范围
                     if let Some(scope) = &claims.scope {
-
                         // 可以按空格分割获取各个 scope
                         let scopes: Vec<&str> = scope.split_whitespace().collect();
                         let scopes_str = scopes.join("\n\t");
                         info!(log, "User Scopes:  [\n\t{}\n]", scopes_str);
-
-
                     }
+                    // 在调用 validate_user_permissions 之前进行转换
+                    let realm_roles_refs: Vec<&str> =
+                        realm_roels.iter().map(|s| s.as_str()).collect();
+                    let resource_roles_refs: Vec<&str> =
+                        resource_roles.iter().map(|s| s.as_str()).collect();
+                    let resource_id_refs: Vec<&str> =
+                        resource_id.iter().map(|s| s.as_str()).collect();
+
+                    // 在调用 validate_user_permissions 时使用转换后的变量
+                    if !validate_user_permissions(
+                        &req,
+                        &realm_roles_refs,
+                        &resource_roles_refs,
+                        &resource_id_refs,
+                    ) {
+                        let response = HttpResponse::Forbidden().body("Insufficient permissions");
+                        let res =
+                            req.into_response(response.map_into_boxed_body().map_into_right_body());
+                        return Ok(res);
+                    }
+
                     let res = service.call(req).await.map_err(actix_web::Error::from)?;
                     Ok(res.map_into_left_body())
                 }
@@ -382,4 +406,125 @@ async fn fetch_and_store_jwks(
     let _ = redis_helper.set_jwks_url_content(txt, 6000); // 设置10分钟过期时间
 
     Ok(())
+}
+
+fn validate_user_permissions(
+    req: &ServiceRequest,
+    realm_roles: &[&str],
+    resource_roles_or_permissions: &[&str],
+    resource_ids: &[&str], // 新增参数
+) -> bool {
+    // 从请求扩展中获取用户信息
+    let extensions = req.extensions(); // 先绑定到一个变量
+    let claims = match extensions.get::<Claims>() {
+        Some(claims) => claims,
+        None => return false, // 没有找到用户信息
+    };
+    // https://www.jwt.io/ claims 示例
+    //{
+    //   "exp": 1762506440,
+    //   "iat": 1762506140,
+    //   "jti": "trrtcc:05ce0ed4-a94d-8344-4cc2-8b86f0b3469b",
+    //   "iss": "https://keycloak.medical.org:8443/realms/dicom-org-cn",
+    //   "aud": [
+    //     "wado-rs-api",
+    //     "account"
+    //   ],
+    //   "sub": "ac901127-ee57-4e88-89a3-fed70d4eb429",
+    //   "typ": "Bearer",
+    //   "azp": "wado-rs-api",
+    //   "acr": "1",
+    //   "allowed-origins": [
+    //     "/*"
+    //   ],
+    //   "realm_access": {
+    //     "roles": [
+    //       "offline_access",
+    //       "default-roles-dicom-org-cn",
+    //       "uma_authorization"
+    //     ]
+    //   },
+    //   "resource_access": {
+    //     "wado-rs-api": {
+    //       "roles": [
+    //         "uma_protection"
+    //       ]
+    //     },
+    //     "account": {
+    //       "roles": [
+    //         "manage-account",
+    //         "manage-account-links",
+    //         "view-profile"
+    //       ]
+    //     }
+    //   },
+    //   "scope": "profile email",
+    //   "email_verified": false,
+    //   "clientHost": "172.26.0.1",
+    //   "preferred_username": "service-account-wado-rs-api",
+    //   "clientAddress": "172.26.0.1",
+    //   "client_id": "wado-rs-api"
+    // }
+    //
+
+    // 检查角色
+    if !realm_roles.is_empty() {
+        let has_required_role = realm_roles.iter().any(|&required_role| {
+            // 检查realm级别角色
+            if let Some(realm_access) = &claims.realm_access {
+                if let Some(roles) = &realm_access.roles {
+                    return roles.iter().any(|user_role| user_role == required_role);
+                }
+            }
+            false
+        });
+        if !has_required_role {
+            return false;
+        }
+    }
+    if resource_ids.is_empty() {
+        // 检查所有资源的权限是否在 resource_roles_or_permissions 中
+        if !resource_roles_or_permissions.is_empty() {
+            let has_required_permission = if let Some(resource_access) = &claims.resource_access {
+                resource_access.values().any(|access| {
+                    if let Some(roles) = &access.roles {
+                        roles
+                            .iter()
+                            .any(|role| resource_roles_or_permissions.contains(&role.as_str()))
+                    } else {
+                        false
+                    }
+                })
+            } else {
+                false
+            };
+
+            if !has_required_permission {
+                return false;
+            }
+        }
+    } else {
+        // 检查指定资源的权限
+
+        // 检查指定资源的权限是否在 resource_roles_or_permissions 中
+        if !resource_roles_or_permissions.is_empty() {
+            let has_required_permission = resource_ids.iter().any(|&resource_id| {
+                if let Some(resource_access) = &claims.resource_access {
+                    if let Some(access) = resource_access.get(resource_id) {
+                        if let Some(roles) = &access.roles {
+                            return roles.iter().any(|role| {
+                                resource_roles_or_permissions.contains(&role.as_str())
+                            });
+                        }
+                    }
+                }
+                false
+            });
+
+            if !has_required_permission {
+                return false;
+            }
+        }
+    }
+    true
 }

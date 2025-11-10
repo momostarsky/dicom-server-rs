@@ -81,6 +81,9 @@ pub struct OAuth2Config {
     pub issuer_url: String,
     pub audience: String,
     pub jwks_url: String,
+    pub realm_roles: Vec<String>,
+    pub resource_id: Vec<String>,
+    pub resource_roles: Vec<String>,
 }
 
 // "wado_oauth2": {
@@ -393,6 +396,9 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
                 println!("wado_oauth2:issuer_url {:?}", oa2.issuer_url);
                 println!("wado_oauth2:audience {:?}", oa2.audience);
                 println!("wado_oauth2:jwks_url {:?}", oa2.jwks_url);
+                println!("wado_oauth2:realm_roles {:?}", oa2.realm_roles);
+                println!("wado_oauth2:resource_id {:?}", oa2.resource_id);
+                println!("wado_oauth2:resource_roles {:?}", oa2.resource_roles);
             }
 
             CONFIG = Some(app_config);
@@ -511,7 +517,7 @@ pub fn dicom_study_dir(
 
 pub fn dicom_series_dir(
     study_info: &DicomStateMeta,
-    create_not_exists: bool,
+    create_when_not_exists: bool,
 ) -> Result<String, std::io::Error> {
     let app_config = load_config().map_err(|e| {
         std::io::Error::new(
@@ -528,7 +534,7 @@ pub fn dicom_series_dir(
         study_info.study_uid.as_str(),
         study_info.series_uid.as_str()
     );
-    if create_not_exists {
+    if create_when_not_exists {
         std::fs::create_dir_all(&study_dir).map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -544,7 +550,7 @@ pub fn make_series_dicom_dir(
     study_date: &str,
     study_uid: &str,
     series_uid: &str,
-    create_not_exists: bool,
+    create_when_not_exists: bool,
 ) -> Result<String, std::io::Error> {
     let app_config = load_config().map_err(|e| {
         std::io::Error::new(
@@ -557,7 +563,7 @@ pub fn make_series_dicom_dir(
         "{}/{}/{}/{}/{}",
         dicom_store_path, tenant_id, study_date, study_uid, series_uid
     );
-    if create_not_exists {
+    if create_when_not_exists {
         std::fs::create_dir_all(&study_dir).map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -573,7 +579,7 @@ pub fn make_series_dicom_dir(
 
 pub fn json_metadata_for_study(
     study_info: &DicomStateMeta,
-    create_not_exists: bool,
+    create_when_not_exists: bool,
 ) -> Result<String, std::io::Error> {
     let app_config = load_config().map_err(|e| {
         std::io::Error::new(
@@ -589,7 +595,7 @@ pub fn json_metadata_for_study(
         study_info.study_date_origin.as_str()
     );
     let json_path = format!("{}/{}.json", study_dir, study_info.study_uid.as_str());
-    if create_not_exists {
+    if create_when_not_exists {
         std::fs::create_dir_all(&study_dir).map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -602,7 +608,7 @@ pub fn json_metadata_for_study(
 
 pub fn json_metadata_for_series(
     study_info: &DicomStateMeta,
-    create_not_exists: bool,
+    create_when_not_exists: bool,
 ) -> Result<String, std::io::Error> {
     let app_config = load_config().map_err(|e| {
         std::io::Error::new(
@@ -619,7 +625,7 @@ pub fn json_metadata_for_series(
         study_info.study_uid.as_str()
     );
     let json_path = format!("{}/{}.json", study_dir, study_info.series_uid.as_str());
-    if create_not_exists {
+    if create_when_not_exists {
         std::fs::create_dir_all(&study_dir).map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
