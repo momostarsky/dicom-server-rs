@@ -151,8 +151,8 @@ where
         let issuer_url = cfg.issuer_url;
         let audience = cfg.audience;
 
-        let role_mapping = cfg.roles.unwrap().clone();
-        let permission_mapping = cfg.permissions.unwrap().clone();
+        let role_mapping = cfg.roles.clone();
+        let permission_mapping = cfg.permissions.clone();
 
         // 修改为模式匹配方式：
         let jwks_uri_content = match redis_helper.get_jwks_url_content() {
@@ -293,28 +293,24 @@ where
                     );
                     info!(log, "Claims given_name:{:?}", claims.given_name);
                     info!(log, "Claims family_name:{:?}", claims.family_name);
-                    // 解析 realm 级别角色
-                    if let Some(realm_access) = &claims.realm_access {
-                        if let Some(roles) = &realm_access.roles {
-                            let realm_roles_str = roles.join("\n\t");
-                            info!(log, "Realm Roles:  [\n\t{}\n]", realm_roles_str);
 
-                            // 可以在这里检查用户是否具有特定角色
-                            // 例如: if roles.contains(&"admin".to_string()) { ... }
+                    if role_mapping.is_some() || permission_mapping.is_some() {
+                        // 在调用 validate_user_permissions 时使用转换后的变量
+                        if !validate_user_permissions(
+                            &req,
+                            &role_mapping,
+                            &permission_mapping,
+                            &log,
+                        ) {
+                            let response =
+                                HttpResponse::Forbidden().body("Insufficient permissions");
+                            let res = req.into_response(
+                                response.map_into_boxed_body().map_into_right_body(),
+                            );
+                            return Ok(res);
                         }
-                    }
-
-                    // 在调用 validate_user_permissions 时使用转换后的变量
-                    if !validate_user_permissions(
-                        &req,
-                        &role_mapping,
-                        &permission_mapping,
-                        &log,
-                    ) {
-                        let response = HttpResponse::Forbidden().body("Insufficient permissions");
-                        let res =
-                            req.into_response(response.map_into_boxed_body().map_into_right_body());
-                        return Ok(res);
+                    } else {
+                        info!(log, "No role mapping or permission mapping found.");
                     }
 
                     let res = service.call(req).await.map_err(actix_web::Error::from)?;
@@ -399,8 +395,8 @@ async fn fetch_and_store_jwks(
 
 fn validate_user_permissions(
     req: &ServiceRequest,
-    role_mapping: &RoleRule,
-    permission_mapping: &RoleRule,
+    role_mapping: &Option<RoleRule>,
+    permission_mapping: &Option<RoleRule>,
     log: &Logger,
 ) -> bool {
     // 从请求扩展中获取用户信息
@@ -415,39 +411,39 @@ fn validate_user_permissions(
         Err(_) => return false,
     };
     info!(log, "Claims JSON:{}", claims_json);
-
     // 验证角色映射
-    if !validate_role_or_permission(&claims_json, role_mapping,log) {
-        return false;
+    if role_mapping.is_some() {
+        let role_mapping = role_mapping.as_ref();
+        if !validate_role_or_permission(&claims_json, role_mapping.unwrap(), log) {
+            return false;
+        }
     }
-
     // 验证权限映射
-    if !validate_role_or_permission(&claims_json, permission_mapping,log ) {
-        return false;
+    if permission_mapping.is_some() {
+        let permission_mapping = permission_mapping.as_ref();
+        if !validate_role_or_permission(&claims_json, permission_mapping.unwrap(), log) {
+            return false;
+        }
     }
-
     true
 }
 
 use serde_json::{Value as JsonValue, Value};
 
-fn validate_role_or_permission(claims: &Value, rule: &RoleRule,logger: &Logger) -> bool {
-
+fn validate_role_or_permission(claims: &Value, rule: &RoleRule, logger: &Logger) -> bool {
     path_values_intersect(
         &claims,
         rule.json_path.as_str(),
         rule.required_values.as_slice(),
-        &logger
+        &logger,
     )
 }
 
 use std::collections::HashSet;
 
-
 /// Extract values (as strings) from `claims_json` using `json_path`.
 /// Returns a Vec\<String\> of all extracted scalar/array items converted to strings.
 pub fn extract_values_as_strings(claims_json: &JsonValue, json_path: &str) -> Vec<String> {
-
     match jsonpath_lib::select(claims_json, json_path) {
         Ok(nodes) => {
             let mut out = Vec::new();
@@ -482,10 +478,13 @@ pub fn path_values_intersect(
     claims_json: &JsonValue,
     json_path: &str,
     rule_values: &[String],
-    logger: &Logger
+    logger: &Logger,
 ) -> bool {
     let extracted = extract_values_as_strings(claims_json, json_path);
-    info!(logger,"path: {}  and extracted: {:?}", json_path, extracted);
+    info!(
+        logger,
+        "path: {}  and extracted: {:?}", json_path, extracted
+    );
     if extracted.is_empty() || rule_values.is_empty() {
         return false;
     }
