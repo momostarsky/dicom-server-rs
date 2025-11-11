@@ -32,7 +32,7 @@ impl RedisHelper {
         Ok(connection)
     }
 
-    const JWKS_URL_KEY: &str = "jwksurl:8e646686-9d36-480b-95ea-1718b24c1c98";
+    const JWKS_URL_KEY: &'static str = "jwksurl:8e646686-9d36-480b-95ea-1718b24c1c98";
     pub fn set_jwks_url_content(&self, txt: String, expire_seconds: u64) {
         let client = self.make_client();
         if !client.is_ok() {
