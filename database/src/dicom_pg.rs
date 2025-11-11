@@ -539,6 +539,61 @@ impl DbProvider for PgDbProvider {
 
         Ok(result)
     }
+
+    async fn get_json_meta(
+        &self,
+        tenant_id: &str,
+        study_uid: &str,
+        series_uid: &str,
+    ) -> Result<DicomJsonMeta, DbError> {
+        let client = self.make_client().await?;
+        let statement = client
+            .prepare(
+                "SELECT
+                tenant_id,
+                study_uid,
+                series_uid,
+                study_uid_hash,
+                series_uid_hash,
+                study_date_origin,
+                flag_time,
+                created_time,
+                json_status,
+                retry_times
+            FROM dicom_json_meta
+            WHERE series_uid = $1  and tenant_id  = $2 and study_uid = $3 ",
+            )
+            .await
+            .map_err(|e| DbError::DatabaseError(e.to_string()))?;
+
+        let rows = client
+            .query(&statement, &[&series_uid, &tenant_id, &study_uid])
+            .await
+            .map_err(|e| DbError::DatabaseError(e.to_string()))?;
+
+        if rows.is_empty() {
+            return Err(DbError::RecordNotExists(format!(
+                "DicomJsonMeta with series_uid {} not found",
+                series_uid
+            )));
+        }
+
+        let row = &rows[0];
+        let json_meta = DicomJsonMeta {
+            tenant_id: row.get(0),
+            study_uid: row.get(1),
+            series_uid: row.get(2),
+            study_uid_hash: row.get(3),
+            series_uid_hash: row.get(4),
+            study_date_origin: row.get(5),
+            flag_time: row.get(6),
+            created_time: row.get(7),
+            json_status: row.get(8),
+            retry_times: row.get(9),
+        };
+
+        Ok(json_meta)
+    }
 }
 #[cfg(test)]
 mod tests {

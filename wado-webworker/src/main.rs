@@ -7,7 +7,7 @@ use database::dicom_dbprovider::DbProvider;
 use slog::{Logger, error, info};
 use std::sync::Arc;
 
-mod background;
+mod json_creator;
 #[derive(Clone)]
 struct AppState {
     log: Logger,
@@ -143,7 +143,6 @@ async fn main() -> std::io::Result<()> {
     };
 
     let g_config = config.clone();
-    let server_config = config.server;
     let local_storage_config = config.local_storage;
     info!(log, "LocalStorage Config is: {:?}", local_storage_config);
 
@@ -156,6 +155,6 @@ async fn main() -> std::io::Result<()> {
         redis_helper: RedisHelper::new(reids_conn),
     };
 
-    background::background_task_manager(app_state).await;
+    json_creator::background_task_manager(app_state).await;
     Ok(())
 }

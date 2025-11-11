@@ -7,6 +7,10 @@ pub enum DbError {
     #[error("Database operation failed: {0}")]
     DatabaseError(String),
 
+    #[error("DataRow not exists: {0}")]
+    RecordNotExists(String),
+
+
     #[error("Record already exists")]
     AlreadyExists,
 
@@ -39,4 +43,6 @@ pub trait DbProvider: Send + Sync {
      * end_time: 截止时间.
      */
     async fn get_json_metaes(&self, end_time: chrono::NaiveDateTime) -> Result<Vec<DicomStateMeta>, DbError>;
+
+    async fn get_json_meta(&self, tenant_id:&str, study_uid: &str, series_uid: &str)->Result<DicomJsonMeta, DbError>;
 }

@@ -5,21 +5,16 @@ use crate::message_sender::MessagePublisher;
 use database::dicom_meta::{DicomImageMeta, DicomStateMeta, DicomStoreMeta};
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu::Whatever;
-use dicom_object::{OpenFileOptions, ReadError};
+use dicom_object::ReadError;
 use dicom_object::file::CharacterSetOverride;
 use slog::LevelFilter;
 use slog::{Drain, Logger, error, info, o};
 use std::collections::HashSet;
 use std::fs;
 use std::fs::OpenOptions;
-use std::io::Error;
+
 use std::path::Path;
 use std::sync::OnceLock;
-use serde_json::{json, Map};
-use tokio::task;
-use crate::dicom_json_helper::walk_directory;
-use crate::dicom_utils::get_tag_values;
-use crate::storage_config::{dicom_series_dir, json_metadata_for_series};
 
 /// 获取当前时间
 pub fn get_current_time() -> chrono::NaiveDateTime {
@@ -282,114 +277,4 @@ pub async fn publish_image_messages(
         }
     }
     Ok(())
-}
-
-
-pub async fn generate_series_json(series_info: &DicomStateMeta) -> Result<String, Error> {
-    let json_file_path = match json_metadata_for_series(&series_info, true) {
-        Ok(v) => v,
-        Err(e) => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to get json_file_path for generate: {}", e),
-            ));
-        }
-    };
-
-    let dicom_dir = match dicom_series_dir(series_info, false) {
-        Ok(vv) => vv,
-        Err(_) => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Failed to retrieve dicom_dir",
-            ));
-        }
-    };
-
-    let files = match walk_directory(dicom_dir) {
-        Ok(files) => files,
-        Err(e) => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to walk directory: {}", e),
-            ));
-        }
-    };
-    let mut handles = vec![];
-
-    for file_path in &files {
-        // 读取 DICOM 文件内容
-        let file_path_clone = file_path.clone(); // 克隆路径供异步任务使用
-        let handle = task::spawn_blocking(move || {
-            // 读取 DICOM 文件内容
-            let sop_json = match OpenFileOptions::new()
-                .charset_override(CharacterSetOverride::AnyVr)
-                .read_until(tags::PIXEL_DATA)
-                .open_file(&file_path_clone)
-            {
-                Ok(dicom_object) => {
-                    let mut dicom_json = Map::new();
-                    dicom_object.tags().into_iter().for_each(|tag| {
-                        let value_str: Vec<String> = get_tag_values(tag, &dicom_object);
-                        let vr = dicom_object.element(tag).expect("REASON").vr().to_string();
-                        let tag_key = format!("{:04X}{:04X}", tag.group(), tag.element());
-                        let element_json = json!({
-                            "vr": vr,
-                            "Value": value_str
-                        });
-                        dicom_json.insert(tag_key, element_json);
-                    });
-                    Ok(dicom_json)
-                }
-                Err(e) => Err(format!(
-                    "Failed to read DICOM file {}: {}",
-                    file_path_clone.display(),
-                    e
-                )),
-            };
-            sop_json
-        });
-        handles.push(handle);
-    }
-
-    // 等待所有任务完成
-    let mut arr = vec![];
-    for handle in handles {
-        match handle.await {
-            Ok(result) => match result {
-                Ok(sop_json) => arr.push(sop_json),
-                Err(e) => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Failed to walk directory: {}", e),
-                    ));
-                }
-            },
-            Err(e) => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to walk directory: {}", e),
-                ));
-            }
-        }
-    }
-
-    let json = match serde_json::to_string(&arr) {
-        Ok(json) => {
-            if let Err(e) = std::fs::write(&json_file_path, &json) {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to write  JSON to file: {}", e),
-                ));
-            }
-            json
-        }
-        Err(e) => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to generate JSON: {}", e),
-            ));
-        }
-    };
-    Ok(json)
 }

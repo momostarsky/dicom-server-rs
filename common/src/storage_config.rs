@@ -105,7 +105,7 @@ pub fn make_series_dicom_dir(
     Ok(study_dir)
 }
 
-pub fn json_metadata_for_study(
+pub fn json_metadata_path_for_study(
     study_info: &DicomStateMeta,
     create_when_not_exists: bool,
 ) -> Result<String, std::io::Error> {
@@ -134,7 +134,7 @@ pub fn json_metadata_for_study(
     Ok(json_path)
 }
 
-pub fn json_metadata_for_series(
+pub fn json_metadata_path_for_series(
     study_info: &DicomStateMeta,
     create_when_not_exists: bool,
 ) -> Result<String, std::io::Error> {

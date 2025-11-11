@@ -1,5 +1,5 @@
 use crate::AppState;
-use common::utils::generate_series_json;
+use common::dicom_json_helper::generate_series_json;
 use database::dicom_dbprovider::current_time;
 use database::dicom_meta::DicomJsonMeta;
 use slog::{error, info};
