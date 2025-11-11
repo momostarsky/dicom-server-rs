@@ -1,6 +1,6 @@
 use crate::dicom_utils;
 
-use crate::server_config::hash_uid;
+use crate::storage_config::hash_uid;
 use chrono::{NaiveDate, NaiveTime};
 use database::dicom_dbtype::{BoundedString, DicomDateString};
 use database::dicom_meta::{DicomImageMeta, DicomStateMeta};

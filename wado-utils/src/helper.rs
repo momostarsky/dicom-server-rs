@@ -1,10 +1,12 @@
 use std::fs;
 use std::path::Path;
 
+#[allow(dead_code)]
 pub fn get_current_time() -> chrono::NaiveDateTime {
     chrono::Local::now().naive_local()
 }
 
+#[allow(dead_code)]
 /// 递归遍历目录，并收集所有.dcm文件
 pub fn collect_dicom_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
     if let Ok(entries) = fs::read_dir(dir) {
@@ -23,7 +25,7 @@ pub fn collect_dicom_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
         }
     }
 }
-
+#[allow(dead_code)]
 /// 递归遍历目录，并收集所有指定文件类型 例如: JPG, PNG, GIF
 pub fn collect_dicom_files_withext(
     dir: &Path,

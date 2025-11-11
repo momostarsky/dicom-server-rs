@@ -20,8 +20,9 @@ pub mod server_config;
 
 pub mod utils;
 
-mod encrypt_helper;
+pub mod encrypt_helper;
 pub mod redis_key;
+pub mod storage_config;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DicomMessage {

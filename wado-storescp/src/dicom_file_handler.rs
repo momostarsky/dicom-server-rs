@@ -2,8 +2,8 @@ use chrono::NaiveDate;
 
 use common::dicom_utils::get_tag_value;
 use common::message_sender_kafka::KafkaMessagePublisher;
-use common::server_config;
-use common::server_config::hash_uid;
+use common::{server_config, storage_config};
+use common::storage_config::hash_uid;
 use common::utils::get_logger;
 use database::dicom_dbtype::{BoundedString, FixedLengthString};
 use database::dicom_meta::{DicomStoreMeta, TransferStatus};
@@ -194,7 +194,7 @@ pub(crate) async fn process_dicom_file(
     let mut file_obj = obj.with_exact_meta(file_meta);
 
     let dir_path =
-        server_config::make_series_dicom_dir(tenant_id, &study_date, &study_uid, &series_uid, true)
+        storage_config::make_series_dicom_dir(tenant_id, &study_date, &study_uid, &series_uid, true)
             .whatever_context(format!(
         "failed to get dicom series dir: tenant_id={}, study_date={}, study_uid={}, series_uid={}",
         tenant_id, study_date, study_uid, series_uid
@@ -202,7 +202,7 @@ pub(crate) async fn process_dicom_file(
     let study_uid_hash_v = hash_uid(study_uid.as_str());
     let series_uid_hash_v = hash_uid(series_uid.as_str());
 
-    let file_path = server_config::dicom_file_path(&dir_path, sop_instance_uid);
+    let file_path = storage_config::dicom_file_path(&dir_path, sop_instance_uid);
 
     info!(logger, "file path: {}", file_path);
     let mut final_ts = ts.to_string();

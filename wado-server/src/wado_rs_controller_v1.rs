@@ -9,7 +9,7 @@ use actix_web::http::header::ACCEPT;
 use actix_web::{HttpMessage, HttpRequest, HttpResponse, Responder, get, web, web::Path};
 use common::dicom_json_helper;
 use common::redis_key::RedisHelper;
-use common::server_config::{
+use common::storage_config::{
     dicom_file_path, dicom_series_dir, dicom_study_dir, json_metadata_for_series,
     json_metadata_for_study,
 };
