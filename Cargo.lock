@@ -6211,22 +6211,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "wado-utils"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "const-crc32",
- "md5",
- "serde",
- "serde_json",
- "slog",
- "slog-async",
- "slog-term",
- "snafu",
- "uuid",
-]
-
-[[package]]
 name = "wado-webworker"
 version = "0.1.0"
 dependencies = [
