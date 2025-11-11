@@ -1,11 +1,11 @@
 use crate::AppState;
-use database::dicom_dbprovider::{current_time};
-use database::dicom_meta::{DicomJsonMeta};
+use common::utils::generate_series_json;
+use database::dicom_dbprovider::current_time;
+use database::dicom_meta::DicomJsonMeta;
 use slog::{error, info};
 use std::ops::Sub;
 use sysinfo::{CpuExt, System, SystemExt};
 use tokio::time::{Duration, interval};
-use common::utils::generate_series_json;
 
 // 后台任务管理器
 pub(crate) async fn background_task_manager(app_state: AppState) {
@@ -89,7 +89,7 @@ async fn execute_background_json_generation(
     for record in pending_records {
         // 这里应该调用实际的JSON生成逻辑
         // 可以参考wado_rs_controller.rs中的实现
-        match generate_series_json( &record).await {
+        match generate_series_json(&record).await {
             Ok(_) => {
                 info!(
                     app_state.log,

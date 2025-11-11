@@ -1,4 +1,4 @@
-use crate::common_utils::generate_series_json;
+ 
 // use crate::constants::WADO_RS_PERMISSONS_IMAGE_READER;
 // use crate::constants::WADO_RS_ID;
 // use crate::constants::WADO_RS_ROLES;
@@ -19,6 +19,7 @@ use dicom_object::OpenFileOptions;
 // use permission_macros::permission_required;
 use slog::info;
 use std::path::PathBuf;
+use common::utils::generate_series_json;
 
 static ACCEPT_DICOM_JSON_TYPE: &str = "application/dicom+json";
 static ACCEPT_JSON_TYPE: &str = "application/json";

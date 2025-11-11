@@ -33,5 +33,10 @@ pub trait DbProvider: Send + Sync {
         study_uid: &str,
     ) -> Result<Vec<DicomStateMeta>, DbError>;
 
+
+    /*
+     * 获取需要生成JSON格式的Metadata的序列信息.
+     * end_time: 截止时间.
+     */
     async fn get_json_metaes(&self, end_time: chrono::NaiveDateTime) -> Result<Vec<DicomStateMeta>, DbError>;
 }
