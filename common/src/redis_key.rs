@@ -1,6 +1,7 @@
 use crate::server_config::RedisConfig;
 use database::dicom_meta::DicomStateMeta;
 use redis::Commands;
+use std::string::ToString;
 
 #[derive(Debug, Clone)]
 pub struct RedisHelper {
@@ -30,6 +31,27 @@ impl RedisHelper {
 
         Ok(connection)
     }
+
+    const JWKS_URL_KEY: &'static str = "jwksurl:8e646686-9d36-480b-95ea-1718b24c1c98";
+    pub fn set_jwks_url_content(&self, txt: String, expire_seconds: u64) {
+        let client = self.make_client();
+        if !client.is_ok() {
+            return;
+        }
+
+        let mut cl = client.unwrap();
+        let _: Result<String, _> = cl.set_ex(Self::JWKS_URL_KEY.to_string(), txt, expire_seconds);
+    }
+
+    pub fn get_jwks_url_content(&self) -> Result<String, redis::RedisError> {
+        let mut client = match self.make_client() {
+            Ok(client) => client,
+            Err(e) => return Err(e),
+        };
+
+        client.get::<String, String>(Self::JWKS_URL_KEY.to_string())
+    }
+
     /// 生成的KEY用于将StudyUID的元数据缓存在Redis中
     pub fn key_for_study_metadata(&self, tenant_id: &str, study_uid: &str) -> String {
         format!("wado:{}:study:{}:metadata", tenant_id, study_uid)
@@ -65,25 +87,6 @@ impl RedisHelper {
             }
             Err(_) => {}
         }
-    }
-
-    pub fn set_jwks_url_content(&self, txt: String, expire_seconds: u64) {
-        let client = self.make_client();
-        if !client.is_ok() {
-            return;
-        }
-        let key = "jwksurl:8e646686-9d36-480b-95ea-1718b24c1c98".to_string();
-        let mut cl = client.unwrap();
-        let _: Result<String, _> = cl.set_ex(key, txt, expire_seconds);
-    }
-
-    pub fn get_jwks_url_content(&self) -> Result<String, redis::RedisError> {
-        let mut client = match self.make_client() {
-            Ok(client) => client,
-            Err(e) => return Err(e),
-        };
-        let key = "jwksurl:8e646686-9d36-480b-95ea-1718b24c1c98".to_string();
-        client.get::<String, String>(key)
     }
 
     pub fn del_study_metadata(&self, tenant_id: &str, study_uid: &str) {

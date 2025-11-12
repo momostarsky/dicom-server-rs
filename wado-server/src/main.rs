@@ -1,7 +1,6 @@
 pub mod common_utils;
 
 mod auth_middleware_kc;
-mod background;
 mod constants;
 mod wado_rs_controller_v1;
 mod wado_rs_models;
@@ -14,7 +13,7 @@ use actix_cors::Cors;
 use actix_web::{App, HttpResponse, HttpServer, Responder, middleware, web};
 
 // use crate::auth_middleware_kc::AuthMiddleware;
-use crate::auth_middleware_kc::{update_jwks_task, AuthMiddleware};
+use crate::auth_middleware_kc::{AuthMiddleware, update_jwks_task};
 use crate::constants::WADO_RS_CONTEXT_PATH;
 use common::license_manager::validate_client_certificate;
 use common::redis_key::RedisHelper;
@@ -201,11 +200,6 @@ async fn main() -> std::io::Result<()> {
         });
     }
 
-    // // 启动生成JSON格式的Metadata后台任务
-    let metadata_app_state = app_state.clone();
-    tokio::spawn(async move {
-        background::background_task_manager(metadata_app_state).await;
-    });
     info!(
         log,
         "Starting the server at {}:{}", server_config.host, server_config.port

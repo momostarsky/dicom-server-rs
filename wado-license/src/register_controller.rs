@@ -5,22 +5,23 @@ use std::fs;
 use common::cert_helper;
 use lazy_static::lazy_static;
 use regex::Regex;
+use serde::Serialize;
 use slog::info;
 use tokio::fs::File as TokioFile;
 use tokio_util::io::ReaderStream;
-#[derive(serde::Deserialize)]
-struct ClientRegisterParams {
-    client_id: String,
-    client_name: String,
-    client_hash_code: String,
-    end_date: String,
+#[derive(serde::Deserialize,Serialize)]
+pub(crate) struct ClientRegisterParams {
+    pub(crate) client_id: String,
+    pub(crate) client_name: String,
+    pub(crate) client_hash_code: String,
+    pub(crate) end_date: String,
 }
 
-const CA_FILE: &str = "/opt/dicom-server/ca_root.pem";
-const CA_KEY_FILE: &str = "/opt/dicom-server/ca_key_root.pem";
+pub(crate) const   CA_FILE: &str = "/opt/dicom-server/ca_root.pem";
+pub(crate) const CA_KEY_FILE: &str = "/opt/dicom-server/ca_key_root.pem";
 
 impl ClientRegisterParams {
-    fn validate(&self) -> Result<(), String> {
+    pub(crate) fn validate(&self) -> Result<(), String> {
         // Validate client_id: 字母数字组合，16位
         lazy_static! {
             static ref CLIENT_ID_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9]{16}$").unwrap();
@@ -34,7 +35,7 @@ impl ClientRegisterParams {
 
         // Validate client_name: 字母数字组合并支持,. 10到64位
         lazy_static! {
-            static ref CLIENT_NAME_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9,.\s]{10,64}$").unwrap();
+             static ref CLIENT_NAME_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9,.\s\u{4e00}-\u{9fff}]{10,64}$").unwrap();
         }
         if !CLIENT_NAME_REGEX.is_match(&self.client_name) {
             return Err("client_name must be between 10 and 64 characters long and contain only letters, numbers, commas, periods, and spaces".to_string());
@@ -296,7 +297,7 @@ async fn process_client_registration(
     HttpResponse::Ok()
         .append_header(("Content-Type", "application/octet-stream"))
         .append_header(("Content-Disposition", content_disposition))
-        .streaming(stream) 
+        .streaming(stream)
 }
 
 pub(crate) async fn manual_hello() -> impl Responder {

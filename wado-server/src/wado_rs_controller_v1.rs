@@ -1,4 +1,3 @@
-use crate::common_utils::generate_series_json;
 // use crate::constants::WADO_RS_PERMISSONS_IMAGE_READER;
 // use crate::constants::WADO_RS_ID;
 // use crate::constants::WADO_RS_ROLES;
@@ -10,13 +9,14 @@ use actix_web::{HttpMessage, HttpRequest, HttpResponse, Responder, get, web, web
 use common::dicom_json_helper;
 use common::redis_key::RedisHelper;
 use common::storage_config::{
-    dicom_file_path, dicom_series_dir, dicom_study_dir, json_metadata_for_series,
-    json_metadata_for_study,
+    dicom_file_path, dicom_series_dir, dicom_study_dir, json_metadata_path_for_series,
+    json_metadata_path_for_study,
 };
-use database::dicom_meta::DicomStateMeta;
+use database::dicom_meta::{DicomJsonMeta, DicomStateMeta};
 use dicom_dictionary_std::tags;
 use dicom_object::OpenFileOptions;
 // use permission_macros::permission_required;
+use common::dicom_json_helper::generate_series_json;
 use slog::info;
 use std::path::PathBuf;
 
@@ -72,7 +72,35 @@ async fn get_study_info_with_cache(
         }
     }
 }
+async fn get_series_json_meta(
+    tenant_id: &str,
+    study_uid: &str,
+    series_uid: &str,
+    app_state: &web::Data<AppState>,
+) -> Option<DicomJsonMeta> {
+    let log = app_state.log.clone();
 
+    match app_state
+        .db
+        .get_json_meta(tenant_id, study_uid, series_uid)
+        .await
+    {
+        Ok(metas) => {
+            info!(
+                log,
+                "Retrieved DicomJsonMeta :{} from database  success", series_uid
+            );
+            Some(metas)
+        }
+        Err(_) => {
+            info!(
+                log,
+                "Retrieved DicomJsonMeta :{} from database  failed ", series_uid
+            );
+            None
+        }
+    }
+}
 #[utoipa::path(
 
     get,
@@ -107,17 +135,6 @@ async fn retrieve_study_metadata(
         "retrieve_study_metadata Tenant ID: {}  and StudyUID:{} ", tenant_id, study_uid
     );
 
-    // 首先尝试从 Redis 缓存中获取数据
-    let rh = &app_state.redis_helper;
-    // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
-    let is_not_found = rh.get_study_entity_not_exists(tenant_id.as_str(), study_uid.as_str());
-
-    if is_not_found.is_ok() {
-        return HttpResponse::NotFound().body(format!(
-            "retrieve_study_metadata Study not found in database retry after 30 seconds: {},{}",
-            tenant_id, study_uid
-        ));
-    }
     // 检查 Accept 头
     let accept = req.headers().get(ACCEPT).and_then(|v| v.to_str().ok());
 
@@ -136,6 +153,17 @@ async fn retrieve_study_metadata(
             ACCEPT_DICOM_JSON_TYPE, ACCEPT_JSON_TYPE
         ));
     }
+    // 首先尝试从 Redis 缓存中获取数据
+    let rh = &app_state.redis_helper;
+    // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
+    let is_not_found = rh.get_study_entity_not_exists(tenant_id.as_str(), study_uid.as_str());
+
+    if is_not_found.is_ok() {
+        return HttpResponse::NotFound().body(format!(
+            "retrieve_study_metadata Study not found in database retry after 30 seconds: {},{}",
+            tenant_id, study_uid
+        ));
+    }
 
     //  从缓存中加载study_info
     let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state, true).await
@@ -152,7 +180,7 @@ async fn retrieve_study_metadata(
 
     info!(log, "Study Info: {:?}", study_info.first());
     let study_info = study_info.first().unwrap();
-    let json_path = match json_metadata_for_study(&study_info, false) {
+    let json_path = match json_metadata_path_for_study(&study_info, false) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -168,11 +196,22 @@ async fn retrieve_study_metadata(
         }
     };
 
+    // 判断JSON是否生成
+    let db_json = get_series_json_meta(&tenant_id, &study_uid, &study_uid, &app_state).await;
+    if db_json.is_some() && std::path::Path::new(&json_path).exists() {
+        let read_context = std::fs::read_to_string(&json_path);
+        if read_context.is_ok() {
+            return HttpResponse::Ok()
+                .content_type(ACCEPT_DICOM_JSON_TYPE)
+                .body(read_context.unwrap());
+        }
+    }
+    // 重新生成JSON
     if !std::path::Path::new(&json_path).exists() {
         let dicom_path = PathBuf::from(&dicom_dir);
         let json_path = PathBuf::from(&json_path);
         info!(log, "DICOM directory: {:?}", dicom_path);
-        if let Err(e) = dicom_json_helper::generate_json_file(&dicom_path, &json_path) {
+        if let Err(e) = dicom_json_helper::generate_study_json(&dicom_path, &json_path) {
             return HttpResponse::InternalServerError().body(format!(
                 "retrieve_study_metadata Failed to generate JSON file: {}: {}",
                 json_path.display(),
@@ -369,7 +408,7 @@ async fn retrieve_series_metadata(
     info!(log, "Series Info: {:?}", series_info);
 
     let series_info = series_info.unwrap();
-    let json_file_path = match json_metadata_for_series(&series_info, true) {
+    let json_file_path = match json_metadata_path_for_series(&series_info, true) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -566,8 +605,6 @@ async fn retrieve_instance_impl(
 // Echo endpoint - 如果你也想让它出现在API文档里:
 #[utoipa::path(
     get,
-
-
     responses(
         (status = 200, description = "Echo Success"),
     ),
@@ -589,10 +626,14 @@ use crate::auth_middleware_kc::Claims; // 确保能访问Claims结构
 /// 身份判断：realm_access.roles.contains("role_patient")
 /// 权限判断：resource_access['wado-rs-api'].roles.contains('study_viewer'')
 /// *** 不要用 scope 字段做权限控制***
+#[allow(dead_code)]
 fn check_user_permissions(
     req: &HttpRequest,
+
     realm_roles: &[&str],
+
     resource_roles_or_permissions: &[&str],
+
     resource_ids: &[&str], // 新增参数
 ) -> bool {
     // 从请求扩展中获取用户信息
@@ -601,6 +642,10 @@ fn check_user_permissions(
         Some(claims) => claims,
         None => return false, // 没有找到用户信息
     };
+    println!(
+        "claims: {:?}, roles:{:?}, permissions:{:?}, resource_ids:{:?}",
+        claims, realm_roles, resource_roles_or_permissions, resource_ids
+    );
     // https://www.jwt.io/ claims 示例
     //{
     //   "exp": 1762506440,

@@ -30,11 +30,12 @@ pub(crate) struct Claims {
     // pub(crate) scope: Option<String>, // 权限范围
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct RealmAccess {
     pub(crate) roles: Option<Vec<String>>, // realm 角色
 }
-
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct ResourceAccess {
     pub(crate) roles: Option<Vec<String>>, // 资源角色

@@ -23,105 +23,31 @@ sudo cp ~/dicom-org-cn.crt  /usr/local/share/ca-certificates/dicom-org-cn.crt
 sudo update-ca-certificates
 ```
 
-### 创建任务 Apache Doris 从 Kafka 加载数据
-```MySQL
+### 服务用途及说明
+|服务| 用途                                                    |  
+|---|-------------------------------------------------------|
+|wado-server| DICOMWEB  WADO-RS RESTFul API 支持 OAuth2 认证.           | 
+|wado-storescp| 只负责写磁盘和消息队列                                       |
+|wado-consumer| 从storage-queue读,往dicom_state_queue,dicom_image_queue写 |
+|wado-webworker| storage-queue                                         |
 
-CREATE TABLE IF NOT EXISTS dicom_object_meta (
-                                                 trace_id            VARCHAR(36)   NOT NULL COMMENT "全局唯一追踪ID，作为主键",
-                                                 worker_node_id      VARCHAR(64)   NOT NULL COMMENT "工作节点 ID",
-                                                 tenant_id           VARCHAR(64)   NOT NULL COMMENT "租户ID",
-                                                 patient_id          VARCHAR(64)   NOT NULL COMMENT "患者ID",
-                                                 study_uid           VARCHAR(64)   NULL,
-                                                 series_uid          VARCHAR(64)   NULL,
-                                                 sop_uid             VARCHAR(64)   NULL,
-                                                 file_size           BIGINT        NULL,
-                                                 file_path           VARCHAR(1024) NULL,
-                                                 transfer_syntax_uid VARCHAR(64)   NULL,
-                                                 number_of_frames    INT           NULL,
-                                                 created_time        DATETIME      NULL,
-                                                 series_uid_hash     BIGINT        NULL,
-                                                 study_uid_hash      BIGINT        NULL,
-                                                 accession_number    VARCHAR(64)   NULL,
-                                                 target_ts           VARCHAR(64)   NULL,
-                                                 study_date          DATE          NULL,
-                                                 transfer_status     VARCHAR(64)   NULL,
-                                                 source_ip           VARCHAR(24)   NULL,
-                                                 source_ae           VARCHAR(64)   NULL
-)
-ENGINE = OLAP
-UNIQUE KEY(trace_id)  -- 逻辑主键，自动去重
-COMMENT "DICOM 对象元数据表"
-DISTRIBUTED BY HASH(trace_id) BUCKETS 10
-PROPERTIES (
-    "replication_num" = "1",
-    "enable_unique_key_merge_on_write" = "true",  -- ⭐ 必须开启（3.x 默认可能已开）
-    "light_schema_change" = "true",               -- 允许快速加列
-    "store_row_column" = "true"                   -- 加速点查（3.0+ 新特性）
-);
-```
 
-```load from kafka
-STOP ROUTINE LOAD FOR dicom_routine_load;
--- 重新创建任务，指定 JSON 格式
- CREATE ROUTINE LOAD dicom_routine_load ON dicom_object_meta
-COLUMNS (
-    trace_id,
-    worker_node_id,
-    tenant_id,
-    patient_id,
-    study_uid,
-    series_uid,
-    sop_uid,
-    file_size,
-    file_path,
-    transfer_syntax_uid,
-    number_of_frames,
-    created_time,
-    series_uid_hash,
-    study_uid_hash,
-    accession_number,
-    target_ts,
-    study_date,
-    transfer_status,
-    source_ip,
-    source_ae
-)
-PROPERTIES (
-    "desired_concurrent_number" = "3",
-    "max_batch_interval" = "10",
-    "max_batch_rows" = "300000",
-    "max_batch_size" = "209715200",
-    "format" = "json",
-    "jsonpaths" = "[\"$.trace_id\",
-                    \"$.worker_node_id\",
-                    \"$.tenant_id\",
-                    \"$.patient_id\",
-                    \"$.study_uid\",
-                    \"$.series_uid\",
-                    \"$.sop_uid\",
-                    \"$.file_size\",
-                    \"$.file_path\",
-                    \"$.transfer_syntax_uid\",
-                    \"$.number_of_frames\",
-                    \"$.created_time\",
-                    \"$.series_uid_hash\",
-                    \"$.study_uid_hash\",
-                    \"$.accession_number\",
-                    \"$.target_ts\",
-                    \"$.study_date\",
-                    \"$.transfer_status\",
-                    \"$.source_ip\",
-                    \"$.source_ae\"]",
-    "max_error_number" = "1000"
-)
-FROM KAFKA (
-    "kafka_broker_list" = "192.168.1.14:9092",
-    "kafka_topic" = "log_queue",
-    "kafka_partitions" = "0",
-    "property.kafka_default_offsets" = "OFFSET_BEGINNING"
-);
+###  wado-server
 
- 
-SHOW ROUTINE LOAD FOR dicom_routine_load;
+    DICOM Web WADO-RS API 接口实现 ,根据配置选项决定是否开启 OAuth2 认证.
 
-```
+### wado-storescp
+
+    DICOM CStoreSCP 服务,接收DICOM文件并写入磁盘,同是分发消息到Kafka:  storage_queue,log_queue      
+    - 1.存储文件路径: ${ROOT}/<TenantID>/<StudyInstanceUID>/<SeriesInstanceUID>/<SopInstanceUID>.dcm
+    - 2.往消息队列: storage_queue ,log_queue 发送消息
+
+### wado-consumer
+
+    消费Kafka消息队列storage_queue ,提取DicomStateMeta 到主数据库,并通过消息队列:dicom_state_queue,dicom_image_queue发布DicomStateMeta,DicomImageMeta 到Doris数据库
+    - 1.从storage-queue读,往dicom_state_queue,dicom_image_queue写
+    - 2.提取DicomStateMeta 到主数据库,
+    - 3.通过消息队列:dicom_state_queue,dicom_image_queue发布DicomStateMeta,DicomImageMeta 到Doris数据库 Stream_Load 模式
+### wado-webworker
+
+    定期扫描数据库,根据最后更新时间生成JSON格式的metadata用于加速WADO-Server的访问

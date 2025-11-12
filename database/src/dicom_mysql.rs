@@ -601,6 +601,62 @@ impl DbProvider for MySqlDbProvider {
 
         Ok(result)
     }
+
+    async fn get_json_meta(&self,tenant_id:&str, study_uid: &str, series_uid: &str) -> std::result::Result<DicomJsonMeta, DbError> {
+        // 创建数据库连接
+        let mut conn = mysql::Conn::new(self.db_connection_string.as_str())
+            .map_err(|e| DbError::DatabaseError(format!("Failed to connect to MySQL: {}", e)))?;
+
+        // 准备查询语句
+        let query = r#"
+        SELECT
+            tenant_id,
+            study_uid,
+            series_uid,
+            study_uid_hash,
+            series_uid_hash,
+            study_date_origin,
+            created_time,
+            flag_time,
+            json_status,
+            retry_times
+        FROM dicom_json_meta
+        WHERE series_uid = :series_uid and tenant_id = :tenant_id and study_uid = :study_uid
+    "#;
+
+        // 执行查询并手动映射结果
+        let result: Option<DicomJsonMeta> = conn
+            .exec_first(
+                query,
+                params! {
+                    "series_uid" => series_uid,
+                    "tenant_id" => tenant_id,
+                    "study_uid" => study_uid,
+                },
+            )
+            .map_err(|e| DbError::DatabaseError(format!("Failed to execute query: {}", e)))?
+            .map(|row: mysql::Row| DicomJsonMeta {
+                tenant_id: row.get("tenant_id").unwrap_or_default(),
+                study_uid: row.get("study_uid").unwrap_or_default(),
+                series_uid: row.get("series_uid").unwrap_or_default(),
+                study_uid_hash: row.get("study_uid_hash").unwrap_or_default(),
+                series_uid_hash: row.get("series_uid_hash").unwrap_or_default(),
+                study_date_origin: row.get("study_date_origin").unwrap_or_default(),
+                created_time: row.get("created_time").unwrap_or_default(),
+                flag_time: row.get("flag_time").unwrap_or_default(),
+                json_status: row.get("json_status").unwrap_or_default(),
+                retry_times: row.get("retry_times").unwrap_or_default(),
+            });
+
+        // 检查是否找到记录
+        match result {
+            Some(json_meta) => Ok(json_meta),
+            None => Err(DbError::DatabaseError(format!(
+                "DicomJsonMeta with series_uid {} not found",
+                series_uid
+            ))),
+        }
+    }
 }
 
 #[cfg(test)]

@@ -1,0 +1,48 @@
+[package]
+name = "wado-webworker"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+dicom-core = { workspace = true }
+dicom-ul = { workspace = true }
+dicom-object = { workspace = true }
+dicom-encoding = { workspace = true }
+dicom-dictionary-std = { workspace = true }
+dicom-transfer-syntax-registry = { workspace = true }
+dicom-pixeldata = { workspace = true }
+actix-web = { workspace = true }
+actix-cors = { workspace = true }
+slog = { workspace = true }
+slog-term = { workspace = true }
+slog-async = { workspace = true }
+serde = { workspace = true  ,features = ["derive"]}
+serde_qs = { workspace = true }
+serde_json = { workspace = true }
+urlencoding = { workspace = true }
+futures-util = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true }
+http = { workspace = true }
+http-body-util = { workspace = true }
+futures = { workspace = true }
+mime = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+redis = { workspace = true }
+url = { workspace = true }
+gdcm_conv = { workspace = true }
+reqwest = { workspace = true,  features = ["native-tls"] }
+openssl = { workspace = true }
+sysinfo = "0.29"
+database = { path = "../database" }
+common = { path = "../common" }
+utoipa = { version = "5.4.0", features = ["actix_extras", "non_strict_integers","chrono","time","openapi_extensions","rc_schema","config"] }
+utoipa-swagger-ui = { version = "9", features = ["actix-web"] }
+utoipa-actix-web =  { version = "0.1.2"  }
+jsonwebtoken = {  version =  "10.1.0", features = ["rust_crypto" ] }
+thiserror = "1.0.69"
+jsonpath-rust = "1.0.4"
+jsonpath_lib = "0.3.0"
+log = "0.4.28"
