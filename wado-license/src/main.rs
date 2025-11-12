@@ -5,9 +5,9 @@ use crate::register_controller::{
     client_registe_get, client_registe_post, get_ca_certificate, manual_hello,
 };
 use actix_cors::Cors;
-use actix_web::{App, HttpServer, middleware, web};
 use actix_session::{SessionMiddleware, storage::CookieSessionStore};
 use actix_web::cookie::Key;
+use actix_web::{App, HttpServer, middleware, web};
 
 use common::utils::setup_logging;
 use slog::Logger;
@@ -28,11 +28,13 @@ async fn main() -> std::io::Result<()> {
 
     // 在 main 函数中
     let current_dir = env::current_dir().expect("Failed to get current directory");
-    println!(
+    info!(
+        &clog,
         "Starting server at current work directory: {}",
         current_dir.display()
     );
-
+    let static_dir = format!("{}/static", current_dir.as_path().to_str().unwrap());
+    info!(&clog, "License Static File Directory Is : {}", static_dir);
     HttpServer::new(move || {
         let mut cors = Cors::default()
             .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
@@ -43,27 +45,29 @@ async fn main() -> std::io::Result<()> {
         use actix_files as fs;
 
         App::new()
-            .wrap(
-                SessionMiddleware::new(
-                    CookieSessionStore::default(),
-                    Key::from(&[0; 64]),          // 生产环境需用随机安全密钥
-                )
-            )
+            .wrap(SessionMiddleware::new(
+                CookieSessionStore::default(),
+                Key::from(&[0; 64]), // 生产环境需用随机安全密钥
+            ))
             // 使用.wrap()方法添加Compress中间件
             .wrap(middleware::Compress::default())
             .wrap(cors)
             .app_data(web::Data::new(app_state.clone()))
-            .service(fs::Files::new("/static", "./static").show_files_listing())
+            .service(fs::Files::new("/static", static_dir.as_str()).show_files_listing())
             .service(client_registe_get)
             .service(client_registe_post)
             .service(get_ca_certificate)
-            .route("/create", web::get().to(client_register::show_register_form)) // 显示表单页面
+            .route(
+                "/create",
+                web::get().to(client_register::show_register_form),
+            ) // 显示表单页面
             .route("/", web::get().to(client_register::show_login_form)) // 显示表单页面
             .route("/login", web::post().to(client_register::handle_login_post)) // 显示表单页面
             .route(
                 "/register",
                 web::post().to(client_register::handle_form_post),
             ) // 处理表单提交
+            .route("/captcha", web::get().to(client_register::refresh_captcha))
             .route("/hey", web::get().to(manual_hello))
     })
     .bind(("0.0.0.0", 8888))?

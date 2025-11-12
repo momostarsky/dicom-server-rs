@@ -36,10 +36,16 @@ pub(crate) async fn show_register_form(
     let end_date_str = format!("{}1231", next_year); // 设置为下一年的12月31日
     // 在生成默认 client_id 的地方修改为：
     let mut rng = rand::rng();
-    let random_suffix = rng.random_range(1000..=9999);
-    let client_id = format!("HZXS20252701{}", random_suffix);
-    // 生成64-128位随机字符串
-    let hash_code_length = rand::rng().random_range(64..=128);
+
+    let client_code = rand::rng()
+        .sample_iter(&Alphanumeric)
+        .take(8)
+        .map(char::from)
+        .collect::<String>()
+        .to_uppercase();
+    let client_id = format!("HZXS2701{}", client_code);
+    // 生成32-64位随机字符串
+    let hash_code_length = rand::rng().random_range(32..=64);
     let random_hash_code = rand::rng()
         .sample_iter(&Alphanumeric)
         .take(hash_code_length)
@@ -76,26 +82,26 @@ pub(crate) async fn show_register_form(
                                 </div>
                                 <div class="card-body">
                                     {}
-                                    <form action="/register" method="post">
+                                    <form id="register-form" action="/register" method="post">
                                         <div class="mb-3">
                                             <label for="client_id" class="form-label">ClientID:</label>
-                                            <input type="text" class="form-control" id="client_id" name="client_id" max-length=32  value="{}" required>
+                                            <input type="text" class="form-control" id="client_id" name="client_id" max-length=32  value="{}" required />
                                         </div>
 
                                         <div class="mb-3">
                                             <label for="client_name" class="form-label">ClientName:</label>
-                                            <input type="text" class="form-control" id="client_name" name="client_name" value="{}"  max-length=64 required>
+                                            <input type="text" class="form-control" id="client_name" name="client_name" value="{}"  max-length=64 required />
                                         </div>
                                         <div class="mb-3">
                                             <label for="hash_code" class="form-label">HashCode:</label>
-                                            <input type="text" class="form-control" id="hash_code" name="hash_code" value="{}" max-length=128 required>
+                                            <input type="text" class="form-control" id="hash_code" name="hash_code" value="{}" max-length=128 required />
                                         </div>
                                          <div class="mb-3">
                                             <label for="expired_date" class="form-label">ExpiredDate:</label>
-                                            <input type="text" class="form-control" id="expired_date" name="expired_date" value="{}" max-length=8 required>
+                                            <input type="text" class="form-control" id="expired_date" name="expired_date" value="{}" max-length=8 required />
                                         </div>
                                         <div class="d-grid">
-                                            <input type="submit" class="btn btn-primary" value="提交">
+                                            <input type="submit" class="btn btn-primary" value="提交" />
                                         </div>
                                     </form>
                                 </div>
@@ -107,6 +113,46 @@ pub(crate) async fn show_register_form(
                 <script src="/static/lib/jquery/dist/jquery.min.js"></script>
                 <script src="/static/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
                 <script src="/static/js/site.js" asp-append-version="true"></script>
+                <script>
+                    document.getElementById('register-form').addEventListener('submit', function(e) {{
+                        e.preventDefault(); // 阻止默认提交
+
+                        const form = e.target;
+                        const formData = new FormData(form);
+                            // 转换为 URL 编码格式
+                        const urlEncodedData = new URLSearchParams(formData).toString();
+
+                        fetch(form.action, {{
+                            method: 'POST',
+                            body: urlEncodedData,
+                            headers: {{
+                                'Content-Type': 'application/x-www-form-urlencoded'
+                            }}
+                        }}).then(response => {{
+                            // 触发文件下载
+                            if (response.ok) {{
+                                const disposition = response.headers.get('Content-Disposition');
+                                const filename = disposition ? disposition.split('filename=')[1].replace(/"/g, '') : 'client.crt';
+
+                                response.blob().then(blob => {{
+                                    const url = window.URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = filename;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    window.URL.revokeObjectURL(url);
+                                    document.body.removeChild(a);
+
+                                    // 跳转到列表页面
+                                    window.location.href = '/list';
+                                }});
+                            }}
+                        }}).catch(error => {{
+                            console.error('Error:', error);
+                        }});
+                    }});
+            </script>
             </body>
         </html>
     "#,
@@ -121,6 +167,10 @@ pub(crate) async fn show_register_form(
 pub(crate) async fn show_login_form(
     session: Session, // 添加 Session 参数
 ) -> Result<HttpResponse> {
+    // 生成CSRF令牌并存储到session
+    let csrf_token = generate_csrf_token();
+    session.insert("csrf_token", &csrf_token)?;
+
     // 不要清除所有session数据，只读取错误消息
     let error_message = session.get::<String>("login_error").unwrap_or(None);
     // 清除错误消息，避免重复显示
@@ -132,6 +182,27 @@ pub(crate) async fn show_login_form(
     } else {
         String::new()
     };
+
+    let mut captcha = Captcha::new();
+    captcha
+        .add_chars(4)
+        .apply_filter(Noise::new(0.4))
+        .apply_filter(Wave::new(2.0, 20.0).horizontal())
+        .apply_filter(Wave::new(2.0, 20.0).vertical())
+        .view(220, 120)
+        .apply_filter(Dots::new(5))
+        .as_png();
+
+    // 获取验证码文本
+    let captcha_text = captcha.chars_as_string();
+
+    // 生成PNG图片数据
+    let png_bytes = captcha.as_png().unwrap();
+    // let (captcha_text, png_bytes) = generate_captcha_png();
+    // // 将验证码文本存储到session中用于后续验证
+    session.insert("captcha", captcha_text)?;
+    // // 将PNG字节数据编码为Base64字符串
+    let captcha_base64 = general_purpose::STANDARD.encode(&png_bytes);
 
     let html = format!(
         r#"
@@ -155,6 +226,7 @@ pub(crate) async fn show_login_form(
                                 <div class="card-body">
                                      {}
                                     <form action="/login" method="post">
+                                        <input type="hidden" name="csrf_token" value="{}">
                                         <div class="mb-3">
                                             <label for="name" class="form-label">Username:</label>
                                             <input type="text" class="form-control" id="name" name="name" required>
@@ -164,7 +236,11 @@ pub(crate) async fn show_login_form(
                                             <label for="password" class="form-label">Password:</label>
                                             <input type="password" class="form-control" id="password" name="password" required>
                                         </div>
-
+                                        <div class="mb-3">
+                                            <label for="captcha_input" class="form-label">验证码:</label>
+                                            <img id="captcha-img" src="data:image/png;base64,{}" alt="验证码" class="img-fluid mb-2" style="cursor: pointer;" title="点击刷新验证码"/>
+                                            <input type="text" class="form-control" id="captcha_input" name="captcha_input" required>
+                                        </div>
                                         <div class="d-grid">
                                             <input type="submit" class="btn btn-primary" value="Login">
                                         </div>
@@ -178,10 +254,23 @@ pub(crate) async fn show_login_form(
                 <script src="/static/lib/jquery/dist/jquery.min.js"></script>
                 <script src="/static/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
                 <script src="/static/js/site.js" asp-append-version="true"></script>
+                <script>
+                    document.getElementById('captcha-img').addEventListener('click', function() {{
+                        fetch('/captcha')
+                            .then(response => response.blob())
+                            .then(blob => {{
+                                const url = URL.createObjectURL(blob);
+                                this.src = url;
+                            }})
+                            .catch(error => {{
+                                console.error('Error refreshing captcha:', error);
+                            }});
+                    }});
+                </script>
             </body>
         </html>
     "#,
-        error_html
+        error_html, csrf_token, captcha_base64
     );
 
     Ok(HttpResponse::Ok()
@@ -191,10 +280,14 @@ pub(crate) async fn show_login_form(
 
 use crate::register_controller::ClientRegisterParams;
 use actix_web::web;
+use base64::Engine;
+use base64::engine::general_purpose;
+use captcha::Captcha;
+use captcha::filters::{Dots, Noise, Wave};
 use chrono::{Datelike, Local};
 use common::cert_helper;
-use rand::distr::Alphanumeric;
 use rand::Rng;
+use rand::distr::Alphanumeric;
 use serde::Deserialize;
 use tokio_util::io::ReaderStream;
 
@@ -202,6 +295,8 @@ use tokio_util::io::ReaderStream;
 pub(crate) struct LoginForm {
     name: String,
     password: String,
+    csrf_token: String,
+    captcha_input: String, // 添加验证码输入字段
 }
 
 #[derive(Deserialize)]
@@ -216,6 +311,43 @@ pub(crate) async fn handle_login_post(
     form: web::Form<LoginForm>,
     session: Session, // 添加 Session 参数
 ) -> Result<HttpResponse> {
+    // 验证CSRF令牌
+    if let Ok(Some(stored_csrf_token)) = session.get::<String>("csrf_token") {
+        if form.csrf_token != stored_csrf_token {
+            session.insert("login_error", "无效的请求令牌")?;
+            return Ok(HttpResponse::Found()
+                .append_header(("Location", "/"))
+                .finish());
+        }
+    } else {
+        session.insert("login_error", "请求令牌已过期，请重新登录")?;
+        return Ok(HttpResponse::Found()
+            .append_header(("Location", "/"))
+            .finish());
+    }
+
+    // 清除已使用的CSRF令牌
+    session.remove("csrf_token");
+
+    println!("captcha:{}", form.captcha_input);
+    // 验证验证码
+    if let Ok(Some(stored_captcha)) = session.get::<String>("captcha") {
+        if form.captcha_input != stored_captcha {
+            session.insert("login_error", "验证码错误")?;
+            return Ok(HttpResponse::Found()
+                .append_header(("Location", "/"))
+                .finish());
+        }
+    } else {
+        session.insert("login_error", "验证码已过期，请重新登录")?;
+        return Ok(HttpResponse::Found()
+            .append_header(("Location", "/"))
+            .finish());
+    }
+    // 验证成功后清除验证码
+    session.remove("captcha");
+    session.remove("register_error");
+
     // 验证用户名和密码
     if form.name == "admin" && form.password == "dJp#123x" {
         // 验证成功，设置 Session
@@ -274,7 +406,8 @@ pub(crate) async fn handle_form_post(
                 .finish());
         }
     };
-
+    let client_cert_file_path = format!("/opt/client-cert/client_{}.crt", &crp.client_id);
+    let client_key_file_path = format!("/opt/client-cert/client_{}.key", &crp.client_id);
     let (client_cert, client_seckey) = match cert_helper::generate_client_and_sign(
         &crp.client_name,
         &crp.client_id,
@@ -294,8 +427,6 @@ pub(crate) async fn handle_form_post(
         }
     };
 
-    let client_cert_file_path = format!("/opt/client-cert/client_{}.crt", &crp.client_id);
-    let client_key_file_path = format!("/opt/client-cert/client_{}.key", &crp.client_id);
     match fs::write(&client_cert_file_path, &client_cert) {
         Ok(_) => {
             session.insert("register_error", "write client cert file success")?;
@@ -350,7 +481,50 @@ pub(crate) async fn handle_form_post(
     let content_disposition = format!("attachment; filename=\"client_{}.crt\"", &crp.client_id);
 
     Ok(HttpResponse::Ok()
+        // .insert_header(("Refresh", "3; url=/create"))
         .append_header(("Content-Type", "application/octet-stream"))
         .append_header(("Content-Disposition", content_disposition))
+        .append_header(("Refresh", "0; url=/list")) // 添加这行实现跳转
         .streaming(stream))
+}
+
+// 生成CSRF令牌
+fn generate_csrf_token() -> String {
+    let mut rng = rand::rng();
+    (0..32)
+        .map(|_| {
+            let chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            let idx = rng.random_range(0..chars.len());
+            chars.chars().nth(idx).unwrap()
+        })
+        .collect()
+}
+
+// 在文件中添加一个新的函数用于生成验证码API
+pub(crate) async fn refresh_captcha(session: Session) -> Result<HttpResponse> {
+    let mut captcha = Captcha::new();
+    captcha
+        .add_chars(4)
+        .apply_filter(Noise::new(0.4))
+        .apply_filter(Wave::new(2.0, 20.0).horizontal())
+        .apply_filter(Wave::new(2.0, 20.0).vertical())
+        .view(220, 120)
+        .apply_filter(Dots::new(5));
+
+    // 获取验证码文本
+    let captcha_text = captcha.chars_as_string();
+
+    // 生成PNG图片数据
+    let png_bytes = match captcha.as_png() {
+        Some(data) => data,
+        None => {
+            return Ok(HttpResponse::InternalServerError().json("Failed to generate captcha"));
+        }
+    };
+
+    // 将验证码文本存储到session中用于后续验证
+    session.insert("captcha", captcha_text)?;
+
+    // 返回图片数据
+    Ok(HttpResponse::Ok().content_type("image/png").body(png_bytes))
 }
