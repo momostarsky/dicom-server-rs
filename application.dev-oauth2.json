@@ -67,5 +67,18 @@
   "dicom_license_server": {
     "client_id": "HZXS2701PQSQ91BU",
     "license_key": "3CFhW1f3SsRiLDM8esoQEF7zBMdhYslSaGXs"
+  },
+  "wado_oauth2": {
+    "issuer_url": "https://keycloak.medical.org:8443/realms/dicom-org-cn",
+    "audience": "wado-rs-api",
+    "jwks_url": "https://keycloak.medical.org:8443/realms/dicom-org-cn/protocol/openid-connect/certs",
+    "roles": {
+      "from": "$.realm_access.roles",
+      "values": ["role_patients"]
+    },
+    "permissions": {
+      "from": "$.resource_access['wado-rs-api'].roles",
+      "values": ["image_reader"]
+    }
   }
 }
