@@ -602,7 +602,12 @@ impl DbProvider for MySqlDbProvider {
         Ok(result)
     }
 
-    async fn get_json_meta(&self,tenant_id:&str, study_uid: &str, series_uid: &str) -> std::result::Result<DicomJsonMeta, DbError> {
+    async fn get_json_meta(
+        &self,
+        tenant_id: &str,
+        study_uid: &str,
+        series_uid: &str,
+    ) -> std::result::Result<DicomJsonMeta, DbError> {
         // 创建数据库连接
         let mut conn = mysql::Conn::new(self.db_connection_string.as_str())
             .map_err(|e| DbError::DatabaseError(format!("Failed to connect to MySQL: {}", e)))?;
@@ -665,13 +670,18 @@ mod tests {
     use crate::dicom_dbprovider::current_time;
     use crate::dicom_dbtype::*;
     use chrono::{NaiveDate, NaiveTime};
+    use std::env;
     use std::ops::Sub;
-
     #[tokio::test]
     async fn test_save_state_info() -> Result<(), Box<dyn std::error::Error>> {
-        let db_provider = MySqlDbProvider::new(
-            "mysql://dicomstore:hzjp%23123@192.168.1.14:3306/dicomdb".to_string(),
-        );
+        let mysql_cnn = env::var("DICOM_MySQL");
+        if mysql_cnn.is_err() {
+            println!("DICOM_MySQL environment variable not set");
+            println!("eg:mysql://dicomstore:hzjp%23123@192.168.1.14:3306/dicomdb");
+            return Ok(());
+        }
+
+        let db_provider = MySqlDbProvider::new(mysql_cnn.unwrap());
 
         // 创建测试数据
         let tenant_id = BoundedString::<64>::try_from("test_tenant_mysql_123".to_string())?;
@@ -755,9 +765,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_state_metaes() -> Result<(), Box<dyn std::error::Error>> {
-        let db_provider = MySqlDbProvider::new(
-            "mysql://dicomstore:hzjp%23123@192.168.1.14:3306/dicomdb".to_string(),
-        );
+        let mysql_cnn = env::var("DICOM_MySQL");
+        if mysql_cnn.is_err() {
+            println!("DICOM_MySQL environment variable not set");
+            return Ok(());
+        }
+
+        let db_provider = MySqlDbProvider::new(mysql_cnn.unwrap());
 
         let tenant_id = "1234567890";
         let study_uid = "1.2.156.112605.0.1685486876.2025061710152134339.2.1.1";
@@ -790,10 +804,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_save_json_list() -> Result<(), Box<dyn std::error::Error>> {
-        let db_provider = MySqlDbProvider::new(
-            "mysql://dicomstore:hzjp%23123@192.168.1.14:3306/dicomdb".to_string(),
-        );
+        let mysql_cnn = env::var("DICOM_MySQL");
+        if mysql_cnn.is_err() {
+            println!("DICOM_MySQL environment variable not set");
+            return Ok(());
+        }
 
+        let db_provider = MySqlDbProvider::new(mysql_cnn.unwrap());
         // 创建测试数据列表
         let mut json_meta_list = Vec::new();
 
@@ -839,9 +856,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_json_metaes() -> Result<(), Box<dyn std::error::Error>> {
-        let db_provider = MySqlDbProvider::new(
-            "mysql://dicomstore:hzjp%23123@192.168.1.14:3306/dicomdb".to_string(),
-        );
+        let mysql_cnn = env::var("DICOM_MySQL");
+        if mysql_cnn.is_err() {
+            println!("DICOM_MySQL environment variable not set");
+            return Ok(());
+        }
+
+        let db_provider = MySqlDbProvider::new(mysql_cnn.unwrap());
 
         let cd = current_time();
         let cd = cd.sub(chrono::Duration::minutes(5));
@@ -870,9 +891,13 @@ mod tests {
     }
     #[tokio::test]
     async fn test_save_state_list() -> Result<(), Box<dyn std::error::Error>> {
-        let db_provider = MySqlDbProvider::new(
-            "mysql://dicomstore:hzjp%23123@192.168.1.14:3306/dicomdb".to_string(),
-        );
+        let mysql_cnn = env::var("DICOM_MySQL");
+        if mysql_cnn.is_err() {
+            println!("DICOM_MySQL environment variable not set");
+            return Ok(());
+        }
+
+        let db_provider = MySqlDbProvider::new(mysql_cnn.unwrap());
 
         // 创建测试数据列表
         let mut state_meta_list = Vec::new();

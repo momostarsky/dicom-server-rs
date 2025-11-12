@@ -597,6 +597,7 @@ impl DbProvider for PgDbProvider {
 }
 #[cfg(test)]
 mod tests {
+    use std::env;
     use super::*;
     use crate::dicom_dbprovider::current_time;
     use crate::dicom_dbtype::*;
@@ -605,8 +606,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_save_state_info() -> Result<(), Box<dyn std::error::Error>> {
+
+
+
+        let sql_cnn = env::var("DICOM_PgSQL");
+        if sql_cnn.is_err() {
+            println!("DICOM_PgSQL environment variable not set");
+            println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
+            return Ok(());
+        }
+
+
+
         let db_provider =
-            PgDbProvider::new("postgresql://root:jp%23123@192.168.1.14:5432/postgres".to_string());
+            PgDbProvider::new(sql_cnn.unwrap() );
 
         // 创建测试数据
         let tenant_id = BoundedString::<64>::try_from("test_tenant_123".to_string())?;
@@ -684,8 +697,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_state_metaes() -> Result<(), Box<dyn std::error::Error>> {
+        let sql_cnn = env::var("DICOM_PgSQL");
+        if sql_cnn.is_err() {
+            println!("DICOM_PgSQL environment variable not set");
+            println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
+            return Ok(());
+        }
+
+
+
         let db_provider =
-            PgDbProvider::new("postgresql://root:jp%23123@192.168.1.14:5432/postgres".to_string());
+            PgDbProvider::new(sql_cnn.unwrap() );
 
         let tenant_id = "1234567890";
         let study_uid = "1.2.156.112605.0.1685486876.2025061710152134339.2.1.1";
@@ -717,8 +739,17 @@ mod tests {
     }
     #[tokio::test]
     async fn test_get_json_metaes() -> Result<(), Box<dyn std::error::Error>> {
+        let sql_cnn = env::var("DICOM_PgSQL");
+        if sql_cnn.is_err() {
+            println!("DICOM_PgSQL environment variable not set");
+            println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
+            return Ok(());
+        }
+
+
+
         let db_provider =
-            PgDbProvider::new("postgresql://root:jp%23123@192.168.1.14:5432/postgres".to_string());
+            PgDbProvider::new(sql_cnn.unwrap() );
 
         let cd = current_time();
         let cd = cd.sub(chrono::Duration::minutes(3));
@@ -747,9 +778,17 @@ mod tests {
     }
     #[tokio::test]
     async fn test_save_state_list() -> Result<(), Box<dyn std::error::Error>> {
-        let db_provider =
-            PgDbProvider::new("postgresql://root:jp%23123@192.168.1.14:5432/postgres".to_string());
+        let sql_cnn = env::var("DICOM_PgSQL");
+        if sql_cnn.is_err() {
+            println!("DICOM_PgSQL environment variable not set");
+            println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
+            return Ok(());
+        }
 
+
+
+        let db_provider =
+            PgDbProvider::new(sql_cnn.unwrap() );
         // 创建测试数据列表
         let mut state_meta_list = Vec::new();
 
@@ -843,8 +882,17 @@ mod tests {
     }
     #[tokio::test]
     async fn test_save_json_list() -> Result<(), Box<dyn std::error::Error>> {
+        let sql_cnn = env::var("DICOM_PgSQL");
+        if sql_cnn.is_err() {
+            println!("DICOM_PgSQL environment variable not set");
+            println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
+            return Ok(());
+        }
+
+
+
         let db_provider =
-            PgDbProvider::new("postgresql://root:jp%23123@192.168.1.14:5432/postgres".to_string());
+            PgDbProvider::new(sql_cnn.unwrap() );
 
         // 创建测试数据列表
         let mut json_meta_list = Vec::new();

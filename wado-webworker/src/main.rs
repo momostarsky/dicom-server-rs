@@ -12,8 +12,8 @@ mod json_creator;
 struct AppState {
     log: Logger,
     db: Arc<dyn DbProvider + Send + Sync>,
-    config: AppConfig,
-    redis_helper: RedisHelper,
+    // config: AppConfig,
+    // redis_helper: RedisHelper,
     // 可以添加其他配置
 }
 fn configure_log() -> Logger {
@@ -151,8 +151,8 @@ async fn main() -> std::io::Result<()> {
     let app_state = AppState {
         log: log.clone(),
         db: db_provider as Arc<dyn DbProvider + Send + Sync>, // 正确的类型转换
-        config: g_config,
-        redis_helper: RedisHelper::new(reids_conn),
+        // config: g_config,
+        // redis_helper: RedisHelper::new(reids_conn),
     };
 
     json_creator::background_task_manager(app_state).await;
