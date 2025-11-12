@@ -1,5 +1,6 @@
 mod client_register;
 mod register_controller;
+mod handlers;
 
 use crate::register_controller::{
     client_registe_get, client_registe_post, get_ca_certificate, manual_hello,
@@ -8,7 +9,7 @@ use actix_cors::Cors;
 use actix_session::{SessionMiddleware, storage::CookieSessionStore};
 use actix_web::cookie::Key;
 use actix_web::{App, HttpServer, middleware, web};
-
+use rust_embed::RustEmbed;
 use common::utils::setup_logging;
 use slog::Logger;
 use slog::info;
@@ -18,6 +19,10 @@ use slog::info;
 struct AppState {
     log: Logger,
 }
+
+#[derive(RustEmbed)]
+#[folder = "static/"]
+struct Asset;
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let clog: Logger = configure_log();
@@ -42,7 +47,7 @@ async fn main() -> std::io::Result<()> {
             .allowed_header(http::header::CONTENT_TYPE)
             .max_age(3600);
         cors = cors.allow_any_origin();
-        use actix_files as fs;
+        // use actix_files as fs;
 
         App::new()
             .wrap(SessionMiddleware::new(
@@ -53,7 +58,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(middleware::Compress::default())
             .wrap(cors)
             .app_data(web::Data::new(app_state.clone()))
-            .service(fs::Files::new("/static", static_dir.as_str()).show_files_listing())
+            // .service(fs::Files::new("/static", static_dir.as_str()).show_files_listing())
             .service(client_registe_get)
             .service(client_registe_post)
             .service(get_ca_certificate)
@@ -69,6 +74,7 @@ async fn main() -> std::io::Result<()> {
             ) // 处理表单提交
             .route("/list", web::get().to(client_register::show_list_form))
             .route("/captcha", web::get().to(client_register::refresh_captcha))
+            .route("/static/{filename:.*}", web::get().to(handlers::static_files))
             .route("/hey", web::get().to(manual_hello))
     })
     .bind(("0.0.0.0", 8888))?
