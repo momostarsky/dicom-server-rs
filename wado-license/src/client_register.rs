@@ -37,7 +37,6 @@ pub(crate) async fn show_register_form(
     let next_year = current_year + 1;
     let end_date_str = format!("{}1231", next_year); // 设置为下一年的12月31日
     // 在生成默认 client_id 的地方修改为：
-    let mut rng = rand::rng();
 
     let client_code = rand::rng()
         .sample_iter(&Alphanumeric)
@@ -330,10 +329,7 @@ pub(crate) async fn show_list_form(
         return Ok(HttpResponse::Found()
             .append_header(("Location", "/"))
             .finish());
-    }
-
-    // 不要清除所有session数据，只读取错误消息
-    let error_message = session.get::<String>("login_error").unwrap_or(None);
+    } 
     // 清除错误消息，避免重复显示
     session.remove("login_error");
     session.remove("register_info");
