@@ -1,6 +1,8 @@
 use actix_session::Session;
 use actix_web::{HttpResponse, Result};
 use std::fs;
+use std::fs::File;
+use std::io::Write;
 
 pub(crate) async fn show_register_form(
     session: Session, // 添加 Session 参数
@@ -278,6 +280,9 @@ pub(crate) async fn show_login_form(
         .body(html))
 }
 
+
+
+
 use crate::register_controller::ClientRegisterParams;
 use actix_web::web;
 use base64::Engine;
@@ -306,6 +311,137 @@ pub(crate) struct RegistrationForm {
     client_name: String,
     hash_code: String,
 }
+
+
+// 替换 show_list_form 函数的实现
+pub(crate) async fn show_list_form(
+    session: Session,
+) -> Result<HttpResponse> {
+    // 检查用户是否已登录
+    if let Ok(Some(logged_in)) = session.get::<bool>("logged_in") {
+        if !logged_in {
+            // 用户未登录，重定向到登录页面
+            return Ok(HttpResponse::Found()
+                .append_header(("Location", "/"))
+                .finish());
+        }
+    } else {
+        // Session 中没有登录信息，重定向到登录页面
+        return Ok(HttpResponse::Found()
+            .append_header(("Location", "/"))
+            .finish());
+    }
+
+    // 不要清除所有session数据，只读取错误消息
+    let error_message = session.get::<String>("login_error").unwrap_or(None);
+    // 清除错误消息，避免重复显示
+    session.remove("login_error");
+    session.remove("register_info");
+    
+    // 查找当前目录下的所有 client_*.json 文件并反序列化为 ClientRegisterParams 结构体
+    let mut clients: Vec<ClientRegisterParams> = Vec::new();
+    if let Ok(entries) = fs::read_dir(".") {
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            if let Some(file_name) = path.file_name() {
+                if let Some(file_name_str) = file_name.to_str() {
+                    if file_name_str.starts_with("client_") && file_name_str.ends_with(".json") {
+                        // 读取并反序列化 JSON 文件
+                        if let Ok(json_content) = fs::read_to_string(&path) {
+                            if let Ok(client_params) = serde_json::from_str::<ClientRegisterParams>(&json_content) {
+                                clients.push(client_params);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // 构建客户端列表的 HTML 表格
+    let mut client_rows = String::new();
+    for client in &clients {
+        client_rows.push_str(&format!(
+            r#"<tr>
+                <td>{}</td>
+                <td>{}</td>
+                <td>{}</td>
+                <td>{}</td>
+            </tr>"#,
+            client.client_id,
+            client.client_name,
+            client.client_hash_code,
+            client.end_date
+        ));
+    }
+    
+    let client_table = if clients.is_empty() {
+        r#"<div class="alert alert-info">暂无客户端注册信息</div>"#.to_string()
+    } else {
+        format!(
+            r#"<div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>Client ID</th>
+                            <th>Client Name</th>
+                            <th>Hash Code</th>
+                            <th>Expired Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {}
+                    </tbody>
+                </table>
+            </div>"#,
+            client_rows
+        )
+    };
+
+    let html = format!(
+        r#"
+        <!DOCTYPE html>
+        <html>
+            <head>
+                <meta charset="utf-8"/>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+                <title>客户端列表</title>
+                <link rel="stylesheet" href="/static/lib/bootstrap/dist/css/bootstrap.min.css"/>
+                <link rel="stylesheet" href="/static/css/site.css" asp-append-version="true"/>
+            </head>
+            <body>
+                <div class="container mt-5">
+                    <div class="row justify-content-center">
+                        <div class="col-md-10">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3 class="text-center">客户端列表</h3>
+                                </div>
+                                <div class="card-body">
+                                    {}
+                                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                        <a href="/create" class="btn btn-primary">新增客户端</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <script src="/static/lib/jquery/dist/jquery.min.js"></script>
+                <script src="/static/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+                <script src="/static/js/site.js" asp-append-version="true"></script>
+            </body>
+        </html>
+    "#,
+        client_table
+    );
+
+    Ok(HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(html))
+}
+
 
 pub(crate) async fn handle_login_post(
     form: web::Form<LoginForm>,
@@ -387,6 +523,12 @@ pub(crate) async fn handle_form_post(
             .append_header(("Location", "/"))
             .finish());
     }
+
+
+
+
+
+
     // 返回响应
     let crp = ClientRegisterParams {
         client_id: form.client_id.clone(),
@@ -406,6 +548,16 @@ pub(crate) async fn handle_form_post(
                 .finish());
         }
     };
+    let json_file = format!("./client_{}.json", &crp.client_id);
+    if fs::exists(json_file)? {
+        session.insert("register_error", "client id already exists")?;
+        session.insert("register_info", crp)?;
+        // 重定向回登录页面
+        return Ok(HttpResponse::Found()
+            .append_header(("Location", "/create"))
+            .finish());
+    }
+
     let client_cert_file_path = format!("/opt/client-cert/client_{}.crt", &crp.client_id);
     let client_key_file_path = format!("/opt/client-cert/client_{}.key", &crp.client_id);
     let (client_cert, client_seckey) = match cert_helper::generate_client_and_sign(
@@ -473,6 +625,20 @@ pub(crate) async fn handle_form_post(
                 .finish());
         }
     };
+
+    let json_data = match serde_json::to_string(&crp) {
+        Ok(data) => data,
+        Err(e) => {
+            session.insert("register_error", format!("Failed to serialize JSON: {}", e))?;
+
+            // 重定向回注册页面
+            return Ok(HttpResponse::Found()
+                .append_header(("Location", "/create"))
+                .finish());
+        }
+    };
+    let json_file = File::create(format!("./client_{}.json", &crp.client_id));
+    json_file?.write_all(json_data.as_bytes())?;
 
     // 将文件转换为 Stream
     let stream = ReaderStream::new(file);

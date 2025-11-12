@@ -67,6 +67,7 @@ async fn main() -> std::io::Result<()> {
                 "/register",
                 web::post().to(client_register::handle_form_post),
             ) // 处理表单提交
+            .route("/list", web::get().to(client_register::show_list_form))
             .route("/captcha", web::get().to(client_register::refresh_captcha))
             .route("/hey", web::get().to(manual_hello))
     })
