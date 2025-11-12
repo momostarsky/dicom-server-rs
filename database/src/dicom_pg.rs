@@ -2,6 +2,7 @@ use crate::dicom_dbprovider::{DbError, DbProvider};
 use crate::dicom_meta::{DicomJsonMeta, DicomStateMeta};
 use async_trait::async_trait;
 use tokio_postgres::{Client, NoTls};
+#[derive(Debug, Clone)]
 pub struct PgDbProvider {
     db_connection_string: String,
 }
@@ -597,18 +598,62 @@ impl DbProvider for PgDbProvider {
 }
 #[cfg(test)]
 mod tests {
-    use std::env;
     use super::*;
     use crate::dicom_dbprovider::current_time;
     use crate::dicom_dbtype::*;
     use chrono::{NaiveDate, NaiveTime};
+    use ctor::ctor;
+    use dotenv::dotenv;
+    use std::env;
     use std::ops::Sub;
 
+    #[cfg(test)]
+    #[ctor]
+    fn init_tests() {
+        // 这个函数会在所有测试运行之前执行一次
+        dotenv().ok();
+        println!("Initializing tests...");
+        // 可以在这里进行全局的测试设置
+    }
+
+    #[cfg(test)]
+    struct TestCleanup {
+        tenant_ids: Vec<String>,
+        db_provider: PgDbProvider,
+    }
+    #[cfg(test)]
+    impl TestCleanup {
+        fn new(db_provider: PgDbProvider) -> Self {
+            Self {
+                tenant_ids: Vec::new(),
+                db_provider,
+            }
+        }
+
+        fn add_tenant(&mut self, tenant_id: String) {
+            self.tenant_ids.push(tenant_id);
+        }
+    }
+    #[cfg(test)]
+    impl Drop for TestCleanup {
+        fn drop(&mut self) {
+            // 在这里执行清理操作
+            println!("Cleaning up test data...");
+            // 在实际实现中，这里应该执行数据库清理操作
+            // 例如删除测试创建的记录
+            // tokio::runtime::Runtime::new().unwrap().block_on(async {
+                for tenant_id in &self.tenant_ids {
+                    // 执行清理SQL
+                    println!(
+                        "exec sql: DELETE FROM dicom_state_meta WHERE tenant_id = {}",
+                        tenant_id
+                    );
+                }
+            // });
+        }
+    }
     #[tokio::test]
     async fn test_save_state_info() -> Result<(), Box<dyn std::error::Error>> {
-
-
-
         let sql_cnn = env::var("DICOM_PgSQL");
         if sql_cnn.is_err() {
             println!("DICOM_PgSQL environment variable not set");
@@ -616,13 +661,14 @@ mod tests {
             return Ok(());
         }
 
-
-
-        let db_provider =
-            PgDbProvider::new(sql_cnn.unwrap() );
-
+        let t_id = "test_tenant_123";
+        let db_provider = PgDbProvider::new(sql_cnn.unwrap());
+        // 构造 TestCleanup 实例
+        let mut cleanup = TestCleanup::new(db_provider.clone());
+        // 注册需要清理的 tenant_id
+        cleanup.add_tenant(t_id.to_string());
         // 创建测试数据
-        let tenant_id = BoundedString::<64>::try_from("test_tenant_123".to_string())?;
+        let tenant_id = BoundedString::<64>::try_from(t_id.to_string())?;
         let patient_id = BoundedString::<64>::try_from("test_patient_456".to_string())?;
         let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9".to_string())?;
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1".to_string())?;
@@ -692,7 +738,7 @@ mod tests {
             result.err()
         );
 
-        Ok(())
+        Ok(()) //   cleanup 会在函数结束时自动调用 Drop
     }
 
     #[tokio::test]
@@ -704,10 +750,7 @@ mod tests {
             return Ok(());
         }
 
-
-
-        let db_provider =
-            PgDbProvider::new(sql_cnn.unwrap() );
+        let db_provider = PgDbProvider::new(sql_cnn.unwrap());
 
         let tenant_id = "1234567890";
         let study_uid = "1.2.156.112605.0.1685486876.2025061710152134339.2.1.1";
@@ -746,10 +789,7 @@ mod tests {
             return Ok(());
         }
 
-
-
-        let db_provider =
-            PgDbProvider::new(sql_cnn.unwrap() );
+        let db_provider = PgDbProvider::new(sql_cnn.unwrap());
 
         let cd = current_time();
         let cd = cd.sub(chrono::Duration::minutes(3));
@@ -785,10 +825,7 @@ mod tests {
             return Ok(());
         }
 
-
-
-        let db_provider =
-            PgDbProvider::new(sql_cnn.unwrap() );
+        let db_provider = PgDbProvider::new(sql_cnn.unwrap());
         // 创建测试数据列表
         let mut state_meta_list = Vec::new();
 
@@ -889,10 +926,7 @@ mod tests {
             return Ok(());
         }
 
-
-
-        let db_provider =
-            PgDbProvider::new(sql_cnn.unwrap() );
+        let db_provider = PgDbProvider::new(sql_cnn.unwrap());
 
         // 创建测试数据列表
         let mut json_meta_list = Vec::new();

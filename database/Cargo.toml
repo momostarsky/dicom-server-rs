@@ -60,3 +60,4 @@ chrono-tz = "0.10.4"
 tokio-postgres = { version = "0.7.15", features = ["default", "with-time-0_3", "with-uuid-1", "with-chrono-0_4"] }
 postgres-types = "0.2.11"
 mysql = { version = "26.0.1", default-features = false, features = ["minimal-rust", "rustls-tls","chrono","time"] }
+ctor = "0.6.1"

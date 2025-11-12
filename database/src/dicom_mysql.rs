@@ -672,6 +672,18 @@ mod tests {
     use chrono::{NaiveDate, NaiveTime};
     use std::env;
     use std::ops::Sub;
+    use ctor::ctor;
+    use dotenv::dotenv;
+
+    #[cfg(test)]
+    #[ctor]
+    fn init_tests() {
+        // 这个函数会在所有测试运行之前执行一次
+        dotenv().ok();
+        println!("Initializing tests...");
+        // 可以在这里进行全局的测试设置
+    }
+
     #[tokio::test]
     async fn test_save_state_info() -> Result<(), Box<dyn std::error::Error>> {
         let mysql_cnn = env::var("DICOM_MySQL");
