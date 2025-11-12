@@ -197,28 +197,28 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    // #[rstest]
-    // #[case(
-    //     "./data/DeflatedExplicitVRLittleEndian.dcm",
-    //     "./data/y-0.dcm"
-    // )]
-    // #[case("./data/ExplicitVRBigEndian.dcm", "./data/y-1.dcm")]
-    // #[case("./data/ExplicitVRLittleEndian.dcm", "./data/y-2.dcm")]
-    // #[case("./data/ImplicitVRLittleEndian.dcm", "./data/y-3.dcm")]
-    // #[case("./data/JPEG2000Lossless.dcm", "./data/y-4.dcm")]
-    // #[case("./data/JPEG2000Lossy.dcm", "./data/y-5.dcm")]
-    // #[case("./data/JPEGProcess1.dcm", "./data/y-6.dcm")]
-    // #[case("./data/JPEGProcess2_4.dcm", "./data/y-7.dcm")]
-    // #[case("./data/RLELossless.dcm", "./data/y-8.dcm")]
-    // #[tokio::test]
-    // async fn test_convert_ts_with_gdcm_conv(#[case] input: &str, #[case] output: &str) {
-    //     println!("input: {}, output: {}", input, output);
-    //     println!("PWD:{}", env!("PWD"));
-    //     // 获取文件大小
-    //     let metadata = fs::metadata(input).unwrap();
-    //     let file_size = metadata.len() as usize;
-    //     let result = convert_ts_with_gdcm_conv(input, file_size, output, false).await;
-    //     assert!(result.is_ok());
-    //
-    // }
+    #[rstest]
+    #[case(
+        "./data/DeflatedExplicitVRLittleEndian.dcm",
+        "./data/y-0.dcm"
+    )]
+    #[case("./data/ExplicitVRBigEndian.dcm", "./data/y-1.dcm")]
+    #[case("./data/ExplicitVRLittleEndian.dcm", "./data/y-2.dcm")]
+    #[case("./data/ImplicitVRLittleEndian.dcm", "./data/y-3.dcm")]
+    #[case("./data/JPEG2000Lossless.dcm", "./data/y-4.dcm")]
+    #[case("./data/JPEG2000Lossy.dcm", "./data/y-5.dcm")]
+    #[case("./data/JPEGProcess1.dcm", "./data/y-6.dcm")]
+    #[case("./data/JPEGProcess2_4.dcm", "./data/y-7.dcm")]
+    #[case("./data/RLELossless.dcm", "./data/y-8.dcm")]
+    #[tokio::test]
+    async fn test_convert_ts_with_gdcm_conv(#[case] input: &str, #[case] output: &str) {
+        println!("input: {}, output: {}", input, output);
+        println!("PWD:{}", env!("PWD"));
+        // 获取文件大小
+        let metadata = fs::metadata(input).unwrap();
+        let file_size = metadata.len() as usize;
+        let result = convert_ts_with_gdcm_conv(input, file_size, output, false).await;
+        assert!(result.is_ok());
+
+    }
 }
