@@ -202,7 +202,8 @@ async fn main() -> std::io::Result<()> {
 
     info!(
         log,
-        "Starting the server at {}:{}", server_config.host, server_config.port
+        "Starting the server at {}:{}  visits:http://{}:{}/swagger-ui/", server_config.host, server_config.port,
+         server_config.host, server_config.port
     );
 
     HttpServer::new(move || {
