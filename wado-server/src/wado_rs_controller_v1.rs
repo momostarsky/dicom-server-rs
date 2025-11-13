@@ -246,8 +246,7 @@ async fn retrieve_study_metadata(
     tag =  WADO_RS_TAG,
     description = "Retrieve Study Sub-Series in DICOM JSON format",
 )]
-#[get("/studies/{study_instance_uid}/subseries")]
-
+#[get("/studies/{study_instance_uid}/series")]
 async fn retrieve_study_subseries(
     req: HttpRequest,
     app_state: web::Data<AppState>,
@@ -338,7 +337,6 @@ async fn retrieve_study_subseries(
     description = "Retrieve Series Metadata in DICOM JSON format"
 )]
 #[get("/studies/{study_instance_uid}/series/{series_instance_uid}/metadata")]
-
 async fn retrieve_series_metadata(
     req: HttpRequest,
     app_state: web::Data<AppState>,
