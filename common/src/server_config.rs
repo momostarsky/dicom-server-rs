@@ -427,9 +427,10 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
                 println!("webworker:interval_minute {:?}   DicomStateMeta.updated_time X", ww.interval_minute);
                 println!("webworker:cpu_usage {:?} ", ww.cpu_usage);
                 println!("webworker:memory_usage {:?} ", ww.memory_usage);
-                println!("说明: interval_minute 表示序列的 DicomStateMeta.updated_time + interval_minute < currentTime ");
-                println!("说明: cpu_usage 表示任务执行时候的CPU利用率低于 阈值 ");
-                println!("说明: memory_usage 表示任务执行时候的内存利用率低于 阈值 ");
+                println!("说明:");
+                println!("\t 1. interval_minute 表示序列的 DicomStateMeta.updated_time 超过, interval_minute= 3 表示 DicomStateMeta.updated_time+3 分钟小于当前时间  ");
+                println!("\t 2. cpu_usage 表示任务执行时候的CPU利用率低于 阈值 , cpu_usage= 40 表示CPU利用率低于 40%");
+                println!("\t 3. memory_usage 表示任务执行时候的内存利用率低于 阈值 , memory_usage = 50 表示内存使用率低于50% ");
 
             }
 

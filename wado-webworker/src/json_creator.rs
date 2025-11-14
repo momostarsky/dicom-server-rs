@@ -1,5 +1,6 @@
 use crate::AppState;
 use common::dicom_json_helper::generate_series_json;
+use common::server_config::WebWorkerConfig;
 use database::dicom_dbprovider::current_time;
 use database::dicom_meta::DicomJsonMeta;
 use slog::{error, info};
@@ -12,6 +13,14 @@ pub(crate) async fn background_task_manager(app_state: AppState) {
     let mut interval = interval(Duration::from_secs(30)); // 每30秒检查一次
     let mut sys = System::new_all();
 
+    let webworker = match &app_state.config.webworker {
+        None => WebWorkerConfig {
+            interval_minute: 5,
+            cpu_usage: 50,
+            memory_usage: 50,
+        },
+        Some(webworker) => webworker.clone(),
+    };
     loop {
         interval.tick().await;
 
@@ -23,9 +32,12 @@ pub(crate) async fn background_task_manager(app_state: AppState) {
         let memory_usage = get_memory_usage(&sys);
 
         // 检查是否满足执行条件（CPU < 60% 且 内存 < 70%）
-        if cpu_usage < 40.0 && memory_usage < 80.0 {
+        if cpu_usage < webworker.cpu_usage as f32 && memory_usage < webworker.memory_usage as f32 {
             // 执行后台任务
-            if let Err(e) = execute_background_json_generation(&app_state).await {
+            if let Err(e) =
+                execute_background_json_generation(&app_state, webworker.interval_minute as i64)
+                    .await
+            {
                 error!(app_state.log, "Background JSON generation failed: {}", e);
             }
         } else {
@@ -63,6 +75,7 @@ fn get_memory_usage(sys: &System) -> f32 {
 // 执行后台JSON生成任务
 async fn execute_background_json_generation(
     app_state: &AppState,
+    interval_minute: i64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!(
         app_state.log,
@@ -70,7 +83,7 @@ async fn execute_background_json_generation(
     );
 
     let cd = current_time();
-    let end_time = cd.sub(chrono::Duration::minutes(3));
+    let end_time = cd.sub(chrono::Duration::minutes(interval_minute));
     // 调用数据库获取需要生成JSON的记录
     let pending_records = app_state
         .db
