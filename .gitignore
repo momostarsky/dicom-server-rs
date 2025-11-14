@@ -65,3 +65,5 @@ target/release
 /common/data/x-JPEGProcess1.dcm
 /common/data/x-JPEGProcess2_4.dcm
 /common/data/x-RLELossless.dcm
+[Xx]-*.dcm
+[Yy]-*.dcm
