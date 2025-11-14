@@ -67,5 +67,10 @@
   "dicom_license_server": {
     "client_id": "HZXS2701PQSQ91BU",
     "license_key": "3CFhW1f3SsRiLDM8esoQEF7zBMdhYslSaGXs"
+  },
+  "webworker": {
+    "interval_minute": 5,
+    "cpu_usage": 40,
+    "memory_usage": 70
   }
 }

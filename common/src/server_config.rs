@@ -94,11 +94,20 @@ pub struct OAuth2Config {
     #[serde(default)]
     pub permissions: Option<RoleRule>,
 }
+#[derive(Debug, Deserialize, Clone)]
+pub struct WebWorkerConfig {
+    ///series_lastUpdateTime + X 分钟内没有更新
+    pub interval_minute: u16,
+    /// cpu 使用率
+    pub cpu_usage: u16,
+    /// 内存使用率
+    pub memory_usage: u16,
+}
 
-// "wado_oauth2": {
-// "issuer_url": "https://keycloak.medical.org:8443/realms/dicom-org-cn",
-// "audience": "wado-rs-api",
-// "jwks_url": "https://keycloak.medical.org:8443/realms/dicom-org-cn/protocol/openid-connect/certs"
+// "webworker": {
+// "interval_minute": 5,
+// "cpu_usage": 40,
+// "memory_usage": 70
 // }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -113,6 +122,7 @@ pub struct AppConfig {
     pub message_queue: MessageQueueConfig,
     pub dicom_license_server: Option<LicenseServerConfig>,
     pub wado_oauth2: Option<OAuth2Config>,
+    pub webworker: Option<WebWorkerConfig>,
 }
 
 static APP_ENV: &str = "APP_ENV";
@@ -392,6 +402,8 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
             );
 
             if let Some(license_server) = app_config.dicom_license_server.as_ref() {
+                println!("dicom_license_server:  证书");
+                println!("\t\t 可以到 https://dicom.org.cn:8443/create  注册");
                 println!(
                     "dicom_license_server:client_id {:?}",
                     license_server.client_id
@@ -402,11 +414,23 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
                 );
             }
             if let Some(oa2) = app_config.wado_oauth2.as_ref() {
+                println!("wado_oauth2:  OAuth2 / OpenID 认证配置");
                 println!("wado_oauth2:issuer_url {:?}", oa2.issuer_url);
                 println!("wado_oauth2:audience {:?}", oa2.audience);
                 println!("wado_oauth2:jwks_url {:?}", oa2.jwks_url);
                 println!("wado_oauth2:roles {:?}", oa2.roles);
                 println!("wado_oauth2:permissions {:?}", oa2.permissions);
+            }
+
+
+            if let Some(ww) = app_config.webworker.as_ref() {
+                println!("webworker:interval_minute {:?}   DicomStateMeta.updated_time X", ww.interval_minute);
+                println!("webworker:cpu_usage {:?} ", ww.cpu_usage);
+                println!("webworker:memory_usage {:?} ", ww.memory_usage);
+                println!("说明: interval_minute 表示序列的 DicomStateMeta.updated_time + interval_minute < currentTime ");
+                println!("说明: cpu_usage 表示任务执行时候的CPU利用率低于 阈值 ");
+                println!("说明: memory_usage 表示任务执行时候的内存利用率低于 阈值 ");
+
             }
 
             CONFIG = Some(app_config);

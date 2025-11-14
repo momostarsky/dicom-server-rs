@@ -76,5 +76,10 @@
         "image_reader"
       ]
     }
+  },
+  "webworker": {
+    "interval_minute": 5,
+    "cpu_usage": 40,
+    "memory_usage": 70
   }
 }
