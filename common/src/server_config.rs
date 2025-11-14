@@ -43,6 +43,8 @@ pub struct DicomStoreScpConfig {
     pub ae_title: String,
     pub unsupported_ts_change_to: String,
     pub cornerstonejs_supported_transfer_syntax: Vec<String>,
+    pub tenant_group: String,   // "0x1211",
+    pub tenant_element: String, // "0x1217",
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -324,6 +326,26 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
                 "dicom_store_scp:ae_title {:?}",
                 app_config.dicom_store_scp.ae_title
             );
+            println!(
+                "dicom_store_scp:tenant_group {:?}",
+                app_config.dicom_store_scp.tenant_group
+            );
+            println!(
+                "dicom_store_scp:tenant_element {:?}",
+                app_config.dicom_store_scp.tenant_element
+            );
+            println!(
+                "dicom_store_scp:tenant_default {}",
+                "1234567890"
+            );
+
+            if app_config.dicom_store_scp.tenant_group !="0x1211"
+                || app_config.dicom_store_scp.tenant_element !="0x1217"
+            {
+                println!(" (tenant_group ,tenant_element )  must be set as ( 0x1211,0x1217) 否则收图时会出现未知错误.");
+                println!(" (tenant_group ,tenant_element )  可以通过CStoreRequest 传递.");
+                println!(" 系统默认 tenant 取值为 1234567890");
+            }
             println!(
                 "dicom_store_scp:cornerstonejs_supported_transfer_syntax {:?}",
                 app_config

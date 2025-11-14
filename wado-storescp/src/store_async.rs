@@ -2,6 +2,7 @@ use crate::{
     create_cecho_response, create_cstore_response, dicom_file_handler, transfer::ABSTRACT_SYNTAXES,
     App,
 };
+use dicom_core::Tag;
 
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
@@ -185,7 +186,17 @@ pub async fn run_store_async(
                                         )?
                                         .trim_end_matches("\0")
                                         .to_string();
-                                    issue_patient_id = "1234567890".to_string();
+
+                                    let tenant = obj.element_opt(Tag::from((0x1211, 0x1217)));
+                                    if let Ok(Some(tenant)) = tenant {
+                                        issue_patient_id = tenant
+                                            .to_str()
+                                            .unwrap()
+                                            .trim_end_matches("\0")
+                                            .to_string();
+                                    } else {
+                                        issue_patient_id = "1234567890".to_string();
+                                    }
                                 }
                                 instance_buffer.clear();
                             } else if data_value.value_type == PDataValueType::Data

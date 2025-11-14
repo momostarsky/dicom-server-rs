@@ -25,6 +25,8 @@
   "dicom_store_scp": {
     "port": 11111,
     "ae_title": "STORE-SCP",
+    "tenant_group": "0x1211",
+    "tenant_element": "0x1217",
     "unsupported_ts_change_to": "1.2.840.10008.1.2.1",
     "cornerstonejs_supported_transfer_syntax": [
       "1.2.840.10008.1.2",
