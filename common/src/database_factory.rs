@@ -30,38 +30,13 @@ pub async fn create_db_instance(
     dbconfig: &DatabaseConfig,
 ) -> Result<Arc<dyn DbProvider>, DatabaseError> {
     let db_type = dbconfig.dbtype.to_lowercase();
-    if !(db_type == "mysql" || db_type == "doris" || db_type == "postgresql") {
+    if !(db_type == "doris" || db_type == "postgresql") {
         return Err(DatabaseError::UnsupportedDatabase(
             "only mysql, doris or postgresql is supported".to_string(),
         ));
     }
 
     match db_type.as_str() {
-        "mysql" => {
-            let conn_url =
-                server_config::generate_database_connection(&dbconfig).map_err(|_| {
-                    DatabaseError::ConfigError(
-                        "database connection string is not right".to_string(),
-                    )
-                })?;
-
-            // let pool = MySqlPoolOptions::new()
-            //     .after_connect(|conn, _| {
-            //         Box::pin(async move {
-            //             let _ = conn.execute("SET time_zone='+08:00';").await;
-            //             Ok(())
-            //         })
-            //     })
-            //     .connect(&conn_url)
-            //     .await
-            //     .map_err(|e| DatabaseError::ConnectionError(format!(
-            //         "database connection failed: {:?}. Connection string: {}",
-            //         e, conn_url
-            //     )))?;
-
-            let db_provider = MySqlDbProvider::new(conn_url);
-            Ok(Arc::new(db_provider))
-        }
         "postgresql" => {
             let conn_url =
                 server_config::generate_pg_database_connection(&dbconfig).map_err(|_| {
