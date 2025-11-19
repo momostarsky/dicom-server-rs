@@ -1,17 +1,17 @@
 ### 总体架构
 
-1. Apache-kafka 作为消息队列.
-2. Apache-Doris 作为数据仓库.提供数据分析功能.
-3. MySQL8 作为数据库.提供数据存储功能.及检查索引功能.
+1. Apache-kafka 作为消息队列.开发阶段可用RedPanda 替代.
+2. Apache-Doris 作为数据仓库.提供DicomStateMeta,DicomImageMeta 及WadoAccessLog 存储,为后续的查询及统计分析.
+3. PostgreSQL  作为数据库.提供数据存储功能.及检查索引功能.只存储PatientInformation,StudyInformation,SeriesInformation 这一级别的元数据.充分利用关系数据库的ACID特性.后续可用Citus进行扩容.
 4. Redis 作为缓存.提供数据缓存功能.
-5. Nginx 作为反向代理服务器.提供负载均衡和静态文件服务.
+5. Nginx 作为反向代理服务器.提供负载均衡,静态文件,TLS透传等
 
 收图文件服务接收的文件,先存储到本地,再通过 kafka 发送到消息队列.
-消息体包括以下内容:
 
-{
-TransferSynatx, SopInstancheUID, StudyInstanceUID,SeriesInstanceUID, PatientID, FileName, FileSize, FilePath
+MessageBody = {
+    TransferSynatx, SopInstancheUID, StudyInstanceUID,SeriesInstanceUID, PatientID, FileName, FileSize, FilePath
 }
+
 消息分发到多个队列:
 1. 存储队列: 存储文件信息,文件存储路径,文件大小.
 2. 索引队列: 提取文件TAG信息, 包括PatientInfomation, StudyInformation, SeriesInformation, ImageInformation.并写入Doris库
@@ -24,12 +24,12 @@ sudo update-ca-certificates
 ```
 
 ### 服务用途及说明
-|服务| 用途                                                    |  
-|---|-------------------------------------------------------|
-|wado-server| DICOMWEB  WADO-RS RESTFul API 支持 OAuth2 认证.           | 
-|wado-storescp| 只负责写磁盘和消息队列                                       |
-|wado-consumer| 从storage-queue读,往dicom_state_queue,dicom_image_queue写 |
-|wado-webworker| storage-queue                                         |
+| service        | usage                                                                                                | 
+|----------------|------------------------------------------------------------------------------------------------------|
+| wado-server    | DICOMWEB  WADO-RS RESTFul API ,support oauth2.                                                       | 
+| wado-storescp  | CStoreSCP Provider,write dicom file to disk. and publish message to kafka:storage_queue,log_queue    |
+| wado-consumer  | consumer storage-queue,publish messages to kafka:dicom_state_queue,dicom_image_queue, write to doris |
+| wado-webworker | generate metadata for wado-server and update related instances for series and study.                 |
 
 
 ###  wado-server
