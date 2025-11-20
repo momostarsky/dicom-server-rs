@@ -89,6 +89,13 @@ impl<const N: usize> TryFrom<&str> for BoundedString<N> {
         BoundedString::from_str(s)
     }
 }
+impl<const N: usize> TryFrom<String> for BoundedString<N> {
+    type Error = BoundedStringError;
+
+    fn try_from(value: String) -> BoundedResult<Self> {
+        BoundedString::new(value)
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -115,6 +122,19 @@ impl<const N: usize> Eq for FixedLengthString<N> {}
 #[serde(transparent)]
 pub struct DicomDateString {
     pub(crate) value: String,
+}
+
+impl DicomDateString {
+    pub fn new(s: String) -> BoundedResult<DicomDateString> {
+        // 使用 NaiveDate 验证日期格式和有效性
+        chrono::NaiveDate::parse_from_str(&s, "%Y%m%d").map_err(|_| {
+            BoundedStringError::LengthError {
+                fixlen: 8,
+                len: s.len(),
+            }
+        })?;
+        Ok(Self { value: s })
+    }
 }
 
 // 为 DicomDateString 实现 Display trait
@@ -151,6 +171,23 @@ impl TryFrom<&String> for DicomDateString {
             }
         })?;
         Ok(Self { value: s.clone() })
+    }
+}
+
+impl TryFrom<String> for DicomDateString {
+    type Error = BoundedStringError;
+
+    fn try_from(value: String) -> BoundedResult<Self> {
+        // 使用 NaiveDate 验证日期格式和有效性
+        chrono::NaiveDate::parse_from_str(value.as_str(), "%Y%m%d").map_err(|_| {
+            BoundedStringError::LengthError {
+                fixlen: 8,
+                len: value.len(),
+            }
+        })?;
+        Ok(Self {
+            value: value.clone(),
+        })
     }
 }
 
@@ -200,6 +237,7 @@ impl DicomDateString {
         self.value.as_str()
     }
 
+    #[allow(dead_code)]
     pub(crate) fn from_db(s: &str) -> Self {
         // 使用 NaiveDate 验证日期格式和有效性
         chrono::NaiveDate::parse_from_str(&s, "%Y%m%d")

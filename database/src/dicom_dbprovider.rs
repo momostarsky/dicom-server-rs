@@ -1,4 +1,4 @@
-use crate::dicom_meta::{DicomJsonMeta, DicomStateMeta};
+use crate::dicom_meta::{DicomImageMeta, DicomJsonMeta, DicomStateMeta};
 use async_trait::async_trait;
 use thiserror::Error;
 
@@ -9,7 +9,6 @@ pub enum DbError {
 
     #[error("DataRow not exists: {0}")]
     RecordNotExists(String),
-
 
     #[error("Record already exists")]
     AlreadyExists,
@@ -28,6 +27,7 @@ pub trait DbProvider: Send + Sync {
     async fn save_state_info(&self, state_meta: &DicomStateMeta) -> Result<(), DbError>;
 
     async fn save_state_list(&self, state_meta: &[DicomStateMeta]) -> Result<(), DbError>;
+    async fn save_image_list(&self, state_meta: &[DicomImageMeta]) -> Result<(), DbError>;
 
     async fn save_json_list(&self, state_meta: &[DicomJsonMeta]) -> Result<(), DbError>;
 
@@ -37,12 +37,19 @@ pub trait DbProvider: Send + Sync {
         study_uid: &str,
     ) -> Result<Vec<DicomStateMeta>, DbError>;
 
-
     /*
      * 获取需要生成JSON格式的Metadata的序列信息.
      * end_time: 截止时间.
      */
-    async fn get_json_metaes(&self, end_time: chrono::NaiveDateTime) -> Result<Vec<DicomStateMeta>, DbError>;
+    async fn get_json_metaes(
+        &self,
+        end_time: chrono::NaiveDateTime,
+    ) -> Result<Vec<DicomStateMeta>, DbError>;
 
-    async fn get_json_meta(&self, tenant_id:&str, study_uid: &str, series_uid: &str)->Result<DicomJsonMeta, DbError>;
+    async fn get_json_meta(
+        &self,
+        tenant_id: &str,
+        study_uid: &str,
+        series_uid: &str,
+    ) -> Result<DicomJsonMeta, DbError>;
 }

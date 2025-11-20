@@ -1,5 +1,5 @@
 use crate::dicom_dbprovider::{DbError, DbProvider};
-use crate::dicom_meta::{DicomJsonMeta, DicomStateMeta};
+use crate::dicom_meta::{DicomImageMeta, DicomJsonMeta, DicomStateMeta};
 use async_trait::async_trait;
 use tokio_postgres::{Client, NoTls};
 #[derive(Debug, Clone)]
@@ -263,6 +263,167 @@ impl DbProvider for PgDbProvider {
         // 提交事务
         transaction.commit().await.map_err(|e| {
             println!("Error transaction.commit: {:?}", e);
+            DbError::DatabaseError(e.to_string())
+        })?;
+
+        Ok(())
+    }
+    // File: `database/src/dicom_pg.rs`
+    async fn save_image_list(&self, image_meta_list: &[DicomImageMeta]) -> Result<(), DbError> {
+        if image_meta_list.is_empty() {
+            return Ok(());
+        }
+
+        let mut client = self.make_client().await?;
+        let transaction = client.transaction().await.map_err(|e| {
+            println!("Failed to start transaction: {}", e);
+            DbError::DatabaseError(e.to_string())
+        })?;
+
+        println!(
+            "Starting transaction to save image meta list of length {}",
+            image_meta_list.len()
+        );
+
+        let sql_statement = r#"
+    INSERT INTO dicom_image_meta (
+        tenant_id,
+        patient_id,
+        study_uid,
+        series_uid,
+        sop_uid,
+        study_uid_hash,
+        series_uid_hash,
+        content_date,
+        content_time,
+        instance_number,
+        image_type,
+        image_orientation_patient,
+        image_position_patient,
+        slice_thickness,
+        spacing_between_slices,
+        slice_location,
+        samples_per_pixel,
+        photometric_interpretation,
+        width,
+        columns,
+        bits_allocated,
+        bits_stored,
+        high_bit,
+        pixel_representation,
+        rescale_intercept,
+        rescale_slope,
+        rescale_type,
+        window_center,
+        window_width,
+        transfer_syntax_uid,
+        pixel_data_location,
+        thumbnail_location,
+        sop_class_uid,
+        image_status,
+        space_size,
+        created_time,
+        updated_time
+    ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+        $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
+        $31, $32, $33, $34, $35, $36, $37
+    )
+    ON CONFLICT (tenant_id, study_uid, series_uid, sop_uid)
+    DO UPDATE SET
+        patient_id = EXCLUDED.patient_id,
+        study_uid_hash = EXCLUDED.study_uid_hash,
+        series_uid_hash = EXCLUDED.series_uid_hash,
+        content_date = EXCLUDED.content_date,
+        content_time = EXCLUDED.content_time,
+        instance_number = EXCLUDED.instance_number,
+        image_type = EXCLUDED.image_type,
+        image_orientation_patient = EXCLUDED.image_orientation_patient,
+        image_position_patient = EXCLUDED.image_position_patient,
+        slice_thickness = EXCLUDED.slice_thickness,
+        spacing_between_slices = EXCLUDED.spacing_between_slices,
+        slice_location = EXCLUDED.slice_location,
+        samples_per_pixel = EXCLUDED.samples_per_pixel,
+        photometric_interpretation = EXCLUDED.photometric_interpretation,
+        width = EXCLUDED.width,
+        columns = EXCLUDED.columns,
+        bits_allocated = EXCLUDED.bits_allocated,
+        bits_stored = EXCLUDED.bits_stored,
+        high_bit = EXCLUDED.high_bit,
+        pixel_representation = EXCLUDED.pixel_representation,
+        rescale_intercept = EXCLUDED.rescale_intercept,
+        rescale_slope = EXCLUDED.rescale_slope,
+        rescale_type = EXCLUDED.rescale_type,
+        window_center = EXCLUDED.window_center,
+        window_width = EXCLUDED.window_width,
+        transfer_syntax_uid = EXCLUDED.transfer_syntax_uid,
+        pixel_data_location = EXCLUDED.pixel_data_location,
+        thumbnail_location = EXCLUDED.thumbnail_location,
+        sop_class_uid = EXCLUDED.sop_class_uid,
+        image_status = EXCLUDED.image_status,
+        space_size = EXCLUDED.space_size,
+        updated_time = EXCLUDED.updated_time
+    "#;
+
+        let statement = transaction.prepare(sql_statement).await.map_err(|e| {
+            println!("Error preparing statement: {:?}", e);
+            DbError::DatabaseError(e.to_string())
+        })?;
+
+        for image_meta in image_meta_list {
+            transaction
+                .execute(
+                    &statement,
+                    &[
+                        &image_meta.tenant_id,
+                        &image_meta.patient_id,
+                        &image_meta.study_uid,
+                        &image_meta.series_uid,
+                        &image_meta.sop_uid,
+                        &image_meta.study_uid_hash,
+                        &image_meta.series_uid_hash,
+                        &image_meta.content_date,
+                        &image_meta.content_time,
+                        &image_meta.instance_number,
+                        &image_meta.image_type,
+                        &image_meta.image_orientation_patient,
+                        &image_meta.image_position_patient,
+                        &image_meta.slice_thickness,
+                        &image_meta.spacing_between_slices,
+                        &image_meta.slice_location,
+                        &image_meta.samples_per_pixel,
+                        &image_meta.photometric_interpretation,
+                        &image_meta.width,
+                        &image_meta.columns,
+                        &image_meta.bits_allocated,
+                        &image_meta.bits_stored,
+                        &image_meta.high_bit,
+                        &image_meta.pixel_representation,
+                        &image_meta.rescale_intercept,
+                        &image_meta.rescale_slope,
+                        &image_meta.rescale_type,
+                        &image_meta.window_center,
+                        &image_meta.window_width,
+                        &image_meta.transfer_syntax_uid,
+                        &image_meta.pixel_data_location,
+                        &image_meta.thumbnail_location,
+                        &image_meta.sop_class_uid,
+                        &image_meta.image_status,
+                        &image_meta.space_size,
+                        &image_meta.created_time,
+                        &image_meta.updated_time,
+                    ],
+                )
+                .await
+                .map_err(|e| {
+                    println!("Error executing statement: {:?}", e);
+                    DbError::DatabaseError(e.to_string())
+                })?;
+        }
+
+        transaction.commit().await.map_err(|e| {
+            println!("Error committing transaction: {:?}", e);
             DbError::DatabaseError(e.to_string())
         })?;
 
@@ -619,6 +780,7 @@ mod tests {
     #[cfg(test)]
     struct TestCleanup {
         tenant_ids: Vec<String>,
+        #[allow(dead_code)]
         db_provider: PgDbProvider,
     }
     #[cfg(test)]
@@ -642,13 +804,14 @@ mod tests {
             // 在实际实现中，这里应该执行数据库清理操作
             // 例如删除测试创建的记录
             // tokio::runtime::Runtime::new().unwrap().block_on(async {
-                for tenant_id in &self.tenant_ids {
-                    // 执行清理SQL
-                    println!(
-                        "exec sql: DELETE FROM dicom_state_meta WHERE tenant_id = {}",
-                        tenant_id
-                    );
-                }
+            for tenant_id in &self.tenant_ids {
+                // 执行清理SQL
+                println!(
+                    "exec sql: DELETE FROM dicom_state_meta WHERE tenant_id = {}",
+                    tenant_id
+                );
+            }
+
             // });
         }
     }
@@ -674,7 +837,7 @@ mod tests {
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1".to_string())?;
         let study_uid_hash = BoundedString::<20>::from_str("1.2.3.4.5.6.7.8.9").unwrap();
         let series_uid_hash = BoundedString::<20>::from_str("9.8.7.6.5.4.3.2.1").unwrap();
-        let study_date_origin = DicomDateString::from_db("20231201");
+        let study_date_origin = DicomDateString::new("20231201".to_string()).unwrap();
         let accession_number = BoundedString::<16>::try_from("ACC123456".to_string())?;
         let modality = Some(BoundedString::<16>::try_from("CT".to_string())?);
         let series_number = Some(1);
@@ -808,6 +971,9 @@ mod tests {
         // 验证返回结果不为空
         assert!(!state_meta_list.is_empty(), "Expected non-empty result");
 
+        if state_meta_list.is_empty() {
+            return Ok(());
+        }
         // 验证每条记录的 tenant_id 和 study_uid 是否正确
         for state_meta in state_meta_list {
             let json = serde_json::to_string_pretty(&state_meta)?;
@@ -965,6 +1131,128 @@ mod tests {
         assert!(
             result.is_ok(),
             "Failed to save DicomJsonMeta list: {:?}",
+            result.err()
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_save_image_list() -> Result<(), Box<dyn std::error::Error>> {
+        let sql_cnn = env::var("DICOM_PgSQL");
+        if sql_cnn.is_err() {
+            println!("DICOM_PgSQL environment variable not set");
+            println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
+            return Ok(());
+        }
+
+        let db_provider = PgDbProvider::new(sql_cnn.unwrap());
+
+        // 创建测试数据列表
+        let mut image_meta_list = Vec::new();
+
+        // 创建测试数据
+        let tenant_id = BoundedString::<64>::try_from("test_tenant_image_123".to_string())?;
+        let patient_id = BoundedString::<64>::try_from("test_patient_image_456".to_string())?;
+        let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9.image".to_string())?;
+        let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.image".to_string())?;
+        let sop_uid =
+            BoundedString::<64>::try_from("1.3.6.1.4.1.5962.1.1.0.0.0.1234567890".to_string())?;
+        let study_uid_hash = BoundedString::<20>::from_str("0AE07C2AA455BEB01D5A").unwrap();
+        let series_uid_hash = BoundedString::<20>::from_str("0AF07C2AA455BEB01D5A").unwrap();
+
+        let content_date = Some(NaiveDate::parse_from_str("20231204", "%Y%m%d")?);
+        let content_time = Some(NaiveTime::parse_from_str("120000", "%H%M%S")?);
+        let instance_number = Some(1);
+        let image_type = Some(BoundedString::<128>::try_from(
+            "ORIGINAL\\PRIMARY\\AXIAL".to_string(),
+        )?);
+        let image_orientation_patient = Some(BoundedString::<128>::try_from(
+            "1.0\\0.0\\0.0\\0.0\\1.0\\0.0".to_string(),
+        )?);
+        let image_position_patient = Some(BoundedString::<64>::try_from(
+            "-125.0\\-125.0\\0.0".to_string(),
+        )?);
+        let slice_thickness = Some(5.0);
+        let spacing_between_slices = Some(5.0);
+        let slice_location = Some(0.0);
+        let samples_per_pixel = Some(1);
+        let photometric_interpretation =
+            Some(BoundedString::<32>::try_from("MONOCHROME2".to_string())?);
+        let width = Some(512);
+        let columns = Some(512);
+        let bits_allocated = Some(16);
+        let bits_stored = Some(12);
+        let high_bit = Some(11);
+        let pixel_representation = Some(0);
+        let rescale_intercept = Some(0.0);
+        let rescale_slope = Some(1.0);
+        let rescale_type = Some(BoundedString::<64>::try_from("US".to_string())?);
+        let window_center = Some(BoundedString::<64>::try_from("50".to_string())?);
+        let window_width = Some(BoundedString::<64>::try_from("400".to_string())?);
+        let transfer_syntax_uid = BoundedString::<64>::try_from("1.2.840.10008.1.2.1".to_string())?;
+        let pixel_data_location = Some(BoundedString::<512>::try_from(
+            "/data/pixel/1234567890".to_string(),
+        )?);
+        let thumbnail_location = Some(BoundedString::<512>::try_from(
+            "/data/thumb/1234567890".to_string(),
+        )?);
+        let sop_class_uid = BoundedString::<64>::try_from("1.2.840.10008.5.1.4.1.1.2".to_string())?;
+        let image_status = Some(BoundedString::<32>::try_from("AVAILABLE".to_string())?);
+        let space_size = Some(2049i64);
+        let created_time = current_time();
+        let updated_time = current_time();
+
+        let image_meta = DicomImageMeta {
+            tenant_id,
+            patient_id,
+            study_uid,
+            series_uid,
+            sop_uid,
+            study_uid_hash,
+            series_uid_hash,
+            content_date,
+            content_time,
+            instance_number,
+            image_type,
+            image_orientation_patient,
+            image_position_patient,
+            slice_thickness,
+            spacing_between_slices,
+            slice_location,
+            samples_per_pixel,
+            photometric_interpretation,
+            width,
+            columns,
+            bits_allocated,
+            bits_stored,
+            high_bit,
+            pixel_representation,
+            rescale_intercept,
+            rescale_slope,
+            rescale_type,
+            window_center,
+            window_width,
+            transfer_syntax_uid,
+            pixel_data_location,
+            thumbnail_location,
+            sop_class_uid,
+            image_status,
+            space_size,
+
+            created_time,
+            updated_time,
+        };
+
+        image_meta_list.push(image_meta);
+
+        // 执行批量保存操作
+        let result = db_provider.save_image_list(&image_meta_list).await;
+
+        // 验证保存成功
+        assert!(
+            result.is_ok(),
+            "Failed to save DicomImageMeta list: {:?}",
             result.err()
         );
 

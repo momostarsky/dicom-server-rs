@@ -93,15 +93,7 @@ pub fn make_image_info(
     // 图像相关信息
     let instance_number = dicom_utils::get_int_value(dicom_obj, tags::INSTANCE_NUMBER);
 
-    let content_date = dicom_utils::get_date_value_dicom(dicom_obj, tags::CONTENT_DATE)
-        .map(|date| {
-            let date_str = date.format("%Y%m%d").to_string();
-            DicomDateString::try_from(date_str)
-        })
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::InvalidDateFormat("Failed to convert content date".to_string())
-        })?;
+    let content_date = dicom_utils::get_date_value_dicom(dicom_obj, tags::CONTENT_DATE);
 
     let content_time = dicom_utils::get_text_value(dicom_obj, tags::CONTENT_TIME)
         .filter(|v| !v.is_empty())
@@ -203,9 +195,18 @@ pub fn make_image_info(
     );
 
     // 计算哈希值
-    let study_uid_hash = hash_uid(&common_meta.study_uid).into();
-    let series_uid_hash = hash_uid(&common_meta.series_uid).into();
+    // 计算哈希值
+    let study_uid_hash = BoundedString::<20>::from_str(&hash_uid(&common_meta.study_uid)).map_err(|_| {
+        DicomParseError::ConversionError("Failed to convert study UID hash".to_string())
+    })?;
+    let series_uid_hash = BoundedString::<20>::from_str(&hash_uid(&common_meta.series_uid)).map_err(|_| {
+        DicomParseError::ConversionError("Failed to convert series UID hash".to_string())
+    })?;
 
+    let mut space_size = Some(0i64);
+    if fsize.is_some() {
+        space_size = Some(fsize.unwrap() as i64);
+    }
     // 时间戳
     let now = chrono::Local::now().naive_local();
 
@@ -260,9 +261,9 @@ pub fn make_image_info(
             DicomParseError::SopClassUidIsEmpty("SOP Class UID is empty".to_string())
         })?,
         image_status,
-        space_size: fsize,
-        created_time: Some(now),
-        updated_time: Some(now),
+        space_size,
+        created_time:  now,
+        updated_time: now,
     })
 }
 
@@ -483,8 +484,13 @@ pub fn make_state_info(
         dicom_utils::get_int_value(dicom_obj, tags::NUMBER_OF_SERIES_RELATED_INSTANCES);
 
     // 计算哈希值
-    let study_uid_hash = hash_uid(&common_meta.study_uid).into();
-    let series_uid_hash = hash_uid(&common_meta.series_uid).into();
+    // 计算哈希值
+    let study_uid_hash = BoundedString::<20>::from_str(&hash_uid(&common_meta.study_uid)).map_err(|_| {
+        DicomParseError::ConversionError("Failed to convert study UID hash".to_string())
+    })?;
+    let series_uid_hash = BoundedString::<20>::from_str(&hash_uid(&common_meta.series_uid)).map_err(|_| {
+        DicomParseError::ConversionError("Failed to convert series UID hash".to_string())
+    })?;
 
     // 时间戳
     let now = chrono::Local::now().naive_local();

@@ -2,9 +2,9 @@ use chrono::NaiveDate;
 
 use common::dicom_utils::get_tag_value;
 use common::message_sender_kafka::KafkaMessagePublisher;
-use common::{server_config, storage_config};
 use common::storage_config::hash_uid;
 use common::utils::get_logger;
+use common::{server_config, storage_config};
 use database::dicom_dbtype::{BoundedString, FixedLengthString};
 use database::dicom_meta::{DicomStoreMeta, TransferStatus};
 use dicom_dictionary_std::tags;
@@ -193,9 +193,14 @@ pub(crate) async fn process_dicom_file(
         .whatever_context("failed to build DICOM meta file information")?;
     let mut file_obj = obj.with_exact_meta(file_meta);
 
-    let dir_path =
-        storage_config::make_series_dicom_dir(tenant_id, &study_date, &study_uid, &series_uid, true)
-            .whatever_context(format!(
+    let dir_path = storage_config::make_series_dicom_dir(
+        tenant_id,
+        &study_date,
+        &study_uid,
+        &series_uid,
+        true,
+    )
+    .whatever_context(format!(
         "failed to get dicom series dir: tenant_id={}, study_date={}, study_uid={}, series_uid={}",
         tenant_id, study_date, study_uid, series_uid
     ))?;
@@ -243,6 +248,7 @@ pub(crate) async fn process_dicom_file(
     let trace_uid = uuid_v7.to_string(); // 或直接用 format!("{}", uuid_v7)
                                          // 修改为
     let cdate = chrono::Local::now().naive_local();
+
     Ok(DicomStoreMeta {
         trace_id: FixedLengthString::<36>::from_string(&trace_uid)
             .with_whatever_context(|err| format!("Failed to create trace_id: {}", err))?,
@@ -268,12 +274,14 @@ pub(crate) async fn process_dicom_file(
             .with_whatever_context(|err| format!("Failed to create target_ts: {}", err))?,
         study_date: NaiveDate::parse_from_str(study_date.as_str(), "%Y%m%d")
             .with_whatever_context(|err| format!("Failed to create study_date: {}", err))?,
-
         transfer_status: transcode_status,
         number_of_frames: frames,
         created_time: cdate,
-        series_uid_hash: series_uid_hash_v.into(),
-        study_uid_hash: study_uid_hash_v.into(),
+        // 修改为使用 from_string 方法创建 BoundedString<20>
+        series_uid_hash: BoundedString::<20>::from_string(&series_uid_hash_v)
+            .with_whatever_context(|err| format!("Failed to create series_uid_hash: {}", err))?,
+        study_uid_hash: BoundedString::<20>::from_string(&study_uid_hash_v)
+            .with_whatever_context(|err| format!("Failed to create study_uid_hash: {}", err))?,
         accession_number: BoundedString::try_from(accession_number)
             .with_whatever_context(|err| format!("Failed to create accession_number: {}", err))?,
         source_ip: BoundedString::try_from(ip)

@@ -204,7 +204,7 @@ pub struct DicomImageMeta {
     pub instance_number: Option<i32>,
 
     #[serde(rename = "content_date")]
-    pub content_date: Option<DicomDateString>,
+    pub content_date: Option<NaiveDate>,
 
     #[serde(rename = "content_time")]
     pub content_time: Option<NaiveTime>,
@@ -282,11 +282,12 @@ pub struct DicomImageMeta {
     pub image_status: Option<BoundedString<32>>,
 
     #[serde(rename = "space_size")]
-    pub space_size: Option<u32>,
+    pub space_size: Option<i64>,
 
     #[serde(rename = "created_time")]
-    pub created_time: Option<NaiveDateTime>,
+    pub created_time: NaiveDateTime,
 
     #[serde(rename = "updated_time")]
-    pub updated_time: Option<NaiveDateTime>,
+    pub updated_time: NaiveDateTime,
+
 }

@@ -238,14 +238,35 @@ async fn persist_message_loop(
         for image_entity in &image_entities {
             info!(logger, "ImageEntity: {:?}", image_entity);
         }
-        let app_config = server_config::load_config().unwrap();
+        let app_config = match server_config::load_config() {
+            Ok(config) => config,
+            Err(e) => {
+                error!(logger, "Failed to load config: {}", e);
+                continue;
+            }
+        };
         let queue_config = app_config.message_queue;
 
         let topic_state = &queue_config.topic_dicom_state.as_str();
         let topic_image = &queue_config.topic_dicom_image.as_str();
 
-        let state_producer = KafkaMessagePublisher::new(topic_state.parse().unwrap());
-        let image_producer = KafkaMessagePublisher::new(topic_image.parse().unwrap());
+        let topic_dicom_state = match topic_state.parse::<String>() {
+            Ok(val) => val,
+            Err(e) => {
+                error!(logger, "Failed to parse topic_dicom_state: {}", e);
+                continue;
+            }
+        };
+        let topic_dicom_image = match topic_image.parse::<String>() {
+            Ok(val) => val,
+            Err(e) => {
+                error!(logger, "Failed to parse topic_image: {}", e);
+                continue;
+            }
+        };
+
+        let state_producer = KafkaMessagePublisher::new(topic_dicom_state);
+        let image_producer = KafkaMessagePublisher::new(topic_dicom_image);
 
         // 发布状态消息和图像消息
         if let Err(e) = publish_dicom_meta(
@@ -259,18 +280,24 @@ async fn persist_message_loop(
             error!(logger, "Failed to publish dicom meta: {}", e);
             continue;
         }
-        let db = match database_factory::create_db_instance(&app_config.main_database).await {
-            Ok(db_provider) => db_provider,
+        match database_factory::create_db_instance(&app_config.main_database).await {
+            Ok(db) => {
+                // 插入状态消息
+                match db.save_state_list(&state_metas).await {
+                    Ok(_) => {}
+                    Err(e) => error!(logger, "Failed to save_state_list: {}", e),
+                }
+                // 插入切片消息
+                match db.save_image_list(&image_entities).await {
+                    Ok(_) => {}
+                    Err(e) => error!(logger, "Failed to save_image_list: {}", e),
+                }
+            }
             Err(e) => {
                 error!(logger, "Failed to create database: {}", e);
                 continue;
             }
         };
-        // 插入状态消息
-        if let Err(e) = db.save_state_list(&state_metas).await {
-            error!(logger, "Failed to save_state_list: {}", e);
-            continue;
-        }
 
         // 更新最后处理时间
         {

@@ -23,6 +23,21 @@ impl<const N: usize> ToSql for BoundedString<N> {
         <&str as ToSql>::to_sql_checked(&self.as_str(), ty, out)
     }
 }
+// impl From<String> for DicomDateString {
+//     fn from(value: String) -> Self {
+//         DicomDateString::from_db(value.as_str())
+//     }
+// }
+//
+// // 移除冲突的 From<String> 实现，这些应该在 dicom_dbtype.rs 中已经存在
+//
+// impl Default for DicomDateString {
+//     fn default() -> Self {
+//         DicomDateString {
+//             value: "00000000".to_string(),
+//         }
+//     }
+// }
 
 impl<const N: usize> FromSql<'_> for BoundedString<N> {
     fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {

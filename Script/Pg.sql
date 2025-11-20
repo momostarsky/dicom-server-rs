@@ -56,3 +56,127 @@ ALTER TABLE dicom_json_meta
 ADD CONSTRAINT PK_dicom_json_meta PRIMARY KEY (tenant_id, study_uid, series_uid);
 
 
+--------------------------
+---------------dicom_image_meta------------------
+----------------------------
+create table public.dicom_image_meta
+(
+    tenant_id                  varchar(64) not null,
+    patient_id                 varchar(64) not null,
+    study_uid                  varchar(64) not null,
+    series_uid                 varchar(64) not null,
+    sop_uid                    varchar(64) not null,
+    study_uid_hash             varchar(20) not null,
+    series_uid_hash            varchar(20) not null,
+    content_date               date,
+    content_time               time,
+    instance_number            integer,
+    image_type                 varchar(128),
+    image_orientation_patient  varchar(128),
+    image_position_patient     varchar(64),
+    slice_thickness            double precision,
+    spacing_between_slices     double precision,
+    slice_location             double precision,
+    samples_per_pixel          integer,
+    photometric_interpretation varchar(32),
+    width                      integer,
+    columns                    integer,
+    bits_allocated             integer,
+    bits_stored                integer,
+    high_bit                   integer,
+    pixel_representation       integer,
+    rescale_intercept          double precision,
+    rescale_slope              double precision,
+    rescale_type               varchar(64),
+    window_center              varchar(64),
+    window_width               varchar(64),
+    transfer_syntax_uid        varchar(64) not null,
+    pixel_data_location        varchar(512),
+    thumbnail_location         varchar(512),
+    sop_class_uid              varchar(64) not null,
+    image_status               varchar(32),
+    space_size                 bigint,
+    created_time               timestamp,
+    updated_time               timestamp
+);
+
+comment on column public.dicom_image_meta.tenant_id is '租户ID';
+
+comment on column public.dicom_image_meta.patient_id is '患者ID';
+
+comment on column public.dicom_image_meta.study_uid is '检查UID';
+
+comment on column public.dicom_image_meta.series_uid is '序列UID';
+
+comment on column public.dicom_image_meta.sop_uid is '实例UID';
+
+comment on column public.dicom_image_meta.study_uid_hash is '检查UID哈希值';
+
+comment on column public.dicom_image_meta.series_uid_hash is '序列UID哈希值';
+
+comment on column public.dicom_image_meta.content_date is '内容日期';
+
+comment on column public.dicom_image_meta.content_time is '内容时间';
+
+comment on column public.dicom_image_meta.instance_number is '实例编号';
+
+comment on column public.dicom_image_meta.image_type is '图像类型';
+
+comment on column public.dicom_image_meta.image_orientation_patient is '图像方向(患者坐标系)';
+
+comment on column public.dicom_image_meta.image_position_patient is '图像位置(患者坐标系)';
+
+comment on column public.dicom_image_meta.slice_thickness is '层厚';
+
+comment on column public.dicom_image_meta.spacing_between_slices is '层间距';
+
+comment on column public.dicom_image_meta.slice_location is '切片位置';
+
+comment on column public.dicom_image_meta.samples_per_pixel is '每个像素采样数';
+
+comment on column public.dicom_image_meta.photometric_interpretation is '光度解释';
+
+comment on column public.dicom_image_meta.width is '图像行数';
+
+comment on column public.dicom_image_meta.columns is '图像列数';
+
+comment on column public.dicom_image_meta.bits_allocated is '分配位数';
+
+comment on column public.dicom_image_meta.bits_stored is '存储位数';
+
+comment on column public.dicom_image_meta.high_bit is '高比特位';
+
+comment on column public.dicom_image_meta.pixel_representation is '像素表示法';
+
+comment on column public.dicom_image_meta.rescale_intercept is '重建截距';
+
+comment on column public.dicom_image_meta.rescale_slope is '重建斜率';
+
+comment on column public.dicom_image_meta.rescale_type is '重建类型';
+
+comment on column public.dicom_image_meta.window_center is '窗位中心';
+
+comment on column public.dicom_image_meta.window_width is '窗宽';
+
+comment on column public.dicom_image_meta.transfer_syntax_uid is '传输语法UID';
+
+comment on column public.dicom_image_meta.pixel_data_location is '像素数据位置';
+
+comment on column public.dicom_image_meta.thumbnail_location is '缩略图位置';
+
+comment on column public.dicom_image_meta.sop_class_uid is 'SOP类UID';
+
+comment on column public.dicom_image_meta.image_status is '图像状态';
+
+comment on column public.dicom_image_meta.space_size is '占用空间大小';
+
+comment on column public.dicom_image_meta.created_time is '创建时间';
+
+comment on column public.dicom_image_meta.updated_time is '更新时间';
+
+
+-- 方案2: 使用现有字段创建组合主键（需要先删除现有约束）
+ALTER TABLE dicom_image_meta
+    ADD CONSTRAINT pk_dicom_image_meta PRIMARY KEY (tenant_id, study_uid, series_uid, sop_uid);
+
+
