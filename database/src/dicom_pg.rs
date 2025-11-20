@@ -817,9 +817,9 @@ mod tests {
     }
     #[tokio::test]
     async fn test_save_state_info() -> Result<(), Box<dyn std::error::Error>> {
-        let sql_cnn = env::var("DICOM_PgSQL");
+        let sql_cnn = env::var("DICOM_PGSQL");
         if sql_cnn.is_err() {
-            println!("DICOM_PgSQL environment variable not set");
+            println!("DICOM_PGSQL environment variable not set");
             println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
             return Ok(());
         }
@@ -906,9 +906,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_state_metaes() -> Result<(), Box<dyn std::error::Error>> {
-        let sql_cnn = env::var("DICOM_PgSQL");
+        let sql_cnn = env::var("DICOM_PGSQL");
         if sql_cnn.is_err() {
-            println!("DICOM_PgSQL environment variable not set");
+            println!("DICOM_PGSQL environment variable not set");
             println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
             return Ok(());
         }
@@ -945,9 +945,9 @@ mod tests {
     }
     #[tokio::test]
     async fn test_get_json_metaes() -> Result<(), Box<dyn std::error::Error>> {
-        let sql_cnn = env::var("DICOM_PgSQL");
+        let sql_cnn = env::var("DICOM_PGSQL");
         if sql_cnn.is_err() {
-            println!("DICOM_PgSQL environment variable not set");
+            println!("DICOM_PGSQL environment variable not set");
             println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
             return Ok(());
         }
@@ -984,9 +984,9 @@ mod tests {
     }
     #[tokio::test]
     async fn test_save_state_list() -> Result<(), Box<dyn std::error::Error>> {
-        let sql_cnn = env::var("DICOM_PgSQL");
+        let sql_cnn = env::var("DICOM_PGSQL");
         if sql_cnn.is_err() {
-            println!("DICOM_PgSQL environment variable not set");
+            println!("DICOM_PGSQL environment variable not set");
             println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
             return Ok(());
         }
@@ -1085,9 +1085,9 @@ mod tests {
     }
     #[tokio::test]
     async fn test_save_json_list() -> Result<(), Box<dyn std::error::Error>> {
-        let sql_cnn = env::var("DICOM_PgSQL");
+        let sql_cnn = env::var("DICOM_PGSQL");
         if sql_cnn.is_err() {
-            println!("DICOM_PgSQL environment variable not set");
+            println!("DICOM_PGSQL environment variable not set");
             println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
             return Ok(());
         }
@@ -1139,9 +1139,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_save_image_list() -> Result<(), Box<dyn std::error::Error>> {
-        let sql_cnn = env::var("DICOM_PgSQL");
+        let sql_cnn = env::var("DICOM_PGSQL");
         if sql_cnn.is_err() {
-            println!("DICOM_PgSQL environment variable not set");
+            println!("DICOM_PGSQL environment variable not set");
             println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
             return Ok(());
         }
