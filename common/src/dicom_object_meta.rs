@@ -86,7 +86,7 @@ impl DicomCommonMeta {
 pub fn make_image_info(
     tenant_id: &str,
     dicom_obj: &InMemDicomObject,
-    fsize: Option<u32>,
+    fsize: Option<i64>,
 ) -> Result<DicomImageMeta, DicomParseError> {
     // 使用公共提取器获取基本信息
     let common_meta = DicomCommonMeta::extract_from_dicom(dicom_obj)?;

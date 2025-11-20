@@ -226,7 +226,7 @@ impl<const N: usize> FixedLengthString<N> {
             Ok(Self { value: s.clone() })
         }
     }
-
+ 
     pub fn as_str(&self) -> &str {
         &self.value
     }

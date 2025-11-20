@@ -1,5 +1,5 @@
 use crate::dicom_dbprovider::{DbError, DbProvider};
-use crate::dicom_meta::{DicomImageMeta, DicomJsonMeta, DicomStateMeta};
+use crate::dicom_meta::{DicomImageMeta, DicomJsonMeta, DicomStateMeta, DicomStoreMeta};
 use async_trait::async_trait;
 use tokio_postgres::{Client, NoTls};
 #[derive(Debug, Clone)]
@@ -30,6 +30,121 @@ impl PgDbProvider {
 
 #[async_trait]
 impl DbProvider for PgDbProvider {
+    async fn save_store_info(&self, store_meta_list: &[DicomStoreMeta]) -> Result<(), DbError> {
+        if store_meta_list.is_empty() {
+            return Ok(());
+        }
+
+        let mut client = self.make_client().await?;
+        let transaction = client.transaction().await.map_err(|e| {
+            println!("Failed to start transaction: {}", e);
+            DbError::DatabaseError(e.to_string())
+        })?;
+
+        println!(
+            "Starting transaction to save store meta list of length {}",
+            store_meta_list.len()
+        );
+
+        let statement = transaction
+            .prepare(
+                r#"
+            INSERT INTO dicom_object_meta (
+                trace_id,
+                worker_node_id,
+                tenant_id,
+                patient_id,
+                study_uid,
+                series_uid,
+                sop_uid,
+                file_size,
+                file_path,
+                transfer_syntax_uid,
+                number_of_frames,
+                series_uid_hash,
+                study_uid_hash,
+                accession_number,
+                target_ts,
+                study_date,
+                transfer_status,
+                source_ip,
+                source_ae,
+                created_time
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+            )
+            ON CONFLICT (trace_id)
+            DO UPDATE SET
+                worker_node_id = EXCLUDED.worker_node_id,
+                tenant_id = EXCLUDED.tenant_id,
+                patient_id = EXCLUDED.patient_id,
+                study_uid = EXCLUDED.study_uid,
+                series_uid = EXCLUDED.series_uid,
+                sop_uid = EXCLUDED.sop_uid,
+                file_size = EXCLUDED.file_size,
+                file_path = EXCLUDED.file_path,
+                transfer_syntax_uid = EXCLUDED.transfer_syntax_uid,
+                number_of_frames = EXCLUDED.number_of_frames,
+                series_uid_hash = EXCLUDED.series_uid_hash,
+                study_uid_hash = EXCLUDED.study_uid_hash,
+                accession_number = EXCLUDED.accession_number,
+                target_ts = EXCLUDED.target_ts,
+                study_date = EXCLUDED.study_date,
+                transfer_status = EXCLUDED.transfer_status,
+                source_ip = EXCLUDED.source_ip,
+                source_ae = EXCLUDED.source_ae,
+                created_time = EXCLUDED.created_time
+            "#,
+            )
+            .await
+            .map_err(|e| {
+                println!("Error preparing statement: {:?}", e);
+                DbError::DatabaseError(e.to_string())
+            })?;
+
+        for store_meta in store_meta_list {
+            transaction
+                .execute(
+                    &statement,
+                    &[
+                        &store_meta.trace_id,
+                        &store_meta.worker_node_id,
+                        &store_meta.tenant_id,
+                        &store_meta.patient_id,
+                        &store_meta.study_uid,
+                        &store_meta.series_uid,
+                        &store_meta.sop_uid,
+                        &store_meta.file_size,
+                        &store_meta.file_path,
+                        &store_meta.transfer_syntax_uid,
+                        &store_meta.number_of_frames,
+                        &store_meta.series_uid_hash,
+                        &store_meta.study_uid_hash,
+                        &store_meta.accession_number,
+                        &store_meta.target_ts,
+                        &store_meta.study_date,
+                        &store_meta.transfer_status.to_string(),
+                        &store_meta.source_ip,
+                        &store_meta.source_ae,
+                        &store_meta.created_time,
+                    ],
+                )
+                .await
+                .map_err(|e| {
+                    println!("Error executing statement: {:?}", e);
+                    DbError::DatabaseError(e.to_string())
+                })?;
+        }
+
+        transaction.commit().await.map_err(|e| {
+            println!("Error committing transaction: {:?}", e);
+            DbError::DatabaseError(e.to_string())
+        })?;
+
+        Ok(())
+    }
+
     async fn save_state_info(&self, state_meta: &DicomStateMeta) -> Result<(), DbError> {
         let client = self.make_client().await?;
         let statement = client
@@ -762,6 +877,7 @@ mod tests {
     use super::*;
     use crate::dicom_dbprovider::current_time;
     use crate::dicom_dbtype::*;
+    use crate::dicom_meta::TransferStatus;
     use chrono::{NaiveDate, NaiveTime};
     use ctor::ctor;
     use dotenv::dotenv;
@@ -1131,6 +1247,78 @@ mod tests {
         assert!(
             result.is_ok(),
             "Failed to save DicomJsonMeta list: {:?}",
+            result.err()
+        );
+
+        Ok(())
+    }
+    #[tokio::test]
+    async fn test_save_store_info() -> Result<(), Box<dyn std::error::Error>> {
+        let sql_cnn = env::var("DICOM_PGSQL");
+        if sql_cnn.is_err() {
+            println!("DICOM_PGSQL environment variable not set");
+            println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
+            return Ok(());
+        }
+
+        let db_provider = PgDbProvider::new(sql_cnn.unwrap());
+
+        // 创建测试数据
+        let trace_id = FixedLengthString::<36>::from_str("123e4567-e89b-12d3-a456-426614174000")?;
+        let worker_node_id = BoundedString::<64>::try_from("TEST_WORKER_NODE".to_string())?;
+        let tenant_id = BoundedString::<64>::try_from("test_tenant_store_123".to_string())?;
+        let patient_id = BoundedString::<64>::try_from("test_patient_store_456".to_string())?;
+        let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9.store".to_string())?;
+        let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.store".to_string())?;
+        let sop_uid =
+            BoundedString::<64>::try_from("1.3.6.1.4.1.5962.1.1.0.0.0.1234567891".to_string())?;
+        let file_size = 1024i64;
+        let file_path = BoundedString::<512>::try_from("/data/test/file.dcm".to_string())?;
+        let transfer_syntax_uid = BoundedString::<64>::try_from("1.2.840.10008.1.2.1".to_string())?;
+        let number_of_frames = 1;
+        let series_uid_hash = BoundedString::<20>::from_str("0BA07C2AA455BEB01D5A").unwrap();
+        let study_uid_hash = BoundedString::<20>::from_str("0BB07C2AA455BEB01D5A").unwrap();
+        let accession_number = BoundedString::<64>::try_from("ACC123458".to_string())?;
+        let target_ts = BoundedString::<64>::try_from("1.2.840.10008.1.2.1".to_string())?;
+        let study_date = NaiveDate::from_ymd_opt(2023, 12, 5).unwrap();
+        let transfer_status = TransferStatus::Success;
+        let source_ip = BoundedString::<24>::try_from("192.168.1.100".to_string())?;
+        let source_ae = BoundedString::<64>::try_from("TEST_AE".to_string())?;
+        let created_time = current_time();
+
+        let store_meta = DicomStoreMeta {
+            trace_id,
+            worker_node_id,
+            tenant_id,
+            patient_id,
+            study_uid,
+            series_uid,
+            sop_uid,
+            file_size,
+            file_path,
+            transfer_syntax_uid,
+            number_of_frames,
+            series_uid_hash,
+            study_uid_hash,
+            accession_number,
+            target_ts,
+            study_date,
+            transfer_status,
+            source_ip,
+            source_ae,
+            created_time,
+        };
+
+        // 创建存储元数据列表
+        let store_meta_list = vec![store_meta];
+
+        // 执行保存操作
+        let result = db_provider.save_store_info(&store_meta_list).await;
+
+        // 验证保存成功
+        assert!(
+            result.is_ok(),
+            "Failed to save DicomStoreMeta list: {:?}",
             result.err()
         );
 

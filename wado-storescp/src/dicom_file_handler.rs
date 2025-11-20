@@ -266,7 +266,7 @@ pub(crate) async fn process_dicom_file(
             .with_whatever_context(|err| format!("Failed to create sop_uid: {}", err))?,
         file_path: BoundedString::try_from(saved_path.to_str().unwrap())
             .with_whatever_context(|err| format!("Failed to create file_path: {}", err))?,
-        file_size: fsize as u32,
+        file_size: fsize as i64,
         transfer_syntax_uid: BoundedString::<64>::from_string(ts).with_whatever_context(|err| {
             format!("Failed to create transfer_syntax_uid: {}", err)
         })?,

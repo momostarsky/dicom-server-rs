@@ -1,6 +1,7 @@
 use crate::dicom_dbtype::{BoundedString, DicomDateString, FixedLengthString};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -9,6 +10,16 @@ pub enum TransferStatus {
     NoNeedTransfer,
     Success,
     Failed,
+}
+
+impl Display for TransferStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TransferStatus::NoNeedTransfer => write!(f, "NoNeedTransfer"),
+            TransferStatus::Success => write!(f, "Success"),
+            TransferStatus::Failed => write!(f, "Failed"),
+        }
+    }
 }
 
 /// DicomStoreMeta 用于DICOM-CStoreSCP服务记录收图日志.
@@ -30,7 +41,7 @@ pub struct DicomStoreMeta {
     #[serde(rename = "sop_uid")]
     pub sop_uid: BoundedString<64>,
     #[serde(rename = "file_size")]
-    pub file_size: u32,
+    pub file_size: i64,
     #[serde(rename = "file_path")]
     pub file_path: BoundedString<512>,
     #[serde(rename = "transfer_syntax_uid")]
@@ -44,7 +55,7 @@ pub struct DicomStoreMeta {
     #[serde(rename = "study_uid_hash")]
     pub study_uid_hash: BoundedString<20>,
     #[serde(rename = "accession_number")]
-    pub accession_number: BoundedString<16>,
+    pub accession_number: BoundedString<64>,
     #[serde(rename = "target_ts")]
     pub target_ts: BoundedString<64>,
     #[serde(rename = "study_date")]
@@ -289,5 +300,4 @@ pub struct DicomImageMeta {
 
     #[serde(rename = "updated_time")]
     pub updated_time: NaiveDateTime,
-
 }

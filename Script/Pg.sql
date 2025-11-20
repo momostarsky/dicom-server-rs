@@ -180,3 +180,39 @@ ALTER TABLE dicom_image_meta
     ADD CONSTRAINT pk_dicom_image_meta PRIMARY KEY (tenant_id, study_uid, series_uid, sop_uid);
 
 
+---------------------------------
+create table IF NOT EXISTS  dicom_object_meta
+(
+    trace_id            varchar(36)   not null,
+    worker_node_id      varchar(64)   not null,
+    tenant_id           varchar(64)   not null,
+    patient_id          varchar(64)   not null,
+    study_uid           varchar(64)   null,
+    series_uid          varchar(64)   null,
+    sop_uid             varchar(64)   null,
+    file_size           bigint        null,
+    file_path           varchar(512) null,
+    transfer_syntax_uid varchar(64)   null,
+    number_of_frames    int           null,
+    series_uid_hash     VARCHAR(20)   null,
+    study_uid_hash      VARCHAR(20)   null,
+    accession_number    varchar(64)   null,
+    target_ts           varchar(64)   null,
+    study_date          date          null,
+    transfer_status     varchar(64)   null,
+    source_ip           varchar(24)   null,
+    source_ae           varchar(64)   null,
+    created_time        timestamp     not null default CURRENT_TIMESTAMP
+);
+
+comment on column dicom_object_meta.tenant_id      is '租户ID';
+comment on column dicom_object_meta.patient_id     is '患者ID';
+comment on column dicom_object_meta.trace_id       is '全局唯一追踪ID，作为主键';
+comment on column dicom_object_meta.worker_node_id is '工作节点 ID';
+
+ALTER TABLE dicom_object_meta   ADD CONSTRAINT pk_dicom_object_meta PRIMARY KEY  (trace_id);
+
+create index idx_dicom_object_meta on dicom_object_meta (tenant_id, patient_id,study_uid,series_uid);
+create index idx_dicom_object_meta_date on dicom_object_meta (tenant_id, study_date);
+
+-----------------------收图记录-------------------------

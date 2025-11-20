@@ -1,4 +1,4 @@
-use crate::dicom_meta::{DicomImageMeta, DicomJsonMeta, DicomStateMeta};
+use crate::dicom_meta::{DicomImageMeta, DicomJsonMeta, DicomStateMeta, DicomStoreMeta};
 use async_trait::async_trait;
 use thiserror::Error;
 
@@ -24,6 +24,9 @@ pub fn current_time() -> chrono::NaiveDateTime {
 }
 #[async_trait]
 pub trait DbProvider: Send + Sync {
+
+    async fn save_store_info(&self, store_meta_list: &[DicomStoreMeta]) -> Result<(), DbError>;
+
     async fn save_state_info(&self, state_meta: &DicomStateMeta) -> Result<(), DbError>;
 
     async fn save_state_list(&self, state_meta: &[DicomStateMeta]) -> Result<(), DbError>;
