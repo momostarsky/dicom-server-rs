@@ -283,7 +283,7 @@ async fn persist_message_loop(
         match database_factory::create_db_instance(&app_config.main_database).await {
             Ok(db) => {
                 // 保存收图记录
-                match db.save_store_info(&messages_to_process).await {
+                match db.save_store_list(&messages_to_process).await {
                     Ok(_) => {}
                     Err(e) => error!(logger, "Failed to save_store_info: {}", e),
                 }

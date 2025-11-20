@@ -30,7 +30,7 @@ impl PgDbProvider {
 
 #[async_trait]
 impl DbProvider for PgDbProvider {
-    async fn save_store_info(&self, store_meta_list: &[DicomStoreMeta]) -> Result<(), DbError> {
+    async fn save_store_list(&self, store_meta_list: &[DicomStoreMeta]) -> Result<(), DbError> {
         if store_meta_list.is_empty() {
             return Ok(());
         }
@@ -1313,7 +1313,7 @@ mod tests {
         let store_meta_list = vec![store_meta];
 
         // 执行保存操作
-        let result = db_provider.save_store_info(&store_meta_list).await;
+        let result = db_provider.save_store_list(&store_meta_list).await;
 
         // 验证保存成功
         assert!(
