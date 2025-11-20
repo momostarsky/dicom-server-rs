@@ -13,6 +13,7 @@ struct AppState {
     log: Logger,
     db: Arc<dyn DbProvider + Send + Sync>,
     config: AppConfig,
+    #[allow(dead_code)]
     redis_helper: RedisHelper,
     // 可以添加其他配置
 }

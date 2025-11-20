@@ -18,11 +18,11 @@ use std::fs::File;
 use std::io::{Error, Write};
 use tokio::task;
 
-pub fn file_exists(p0: &PathBuf) -> bool {
-    fs::metadata(p0).is_ok()
+pub fn file_exists(file_path: &PathBuf) -> bool {
+    fs::metadata(file_path).is_ok()
 }
 /// 递归遍历目录下的所有文件
-pub fn walk_directory<P: Into<PathBuf>>(start_path: P) -> Result<Vec<PathBuf>, std::io::Error> {
+pub fn walk_directory<P: Into<PathBuf>>(start_path: P) -> Result<Vec<PathBuf>, Error> {
     let start_path = start_path.into();
     let mut file_paths = Vec::new();
 
@@ -56,7 +56,7 @@ pub fn generate_study_json(
 ) -> Result<(), Box<dyn std::error::Error>> {
     if !file_exists(file) {
         eprintln!("File does not exist: {:?}", file);
-        return Err(Box::new(std::io::Error::new(
+        return Err(Box::new(Error::new(
             std::io::ErrorKind::NotFound,
             format!("File or Directory does not exist: {:?}", file),
         )));
@@ -64,7 +64,7 @@ pub fn generate_study_json(
     if !file.is_dir() {
         // 递归遍历目录下的所有文件
         eprintln!("File does not exist: {:?}", file);
-        return Err(Box::new(std::io::Error::new(
+        return Err(Box::new(Error::new(
             std::io::ErrorKind::NotFound,
             format!("File or Directory does not exist: {:?}", file),
         )));
@@ -143,21 +143,21 @@ pub fn generate_study_json(
                     let series_desc = get_string(tags::SERIES_DESCRIPTION, &obj);
 
                     let px_spacing_vec: Vec<String> =
-                        dicom_utils::get_tag_values(tags::PIXEL_SPACING, &obj);
+                        get_tag_values(tags::PIXEL_SPACING, &obj);
 
                     let rows = get_string(tags::ROWS, &obj);
                     let columns = get_string(tags::COLUMNS, &obj);
                     let body_part = get_string(tags::BODY_PART_EXAMINED, &obj);
 
                     let image_type_vec: Vec<String> =
-                        dicom_utils::get_tag_values(tags::IMAGE_TYPE, &obj);
+                        get_tag_values(tags::IMAGE_TYPE, &obj);
                     let pixel_representation = get_string(tags::PIXEL_REPRESENTATION, &obj);
                     let patient_position = get_string(tags::PATIENT_POSITION, &obj);
                     let image_position_patient_vec: Vec<String> =
-                        dicom_utils::get_tag_values(tags::IMAGE_POSITION_PATIENT, &obj);
+                        get_tag_values(tags::IMAGE_POSITION_PATIENT, &obj);
 
                     let image_orientation_patient_vec: Vec<String> =
-                        dicom_utils::get_tag_values(tags::IMAGE_ORIENTATION_PATIENT, &obj);
+                        get_tag_values(tags::IMAGE_ORIENTATION_PATIENT, &obj);
 
                     let instance_num = get_string(tags::INSTANCE_NUMBER, &obj);
                     let slice_thickness = get_string(tags::SLICE_THICKNESS, &obj);
@@ -271,7 +271,7 @@ pub async fn generate_series_json(series_info: &DicomStateMeta) -> Result<String
     let json_file_path = match json_metadata_path_for_series(&series_info, true) {
         Ok(v) => v,
         Err(e) => {
-            return Err(std::io::Error::new(
+            return Err(Error::new(
                 std::io::ErrorKind::Other,
                 format!("Failed to get json_file_path for generate: {}", e),
             ));
@@ -281,22 +281,30 @@ pub async fn generate_series_json(series_info: &DicomStateMeta) -> Result<String
     let dicom_dir = match dicom_series_dir(series_info, false) {
         Ok(vv) => vv,
         Err(_) => {
-            return Err(std::io::Error::new(
+            return Err(Error::new(
                 std::io::ErrorKind::Other,
                 "Failed to retrieve dicom_dir",
             ));
         }
     };
 
-    let files = match walk_directory(dicom_dir) {
+    let files = match walk_directory(&dicom_dir) {
         Ok(files) => files,
         Err(e) => {
-            return Err(std::io::Error::new(
+            return Err(Error::new(
                 std::io::ErrorKind::Other,
                 format!("Failed to walk directory: {}", e),
             ));
         }
     };
+
+    if files.is_empty() {
+        return Err(Error::new(
+            std::io::ErrorKind::Other,
+            format!("No DICOM files found in the directory:{}", &dicom_dir),
+        ));
+    };
+
     let mut handles = vec![];
 
     for file_path in &files {
@@ -341,14 +349,14 @@ pub async fn generate_series_json(series_info: &DicomStateMeta) -> Result<String
             Ok(result) => match result {
                 Ok(sop_json) => arr.push(sop_json),
                 Err(e) => {
-                    return Err(std::io::Error::new(
+                    return Err(Error::new(
                         std::io::ErrorKind::Other,
                         format!("Failed to walk directory: {}", e),
                     ));
                 }
             },
             Err(e) => {
-                return Err(std::io::Error::new(
+                return Err(Error::new(
                     std::io::ErrorKind::Other,
                     format!("Failed to walk directory: {}", e),
                 ));
@@ -358,16 +366,16 @@ pub async fn generate_series_json(series_info: &DicomStateMeta) -> Result<String
 
     let json = match serde_json::to_string(&arr) {
         Ok(json) => {
-            if let Err(e) = std::fs::write(&json_file_path, &json) {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+            if let Err(e) = fs::write(&json_file_path, &json) {
+                return Err(Error::new(
+                    std::io::ErrorKind::PermissionDenied,
                     format!("Failed to write  JSON to file: {}", e),
                 ));
             }
             json
         }
         Err(e) => {
-            return Err(std::io::Error::new(
+            return Err(Error::new(
                 std::io::ErrorKind::Other,
                 format!("Failed to generate JSON: {}", e),
             ));
