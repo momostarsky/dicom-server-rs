@@ -18,7 +18,6 @@ use dicom_object::OpenFileOptions;
 // use permission_macros::permission_required;
 use common::dicom_json_helper::generate_series_json;
 use slog::info;
-use tokio::time::Sleep;
 use std::path::PathBuf;
 
 static ACCEPT_DICOM_JSON_TYPE: &str = "application/dicom+json";
