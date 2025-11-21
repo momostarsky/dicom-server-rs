@@ -3,18 +3,19 @@ use crate::{
     App,
 };
 
+use common::message_sender_kafka::KafkaMessagePublisher;
+use common::server_config;
+use common::utils::get_logger;
+use dicom_core::Tag;
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu::{OptionExt, Report, ResultExt, Whatever};
 use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dicom_ul::{pdu::PDataValueType, Pdu};
 use std::net::TcpStream;
-use dicom_core::Tag;
-use common::message_sender_kafka::KafkaMessagePublisher;
-use common::server_config;
-use common::utils::get_logger;
 
 use crate::dicom_file_handler::classify_and_publish_dicom_messages;
+use common::storage_config::StorageConfig;
 use slog::{debug, info, o, warn};
 
 pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Whatever> {
@@ -32,14 +33,13 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
     let verbose = *verbose;
     let peer = scu_stream.peer_addr().unwrap();
     let app_config = server_config::load_config().whatever_context("failed to load config")?;
-    let queue_config = app_config.message_queue;
+    let queue_config = &app_config.message_queue;
     let queue_topic_main = &queue_config.topic_main.as_str();
     let queue_topic_log = &queue_config.topic_log.as_str();
 
     let storage_producer = KafkaMessagePublisher::new(queue_topic_main.parse().unwrap());
     let log_producer = KafkaMessagePublisher::new(queue_topic_log.parse().unwrap());
     let ip_address = peer.ip().to_string();
-
 
     let mut instance_buffer: Vec<u8> = Vec::with_capacity(1024 * 1024);
     let mut msgid = 1;
@@ -86,7 +86,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         association.presentation_contexts()
     );
 
-
+    let storage_config = StorageConfig::new(app_config.clone());
     let client_ae_title = association.client_ae_title().to_string();
     let mut dicom_message_lists = vec![];
     loop {
@@ -171,10 +171,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                         .to_string();
                                     let tenant = obj.element_opt(Tag::from((0x1211, 0x1217)));
                                     if let Ok(Some(tenant)) = tenant {
-                                        tenant_id = tenant
-                                            .to_str()
-                                            .unwrap()
-                                            .to_string();
+                                        tenant_id = tenant.to_str().unwrap().to_string();
                                     } else {
                                         tenant_id = "1234567890".to_string();
                                     }
@@ -205,6 +202,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                     &sop_instance_uid,
                                     ip_address.clone(),
                                     client_ae_title.clone(),
+                                    &storage_config
                                 )
                                 .await
                                 {

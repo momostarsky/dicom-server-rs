@@ -9,8 +9,7 @@ use actix_web::{HttpMessage, HttpRequest, HttpResponse, Responder, get, web, web
 use common::dicom_json_helper;
 use common::redis_key::RedisHelper;
 use common::storage_config::{
-    dicom_file_path, dicom_series_dir, dicom_study_dir, json_metadata_path_for_series,
-    json_metadata_path_for_study,
+    StorageConfig, dicom_file_path
 };
 use database::dicom_meta::{DicomJsonMeta, DicomStateMeta};
 use dicom_dictionary_std::tags;
@@ -179,8 +178,19 @@ async fn retrieve_study_metadata(
     }
 
     info!(log, "Study Info: {:?}", study_info.first());
-    let study_info = study_info.first().unwrap();
-    let json_path = match json_metadata_path_for_study(&study_info, false) {
+    let study_info = match study_info.first() {
+        Some(v) => v,
+        None => {
+            return HttpResponse::NotFound().body(format!(
+                "retrieve_study_metadata Study not found in database retry after 30 seconds: {},{}",
+                tenant_id, study_uid
+            ));
+        }
+    };
+
+    let storage_config = StorageConfig::new( app_state.config.clone());
+
+    let json_path = match storage_config.json_metadata_path_for_study(study_info,false) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -188,7 +198,7 @@ async fn retrieve_study_metadata(
         }
     };
 
-    let dicom_dir = match dicom_study_dir(&study_info, false) {
+    let dicom_dir = match storage_config.dicom_study_dir(study_info,false) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -399,19 +409,32 @@ async fn retrieve_series_metadata(
         .find(|info| info.series_uid.as_str() == series_uid)
         .cloned();
 
-    if series_info.is_none() {
-        return HttpResponse::NotFound()
-            .body(format!("Series not found in study info: {}", series_uid));
-    }
+    let series_info = match series_info {
+        Some(v) => v,
+        None => {
+            return HttpResponse::NotFound().body(format!(
+                "retrieve_series_metadata seies not found in database retry after 30 seconds: {},{}",
+                tenant_id, series_uid
+            ));
+        }
+    };
+
     info!(log, "Series Info: {:?}", series_info);
 
-    while rh.get_series_metadata_gererate(tenant_id.as_str(), series_uid.as_str()).is_ok() {
-        info!(log, "get_series_metadata_gererate is Ok , sleep 100 ms to wait generating json stopped");
+    while rh
+        .get_series_metadata_gererate(tenant_id.as_str(), series_uid.as_str())
+        .is_ok()
+    {
+        info!(
+            log,
+            "get_series_metadata_gererate is Ok , sleep 100 ms to wait generating json stopped"
+        );
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
-    let series_info = series_info.unwrap();
-    let json_file_path = match json_metadata_path_for_series(&series_info, true) {
+    let storage_config = StorageConfig::new( app_state.config.clone());
+
+    let json_file_path = match storage_config.json_metadata_path_for_series(&series_info,true) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -569,15 +592,21 @@ async fn retrieve_instance_impl(
         .find(|info| info.series_uid.as_str() == series_uid)
         .cloned();
 
-    if series_info.is_none() {
-        return HttpResponse::NotFound()
-            .body(format!("Series not found in study info: {}", series_uid));
-    }
+    let series_info = match series_info {
+        Some(v) => v,
+        None => {
+            return HttpResponse::NotFound().body(format!(
+                "retrieve_instance_impl seies not found in database retry after 30 seconds: {},{}",
+                tenant_id, series_uid
+            ));
+        }
+    };
+
     info!(log, "Series Info: {:?}", series_info);
 
-    let series_info = series_info.unwrap();
+    let storage_config = StorageConfig::new( app_state.config.clone());
 
-    let dicom_dir = match dicom_series_dir(&series_info, false) {
+    let dicom_dir = match storage_config.dicom_series_dir(&series_info,false) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()

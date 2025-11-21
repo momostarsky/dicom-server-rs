@@ -2,7 +2,7 @@ use chrono::NaiveDate;
 
 use common::dicom_utils::get_tag_value;
 use common::message_sender_kafka::KafkaMessagePublisher;
-use common::storage_config::hash_uid;
+use common::storage_config::{hash_uid, StorageConfig};
 use common::utils::get_logger;
 use common::{server_config, storage_config};
 use database::dicom_dbtype::{BoundedString, FixedLengthString};
@@ -104,6 +104,7 @@ pub(crate) async fn process_dicom_file(
     sop_instance_uid: &String, //当前文件的SOP实例ID
     ip: String,
     client_ae: String,
+    storage_config: &StorageConfig,
 ) -> Result<DicomStoreMeta, Whatever> {
     let root_logger = get_logger();
     let logger = root_logger.new(o!("wado-storescp"=>"process_dicom_file"));
@@ -193,7 +194,7 @@ pub(crate) async fn process_dicom_file(
         .whatever_context("failed to build DICOM meta file information")?;
     let mut file_obj = obj.with_exact_meta(file_meta);
 
-    let dir_path = storage_config::make_series_dicom_dir(
+    let dir_path = storage_config.make_series_dicom_dir(
         tenant_id,
         &study_date,
         &study_uid,

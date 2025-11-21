@@ -17,6 +17,7 @@ use slog::o;
 use crate::dicom_file_handler::classify_and_publish_dicom_messages;
 use database::dicom_meta::DicomStoreMeta;
 use slog::{debug, info, warn};
+use common::storage_config::StorageConfig;
 
 pub async fn run_store_async(
     scu_stream: tokio::net::TcpStream,
@@ -48,7 +49,7 @@ pub async fn run_store_async(
 
     let app_config = server_config::load_config().whatever_context("failed to load config")?;
 
-    let queue_config = app_config.message_queue;
+    let queue_config = &app_config.message_queue;
 
     let queue_topic_main = &queue_config.topic_main.as_str();
     let queue_topic_log = &queue_config.topic_log.as_str();
@@ -103,6 +104,7 @@ pub async fn run_store_async(
         association.presentation_contexts()
     );
 
+    let storage_config = StorageConfig::new(app_config.clone());
 
     let mut dicom_message_lists: Vec<DicomStoreMeta> = vec![];
 
@@ -224,6 +226,7 @@ pub async fn run_store_async(
                                     &sop_instance_uid,
                                     ip_address.clone(),
                                     client_ae_title.clone(),
+                                    &storage_config
                                 )
                                 .await
                                 {

@@ -4,9 +4,9 @@ use std::path::PathBuf;
 
 use dicom_object::{DefaultDicomObject, FileDicomObject, FileMetaTableBuilder, OpenFileOptions};
 
-use crate::dicom_utils;
 use crate::dicom_utils::get_tag_values;
-use crate::storage_config::{dicom_series_dir, json_metadata_path_for_series};
+use crate::storage_config::StorageConfig;
+use crate::{dicom_utils, server_config};
 use database::dicom_meta::DicomStateMeta;
 use dicom_dictionary_std::tags;
 use dicom_object::file::CharacterSetOverride;
@@ -142,15 +142,13 @@ pub fn generate_study_json(
 
                     let series_desc = get_string(tags::SERIES_DESCRIPTION, &obj);
 
-                    let px_spacing_vec: Vec<String> =
-                        get_tag_values(tags::PIXEL_SPACING, &obj);
+                    let px_spacing_vec: Vec<String> = get_tag_values(tags::PIXEL_SPACING, &obj);
 
                     let rows = get_string(tags::ROWS, &obj);
                     let columns = get_string(tags::COLUMNS, &obj);
                     let body_part = get_string(tags::BODY_PART_EXAMINED, &obj);
 
-                    let image_type_vec: Vec<String> =
-                        get_tag_values(tags::IMAGE_TYPE, &obj);
+                    let image_type_vec: Vec<String> = get_tag_values(tags::IMAGE_TYPE, &obj);
                     let pixel_representation = get_string(tags::PIXEL_REPRESENTATION, &obj);
                     let patient_position = get_string(tags::PATIENT_POSITION, &obj);
                     let image_position_patient_vec: Vec<String> =
@@ -268,7 +266,18 @@ pub fn generate_study_json(
 }
 
 pub async fn generate_series_json(series_info: &DicomStateMeta) -> Result<String, Error> {
-    let json_file_path = match json_metadata_path_for_series(&series_info, true) {
+    let app_config = match server_config::load_config() {
+        Ok(v) => v,
+        Err(e) => {
+            return Err(Error::new(
+                std::io::ErrorKind::Other,
+                format!("server_config::load_config failed for generate: {}", e),
+            ));
+        }
+    };
+    let storage_config = StorageConfig::new( app_config);
+
+    let json_file_path = match storage_config.json_metadata_path_for_series(series_info,true) {
         Ok(v) => v,
         Err(e) => {
             return Err(Error::new(
@@ -278,7 +287,7 @@ pub async fn generate_series_json(series_info: &DicomStateMeta) -> Result<String
         }
     };
 
-    let dicom_dir = match dicom_series_dir(series_info, false) {
+    let dicom_dir = match storage_config.dicom_series_dir(series_info,false) {
         Ok(vv) => vv,
         Err(_) => {
             return Err(Error::new(
