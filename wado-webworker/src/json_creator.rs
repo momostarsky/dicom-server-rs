@@ -100,6 +100,12 @@ async fn execute_background_json_generation(
     let mut json_mets = vec![];
     // 逐个处理记录
     for record in pending_records {
+
+        let tenant_id = record.tenant_id.clone().to_string();
+        let series_uid = record.series_uid.clone().to_string();
+
+        app_state.redis_helper.set_series_metadata_gererate(&tenant_id, &series_uid);
+         
         // 这里应该调用实际的JSON生成逻辑
         // 可以参考wado_rs_controller.rs中的实现
         match generate_series_json(&record).await {
@@ -109,7 +115,7 @@ async fn execute_background_json_generation(
                     "Generated JSON for study: {}, series: {}", record.study_uid, record.series_uid
                 );
                 json_mets.push(DicomJsonMeta {
-                    tenant_id: record.tenant_id,
+                    tenant_id: record.tenant_id.clone(),
                     study_uid: record.study_uid.clone(),
                     series_uid: record.series_uid.clone(),
                     study_uid_hash: record.study_uid_hash,
@@ -130,7 +136,7 @@ async fn execute_background_json_generation(
                     e
                 );
                 json_mets.push(DicomJsonMeta {
-                    tenant_id: record.tenant_id,
+                    tenant_id: record.tenant_id.clone(),
                     study_uid: record.study_uid.clone(),
                     series_uid: record.series_uid.clone(),
                     study_uid_hash: record.study_uid_hash,
@@ -143,6 +149,8 @@ async fn execute_background_json_generation(
                 });
             }
         }
+        // 删除redis中的记录,无论生成成功与否
+        app_state.redis_helper.del_series_metadata_gererate(&tenant_id, &series_uid);
     }
     if !json_mets.is_empty() {
         match app_state.db.save_json_list(&json_mets).await {

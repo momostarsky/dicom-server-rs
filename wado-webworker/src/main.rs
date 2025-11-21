@@ -13,8 +13,7 @@ struct AppState {
     log: Logger,
     db: Arc<dyn DbProvider + Send + Sync>,
     config: AppConfig,
-    redis_helper: RedisHelper,
-    // 可以添加其他配置
+    redis_helper: RedisHelper, 
 }
 fn configure_log() -> Logger {
     // let decorator = slog_term::TermDecorator::new().build();

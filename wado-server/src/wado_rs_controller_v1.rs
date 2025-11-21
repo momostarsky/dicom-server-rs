@@ -18,6 +18,7 @@ use dicom_object::OpenFileOptions;
 // use permission_macros::permission_required;
 use common::dicom_json_helper::generate_series_json;
 use slog::info;
+use tokio::time::Sleep;
 use std::path::PathBuf;
 
 static ACCEPT_DICOM_JSON_TYPE: &str = "application/dicom+json";
@@ -405,6 +406,11 @@ async fn retrieve_series_metadata(
     }
     info!(log, "Series Info: {:?}", series_info);
 
+    while rh.get_series_metadata_gererate(tenant_id.as_str(), series_uid.as_str()).is_ok() {
+        info!(log, "get_series_metadata_gererate is Ok , sleep 100 ms to wait generating json stopped");
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+
     let series_info = series_info.unwrap();
     let json_file_path = match json_metadata_path_for_series(&series_info, true) {
         Ok(v) => v,
@@ -427,6 +433,7 @@ async fn retrieve_series_metadata(
     }
 
     info!(log, "Study Info: {:?}", study_info);
+ 
 
     match generate_series_json(&series_info).await {
         Ok(json_str) => HttpResponse::Ok()
