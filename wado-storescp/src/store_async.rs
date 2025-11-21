@@ -46,6 +46,18 @@ pub async fn run_store_async(
         peer.port()
     );
 
+    let app_config = server_config::load_config().whatever_context("failed to load config")?;
+
+    let queue_config = app_config.message_queue;
+
+    let queue_topic_main = &queue_config.topic_main.as_str();
+    let queue_topic_log = &queue_config.topic_log.as_str();
+
+    let storage_producer = KafkaMessagePublisher::new(queue_topic_main.parse().unwrap());
+    let log_producer = KafkaMessagePublisher::new(queue_topic_log.parse().unwrap());
+    let ip_address = peer.ip().to_string();
+
+
     let mut instance_buffer: Vec<u8> = Vec::with_capacity(1024 * 1024);
     let mut message_id = 1;
     let mut sop_class_uid = "".to_string();
@@ -91,18 +103,9 @@ pub async fn run_store_async(
         association.presentation_contexts()
     );
 
-    let app_config = server_config::load_config().whatever_context("failed to load config")?;
-
-    let queue_config = app_config.message_queue;
-
-    let queue_topic_main = &queue_config.topic_main.as_str();
-    let queue_topic_log = &queue_config.topic_log.as_str();
-
-    let storage_producer = KafkaMessagePublisher::new(queue_topic_main.parse().unwrap());
-    let log_producer = KafkaMessagePublisher::new(queue_topic_log.parse().unwrap());
 
     let mut dicom_message_lists: Vec<DicomStoreMeta> = vec![];
-    let ip_address = peer.ip().to_string();
+
     let client_ae_title = association.client_ae_title().to_string();
     loop {
         match association.receive().await {

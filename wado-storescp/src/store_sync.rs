@@ -31,6 +31,16 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
     } = args;
     let verbose = *verbose;
     let peer = scu_stream.peer_addr().unwrap();
+    let app_config = server_config::load_config().whatever_context("failed to load config")?;
+    let queue_config = app_config.message_queue;
+    let queue_topic_main = &queue_config.topic_main.as_str();
+    let queue_topic_log = &queue_config.topic_log.as_str();
+
+    let storage_producer = KafkaMessagePublisher::new(queue_topic_main.parse().unwrap());
+    let log_producer = KafkaMessagePublisher::new(queue_topic_log.parse().unwrap());
+    let ip_address = peer.ip().to_string();
+
+
     let mut instance_buffer: Vec<u8> = Vec::with_capacity(1024 * 1024);
     let mut msgid = 1;
     let mut sop_class_uid = "".to_string();
@@ -76,16 +86,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         association.presentation_contexts()
     );
 
-    let app_config = server_config::load_config().whatever_context("failed to load config")?;
 
-    let queue_config = app_config.message_queue;
-
-    let queue_topic_main = &queue_config.topic_main.as_str();
-    let queue_topic_log = &queue_config.topic_log.as_str();
-
-    let storage_producer = KafkaMessagePublisher::new(queue_topic_main.parse().unwrap());
-    let log_producer = KafkaMessagePublisher::new(queue_topic_log.parse().unwrap());
-    let ip_address = peer.ip().to_string();
     let client_ae_title = association.client_ae_title().to_string();
     let mut dicom_message_lists = vec![];
     loop {
@@ -158,7 +159,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                         .to_str()
                                         .whatever_context(
                                             "could not retrieve Affected SOP Class UID",
-                                        )? 
+                                        )?
                                         .to_string();
                                     sop_instance_uid = obj
                                         .element(tags::AFFECTED_SOP_INSTANCE_UID)
@@ -166,13 +167,13 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                         .to_str()
                                         .whatever_context(
                                             "could not retrieve Affected SOP Instance UID",
-                                        )? 
+                                        )?
                                         .to_string();
                                     let tenant = obj.element_opt(Tag::from((0x1211, 0x1217)));
                                     if let Ok(Some(tenant)) = tenant {
                                         tenant_id = tenant
                                             .to_str()
-                                            .unwrap() 
+                                            .unwrap()
                                             .to_string();
                                     } else {
                                         tenant_id = "1234567890".to_string();
