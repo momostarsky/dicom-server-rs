@@ -9,7 +9,7 @@ use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dicom_ul::{pdu::PDataValueType, Pdu};
 use std::net::TcpStream;
-
+use dicom_core::Tag;
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::server_config;
 use common::utils::get_logger;
@@ -35,7 +35,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
     let mut msgid = 1;
     let mut sop_class_uid = "".to_string();
     let mut sop_instance_uid = "".to_string();
-    let mut issue_patient_id = "".to_string();
+    let mut tenant_id = "1234567890".to_string();
     let mut options = dicom_ul::association::ServerAssociationOptions::new()
         .accept_any()
         .ae_title(calling_ae_title)
@@ -158,8 +158,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                         .to_str()
                                         .whatever_context(
                                             "could not retrieve Affected SOP Class UID",
-                                        )?
-                                        .trim_end_matches("\0")
+                                        )? 
                                         .to_string();
                                     sop_instance_uid = obj
                                         .element(tags::AFFECTED_SOP_INSTANCE_UID)
@@ -167,18 +166,17 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                         .to_str()
                                         .whatever_context(
                                             "could not retrieve Affected SOP Instance UID",
-                                        )?
-                                        .trim_end_matches("\0")
+                                        )? 
                                         .to_string();
-                                    issue_patient_id = "1234567890".to_string();
-                                    // issue_patient_id = obj
-                                    //     .element(tags::ISSUER_OF_PATIENT_ID)
-                                    //     .whatever_context("missing ISSUER_OF_PATIENT_ID")?
-                                    //     .to_str()
-                                    //     .whatever_context(
-                                    //         "could not retrieve ISSUER_OF_PATIENT_ID",
-                                    //     )?
-                                    //     .to_string();
+                                    let tenant = obj.element_opt(Tag::from((0x1211, 0x1217)));
+                                    if let Ok(Some(tenant)) = tenant {
+                                        tenant_id = tenant
+                                            .to_str()
+                                            .unwrap() 
+                                            .to_string();
+                                    } else {
+                                        tenant_id = "1234567890".to_string();
+                                    }
                                 }
                                 instance_buffer.clear();
                             } else if data_value.value_type == PDataValueType::Data
@@ -201,7 +199,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
 
                                 match dicom_file_handler::process_dicom_file(
                                     &instance_buffer,
-                                    &issue_patient_id,
+                                    &tenant_id,
                                     ts,
                                     &sop_instance_uid,
                                     ip_address.clone(),
