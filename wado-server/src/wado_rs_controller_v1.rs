@@ -405,6 +405,11 @@ async fn retrieve_series_metadata(
     }
     info!(log, "Series Info: {:?}", series_info);
 
+    while rh.get_series_metadata_gererate(tenant_id.as_str(), series_uid.as_str()).is_ok() {
+        info!(log, "get_series_metadata_gererate is Ok , sleep 100 ms to wait generating json stopped");
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+
     let series_info = series_info.unwrap();
     let json_file_path = match json_metadata_path_for_series(&series_info, true) {
         Ok(v) => v,

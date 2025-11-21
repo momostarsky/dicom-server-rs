@@ -1,3 +1,5 @@
+
+drop table if exists dicom_state_meta;
 create table dicom_state_meta
 (
     tenant_id                varchar(64) not null,
@@ -37,6 +39,12 @@ create table dicom_state_meta
 create unique index index_state_unique
     on dicom_state_meta (tenant_id, study_uid, series_uid, accession_number);
 
+create unique index index_state_unique4study
+    on dicom_state_meta (tenant_id, study_uid,series_uid);
+
+create unique index index_state_unique4patient
+    on dicom_state_meta (tenant_id,patient_id, study_uid,series_uid);
+
 drop table if exists dicom_json_meta;
 create table  dicom_json_meta
 (
@@ -59,7 +67,8 @@ ADD CONSTRAINT PK_dicom_json_meta PRIMARY KEY (tenant_id, study_uid, series_uid)
 --------------------------
 ---------------dicom_image_meta------------------
 ----------------------------
-create table public.dicom_image_meta
+drop table if exists dicom_image_meta;
+create table  dicom_image_meta
 (
     tenant_id                  varchar(64) not null,
     patient_id                 varchar(64) not null,
@@ -100,79 +109,79 @@ create table public.dicom_image_meta
     updated_time               timestamp
 );
 
-comment on column public.dicom_image_meta.tenant_id is '租户ID';
+comment on column dicom_image_meta.tenant_id is '租户ID';
 
-comment on column public.dicom_image_meta.patient_id is '患者ID';
+comment on column dicom_image_meta.patient_id is '患者ID';
 
-comment on column public.dicom_image_meta.study_uid is '检查UID';
+comment on column dicom_image_meta.study_uid is '检查UID';
 
-comment on column public.dicom_image_meta.series_uid is '序列UID';
+comment on column dicom_image_meta.series_uid is '序列UID';
 
-comment on column public.dicom_image_meta.sop_uid is '实例UID';
+comment on column dicom_image_meta.sop_uid is '实例UID';
 
-comment on column public.dicom_image_meta.study_uid_hash is '检查UID哈希值';
+comment on column dicom_image_meta.study_uid_hash is '检查UID哈希值';
 
-comment on column public.dicom_image_meta.series_uid_hash is '序列UID哈希值';
+comment on column dicom_image_meta.series_uid_hash is '序列UID哈希值';
 
-comment on column public.dicom_image_meta.content_date is '内容日期';
+comment on column dicom_image_meta.content_date is '内容日期';
 
-comment on column public.dicom_image_meta.content_time is '内容时间';
+comment on column dicom_image_meta.content_time is '内容时间';
 
-comment on column public.dicom_image_meta.instance_number is '实例编号';
+comment on column dicom_image_meta.instance_number is '实例编号';
 
-comment on column public.dicom_image_meta.image_type is '图像类型';
+comment on column dicom_image_meta.image_type is '图像类型';
 
-comment on column public.dicom_image_meta.image_orientation_patient is '图像方向(患者坐标系)';
+comment on column dicom_image_meta.image_orientation_patient is '图像方向(患者坐标系)';
 
-comment on column public.dicom_image_meta.image_position_patient is '图像位置(患者坐标系)';
+comment on column dicom_image_meta.image_position_patient is '图像位置(患者坐标系)';
 
-comment on column public.dicom_image_meta.slice_thickness is '层厚';
+comment on column dicom_image_meta.slice_thickness is '层厚';
 
-comment on column public.dicom_image_meta.spacing_between_slices is '层间距';
+comment on column dicom_image_meta.spacing_between_slices is '层间距';
 
-comment on column public.dicom_image_meta.slice_location is '切片位置';
+comment on column dicom_image_meta.slice_location is '切片位置';
 
-comment on column public.dicom_image_meta.samples_per_pixel is '每个像素采样数';
+comment on column dicom_image_meta.samples_per_pixel is '每个像素采样数';
 
-comment on column public.dicom_image_meta.photometric_interpretation is '光度解释';
+comment on column dicom_image_meta.photometric_interpretation is '光度解释';
 
-comment on column public.dicom_image_meta.width is '图像行数';
+comment on column dicom_image_meta.width is '图像行数';
 
-comment on column public.dicom_image_meta.columns is '图像列数';
+comment on column dicom_image_meta.columns is '图像列数';
 
-comment on column public.dicom_image_meta.bits_allocated is '分配位数';
+comment on column dicom_image_meta.bits_allocated is '分配位数';
 
-comment on column public.dicom_image_meta.bits_stored is '存储位数';
+comment on column dicom_image_meta.bits_stored is '存储位数';
 
-comment on column public.dicom_image_meta.high_bit is '高比特位';
+comment on column dicom_image_meta.high_bit is '高比特位';
 
-comment on column public.dicom_image_meta.pixel_representation is '像素表示法';
+comment on column dicom_image_meta.pixel_representation is '像素表示法';
 
-comment on column public.dicom_image_meta.rescale_intercept is '重建截距';
+comment on column dicom_image_meta.rescale_intercept is '重建截距';
 
-comment on column public.dicom_image_meta.rescale_slope is '重建斜率';
+comment on column dicom_image_meta.rescale_slope is '重建斜率';
 
-comment on column public.dicom_image_meta.rescale_type is '重建类型';
+comment on column dicom_image_meta.rescale_type is '重建类型';
 
-comment on column public.dicom_image_meta.window_center is '窗位中心';
+comment on column dicom_image_meta.window_center is '窗位中心';
 
-comment on column public.dicom_image_meta.window_width is '窗宽';
+comment on column dicom_image_meta.window_width is '窗宽';
 
-comment on column public.dicom_image_meta.transfer_syntax_uid is '传输语法UID';
+comment on column dicom_image_meta.transfer_syntax_uid is '传输语法UID';
 
-comment on column public.dicom_image_meta.pixel_data_location is '像素数据位置';
+comment on column dicom_image_meta.pixel_data_location is '像素数据位置';
 
-comment on column public.dicom_image_meta.thumbnail_location is '缩略图位置';
+comment on column dicom_image_meta.thumbnail_location is '缩略图位置';
 
-comment on column public.dicom_image_meta.sop_class_uid is 'SOP类UID';
+comment on column dicom_image_meta.sop_class_uid is 'SOP类UID';
 
-comment on column public.dicom_image_meta.image_status is '图像状态';
+comment on column dicom_image_meta.image_status is '图像状态';
 
-comment on column public.dicom_image_meta.space_size is '占用空间大小';
+comment on column dicom_image_meta.space_size is '占用空间大小';
 
-comment on column public.dicom_image_meta.created_time is '创建时间';
+comment on column dicom_image_meta.created_time is '创建时间';
 
-comment on column public.dicom_image_meta.updated_time is '更新时间';
+comment on column dicom_image_meta.updated_time is '更新时间';
 
 
 -- 方案2: 使用现有字段创建组合主键（需要先删除现有约束）
@@ -181,7 +190,8 @@ ALTER TABLE dicom_image_meta
 
 
 ---------------------------------
-create table IF NOT EXISTS  dicom_object_meta
+drop table if exists dicom_object_meta;
+create table  dicom_object_meta
 (
     trace_id            varchar(36)   not null,
     worker_node_id      varchar(64)   not null,
@@ -212,7 +222,8 @@ comment on column dicom_object_meta.worker_node_id is '工作节点 ID';
 
 ALTER TABLE dicom_object_meta   ADD CONSTRAINT pk_dicom_object_meta PRIMARY KEY  (trace_id);
 
-create index idx_dicom_object_meta on dicom_object_meta (tenant_id, patient_id,study_uid,series_uid);
+create index idx_dicom_object_meta on dicom_object_meta (tenant_id, patient_id,study_uid,series_uid,sop_uid);
 create index idx_dicom_object_meta_date on dicom_object_meta (tenant_id, study_date);
+create index idx_dicom_object_meta_createdate on dicom_object_meta (tenant_id, created_time);
 
 -----------------------收图记录-------------------------

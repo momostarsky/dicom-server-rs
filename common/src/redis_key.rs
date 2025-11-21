@@ -161,4 +161,41 @@ impl RedisHelper {
             Err(e) => Err(e),
         }
     }
+    /// 保存当前正在生成JSON元数据的标记, 最多10分钟自动过期
+    pub fn set_series_metadata_gererate(&self, tenant_id: &str, series_uid: &str) {
+        let key = format!("wado:{}:series:{}:json_generating", tenant_id, series_uid);
+        let client = self.make_client();
+        if !client.is_ok() {
+            return;
+        }
+        let mut cl = client.unwrap();
+        let _: Result<String, _> = cl.set_ex(key, "1", Self::TEN_MINULE);
+    }
+
+    /// 删除当前正在生成JSON元数据的标记
+    pub fn del_series_metadata_gererate(&self, tenant_id: &str, series_uid: &str) {
+        let key = format!("wado:{}:series:{}:json_generating", tenant_id, series_uid);
+        let client = self.make_client();
+        if !client.is_ok() {
+            return;
+        }
+        let mut cl = client.unwrap();
+        let _: Result<String, _> = cl.del(key);
+    }
+    /// 读取当前正在生成JSON元数据的标记,是否正在生成
+    pub fn get_series_metadata_gererate(
+        &self,
+        tenant_id: &str,
+        series_uid: &str,
+    ) -> Result<bool, redis::RedisError> {
+        let key = format!("wado:{}:series:{}:json_generating", tenant_id, series_uid);
+        let mut client = match self.make_client() {
+            Ok(client) => client,
+            Err(e) => return Err(e),
+        };
+        match client.get::<String, String>(key) {
+            Ok(cached_data) => Ok(cached_data == "1"),
+            Err(e) => Err(e),
+        }
+    }
 }
