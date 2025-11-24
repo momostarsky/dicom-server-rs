@@ -15,10 +15,10 @@ use std::rc::Rc;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct Claims {
-    iss: String,            //签发方（issuer），明确这个 JWT 是哪个认证系统生成的	必须（标准）
-    sub: Option<String>,    //主题（subject），指用户唯一标识（通常为用户 ID）	必须（标准）
-    aud: Value, //受众（audience），JWT 颁发给哪个客户端/应用	必须（强烈建议)
-    exp: usize,             //过期时间（expiration），用于 token 有效期控制	必须（强烈建议）
+    iss: String,         //签发方（issuer），明确这个 JWT 是哪个认证系统生成的	必须（标准）
+    sub: Option<String>, //主题（subject），指用户唯一标识（通常为用户 ID）	必须（标准）
+    aud: Value,          //受众（audience），JWT 颁发给哪个客户端/应用	必须（强烈建议)
+    exp: usize,          //过期时间（expiration），用于 token 有效期控制	必须（强烈建议）
     email: Option<String>,
     name: Option<String>,
     username: Option<String>,
@@ -164,25 +164,25 @@ where
             });
         }
 
-        // 修改为模式匹配方式：
-        let jwks_uri_content = match redis_helper.get_jwks_url_content() {
-            Ok(content) => {
-                info!(log, "get_jwks_url_content success");
-                info!(log, "Received jwk_urs_content: {}", content);
-                content
-            }
-            Err(e) => {
-                error!(log, "Failed to get JWKS content from Redis: {:?}", e);
-                // 返回认证不通过的响应
-
-                let response =
-                    HttpResponse::Unauthorized().body("Authentication failed: JWKS not available");
-                let res = req.into_response(response.map_into_boxed_body().map_into_right_body());
-                return Box::pin(async move { Ok(res) });
-            }
-        };
-
         Box::pin(async move {
+            // 修改为模式匹配方式：
+            let jwks_uri_content = match redis_helper.get_jwks_url_content().await {
+                Ok(content) => {
+                    info!(log, "get_jwks_url_content success");
+                    info!(log, "Received jwk_urs_content: {}", content);
+                    content
+                }
+                Err(e) => {
+                    error!(log, "Failed to get JWKS content from Redis: {:?}", e);
+                    // 返回认证不通过的响应
+
+                    let response = HttpResponse::Unauthorized()
+                        .body("Authentication failed: JWKS not available");
+                    let res =
+                        req.into_response(response.map_into_boxed_body().map_into_right_body());
+                    return Ok(res);
+                }
+            };
             // 在 async 块内部处理所有可能的错误
             let auth_header = req.headers().get("Authorization");
             if auth_header.is_none() {
@@ -376,8 +376,7 @@ async fn fetch_and_store_jwks(
     let txt = response.text().await?;
 
     // 验证JSON格式
-    let jwks: Value =
-        serde_json::from_str(&txt).map_err(|e| format!("JSON格式无效: {}", e))?;
+    let jwks: Value = serde_json::from_str(&txt).map_err(|e| format!("JSON格式无效: {}", e))?;
 
     // 验证JWKS结构
     if !jwks.is_object() || !jwks["keys"].is_array() {

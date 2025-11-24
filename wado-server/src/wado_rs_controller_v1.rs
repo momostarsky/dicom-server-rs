@@ -8,15 +8,13 @@ use actix_web::http::header::ACCEPT;
 use actix_web::{HttpMessage, HttpRequest, HttpResponse, Responder, get, web, web::Path};
 use common::dicom_json_helper;
 use common::redis_key::RedisHelper;
-use common::storage_config::{
-    StorageConfig, dicom_file_path
-};
+use common::storage_config::{StorageConfig, dicom_file_path};
 use database::dicom_meta::{DicomJsonMeta, DicomStateMeta};
 use dicom_dictionary_std::tags;
 use dicom_object::OpenFileOptions;
 // use permission_macros::permission_required;
 use common::dicom_json_helper::generate_series_json;
-use slog::info;
+use slog::{error, info};
 use std::path::PathBuf;
 
 static ACCEPT_DICOM_JSON_TYPE: &str = "application/dicom+json";
@@ -47,7 +45,7 @@ async fn get_study_info_with_cache(
     let rh = &app_state.redis_helper;
 
     if from_cache {
-        match rh.get_study_metadata(tenant_id, study_uid) {
+        match rh.get_study_metadata(tenant_id, study_uid).await {
             Ok(metas) => {
                 info!(log, "Retrieved study_info from Redis cache");
                 return Ok(metas);
@@ -59,14 +57,31 @@ async fn get_study_info_with_cache(
     match app_state.db.get_state_metaes(tenant_id, study_uid).await {
         Ok(metas) => {
             info!(log, "Retrieved study_info from database");
-            rh.del_study_entity_not_exists(tenant_id, study_uid);
+            rh.del_study_entity_not_exists(tenant_id, study_uid).await;
             // 将查询结果序列化并写入 Redis 缓存，过期时间设置为2小时
-            rh.set_study_metadata(tenant_id, study_uid, &metas, 2 * RedisHelper::ONE_HOUR);
+            match rh
+                .set_study_metadata(tenant_id, study_uid, &metas, 2 * RedisHelper::ONE_HOUR)
+                .await
+            {
+                Ok(_) => {
+                    info!(log, "Stored study_info into Redis cache");
+                }
+                Err(e) => {
+                    error!(log, "Failed to store study_info into Redis cache: {}", e);
+                }
+            }
             Ok(metas)
         }
         Err(e) => {
             let error_msg = format!("Failed to retrieve study info: {}", e);
-            rh.set_study_entity_not_exists(tenant_id, study_uid, 5 * RedisHelper::ONE_MINULE);
+            match  rh.set_study_entity_not_exists(tenant_id, study_uid, 5 * RedisHelper::ONE_MINULE).await{
+                Ok(_) => {
+                    info!(log, "set_study_entity_not_exists {}", study_uid);
+                }
+                Err(e) => {
+                    error!(log, "Failed to store study_info into Redis cache: {}", e);
+                }
+            }
             Err(HttpResponse::InternalServerError().body(error_msg))
         }
     }
@@ -157,7 +172,7 @@ async fn retrieve_study_metadata(
     // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
     let is_not_found = rh.get_study_entity_not_exists(tenant_id.as_str(), study_uid.as_str());
 
-    if is_not_found.is_ok() {
+    if is_not_found.await.is_ok() {
         return HttpResponse::NotFound().body(format!(
             "retrieve_study_metadata Study not found in database retry after 30 seconds: {},{}",
             tenant_id, study_uid
@@ -188,9 +203,9 @@ async fn retrieve_study_metadata(
         }
     };
 
-    let storage_config = StorageConfig::new( app_state.config.clone());
+    let storage_config = StorageConfig::new(app_state.config.clone());
 
-    let json_path = match storage_config.json_metadata_path_for_study(study_info,false) {
+    let json_path = match storage_config.json_metadata_path_for_study(study_info, false) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -198,7 +213,7 @@ async fn retrieve_study_metadata(
         }
     };
 
-    let dicom_dir = match storage_config.dicom_study_dir(study_info,false) {
+    let dicom_dir = match storage_config.dicom_study_dir(study_info, false) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -292,7 +307,7 @@ async fn retrieve_study_subseries(
     // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
     let is_not_found = rh.get_study_entity_not_exists(tenant_id.as_str(), study_uid.as_str());
 
-    if is_not_found.is_ok() {
+    if is_not_found.await.is_ok() {
         return HttpResponse::NotFound().body(format!(
             "retrieve_study_metadata Study not found in database retry after 30 seconds: {},{}",
             tenant_id, study_uid
@@ -385,7 +400,7 @@ async fn retrieve_series_metadata(
     // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
     let is_not_found = rh.get_study_entity_not_exists(tenant_id.as_str(), study_uid.as_str());
 
-    if is_not_found.is_ok() {
+    if is_not_found.await.is_ok() {
         return HttpResponse::NotFound().body(format!(
             "retrieve_series_metadata Study not found in database retry after 30 seconds: {},{}",
             tenant_id, study_uid
@@ -423,6 +438,7 @@ async fn retrieve_series_metadata(
 
     while rh
         .get_series_metadata_gererate(tenant_id.as_str(), series_uid.as_str())
+        .await
         .is_ok()
     {
         info!(
@@ -432,9 +448,9 @@ async fn retrieve_series_metadata(
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
-    let storage_config = StorageConfig::new( app_state.config.clone());
+    let storage_config = StorageConfig::new(app_state.config.clone());
 
-    let json_file_path = match storage_config.json_metadata_path_for_series(&series_info,true) {
+    let json_file_path = match storage_config.json_metadata_path_for_series(&series_info, true) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -604,9 +620,9 @@ async fn retrieve_instance_impl(
 
     info!(log, "Series Info: {:?}", series_info);
 
-    let storage_config = StorageConfig::new( app_state.config.clone());
+    let storage_config = StorageConfig::new(app_state.config.clone());
 
-    let dicom_dir = match storage_config.dicom_series_dir(&series_info,false) {
+    let dicom_dir = match storage_config.dicom_series_dir(&series_info, false) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()

@@ -3,6 +3,7 @@ use database::dicom_meta::DicomStateMeta;
 use deadpool_redis::redis::AsyncCommands;
 use deadpool_redis::{Config as DeadConfig, Pool};
 
+use slog::{error, info};
 use std::string::ToString;
 
 #[derive(Debug, Clone)]
@@ -168,13 +169,12 @@ impl RedisHelper {
             .await
     }
 
-    pub async fn del_study_entity_not_exists(
-        &self,
-        tenant_id: &str,
-        study_uid: &str,
-    ) -> Result<(), redis::RedisError> {
+    pub async fn del_study_entity_not_exists(&self, tenant_id: &str, study_uid: &str) {
         let key = self.key_for_study_enity(tenant_id, study_uid);
-        self.del_key(key).await
+        match self.del_key(key).await {
+            Ok(()) => {}
+            Err(_) => {}
+        }
     }
 
     pub async fn get_study_entity_not_exists(
