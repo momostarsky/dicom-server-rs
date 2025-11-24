@@ -48,7 +48,9 @@ async fn get_study_info_with_cache(
         match rh.get_study_metadata(tenant_id, study_uid).await {
             Ok(metas) => {
                 info!(log, "Retrieved study_info from Redis cache");
-                return Ok(metas);
+                if !metas.is_empty() {
+                    return Ok(metas);
+                }
             }
             Err(_) => {}
         }
@@ -74,7 +76,10 @@ async fn get_study_info_with_cache(
         }
         Err(e) => {
             let error_msg = format!("Failed to retrieve study info: {}", e);
-            match  rh.set_study_entity_not_exists(tenant_id, study_uid, 5 * RedisHelper::ONE_MINULE).await{
+            match rh
+                .set_study_entity_not_exists(tenant_id, study_uid, 5 * RedisHelper::ONE_MINULE)
+                .await
+            {
                 Ok(_) => {
                     info!(log, "set_study_entity_not_exists {}", study_uid);
                 }
@@ -172,7 +177,7 @@ async fn retrieve_study_metadata(
     // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
     let is_not_found = rh.get_study_entity_not_exists(tenant_id.as_str(), study_uid.as_str());
 
-    if is_not_found.await.is_ok() {
+    if is_not_found.await.unwrap() == true {
         return HttpResponse::NotFound().body(format!(
             "retrieve_study_metadata Study not found in database retry after 30 seconds: {},{}",
             tenant_id, study_uid
@@ -307,7 +312,7 @@ async fn retrieve_study_subseries(
     // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
     let is_not_found = rh.get_study_entity_not_exists(tenant_id.as_str(), study_uid.as_str());
 
-    if is_not_found.await.is_ok() {
+    if is_not_found.await.unwrap() == true {
         return HttpResponse::NotFound().body(format!(
             "retrieve_study_metadata Study not found in database retry after 30 seconds: {},{}",
             tenant_id, study_uid
@@ -400,7 +405,7 @@ async fn retrieve_series_metadata(
     // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
     let is_not_found = rh.get_study_entity_not_exists(tenant_id.as_str(), study_uid.as_str());
 
-    if is_not_found.await.is_ok() {
+    if is_not_found.await.unwrap() == true {
         return HttpResponse::NotFound().body(format!(
             "retrieve_series_metadata Study not found in database retry after 30 seconds: {},{}",
             tenant_id, study_uid

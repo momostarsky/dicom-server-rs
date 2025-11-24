@@ -3,7 +3,6 @@ use database::dicom_meta::DicomStateMeta;
 use deadpool_redis::redis::AsyncCommands;
 use deadpool_redis::{Config as DeadConfig, Pool};
 
-use slog::{error, info};
 use std::string::ToString;
 
 #[derive(Debug, Clone)]
