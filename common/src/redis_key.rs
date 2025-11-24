@@ -1,201 +1,225 @@
 use crate::server_config::RedisConfig;
 use database::dicom_meta::DicomStateMeta;
-use redis::Commands;
+use deadpool_redis::redis::AsyncCommands;
+use deadpool_redis::{Config as DeadConfig, Pool};
+
 use std::string::ToString;
 
 #[derive(Debug, Clone)]
 pub struct RedisHelper {
-    config: RedisConfig,
+    pool: Pool,
 }
 
 impl RedisHelper {
     pub fn new(config: RedisConfig) -> Self {
-        RedisHelper { config }
+        let mut dead_cfg = DeadConfig::default();
+        dead_cfg.url = Some(config.url.clone());
+        let pool = dead_cfg
+            .create_pool(Some(deadpool_redis::Runtime::Tokio1))
+            .expect("Pool creation failed");
+        RedisHelper { pool }
     }
 
-    fn make_client(&self) -> Result<redis::Connection, redis::RedisError> {
-        // redis::Client::open(self.config.url.as_str())
-        //     .expect("Invalid Redis connection URL")
-        //     .get_connection()
-        let client =
-            redis::Client::open(self.config.url.as_str()).expect("Invalid Redis connection URL");
-
-        let mut connection = client.get_connection()?;
-
-        // 如果配置中有密码，则进行认证
-        if let Some(password) = &self.config.password {
-            redis::cmd("AUTH")
-                .arg(password)
-                .query::<()>(&mut connection)?;
+    async fn get_connection(&self) -> Result<deadpool_redis::Connection, redis::RedisError> {
+        match self.pool.get().await {
+            Ok(conn) => Ok(conn),
+            Err(e) => Err(redis::RedisError::from((
+                redis::ErrorKind::IoError,
+                "Failed to get Redis connection",
+                e.to_string(),
+            ))),
         }
+    }
 
-        Ok(connection)
+    async fn set_key_value_expire(
+        &self,
+        key: String,
+        txt: String,
+        expire_seconds: u64,
+    ) -> Result<(), redis::RedisError> {
+        let mut conn = self.get_connection().await?;
+        match conn
+            .set_ex::<String, String, ()>(key, txt, expire_seconds)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => {
+                return Err(redis::RedisError::from((
+                    redis::ErrorKind::IoError,
+                    "Failed to set_key_value_expire",
+                    e.to_string(),
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    async fn get_value(&self, key: String) -> Result<String, redis::RedisError> {
+        let mut conn = self.get_connection().await?;
+        match conn.get(key).await {
+            Ok(jwks_url) => Ok(jwks_url),
+            Err(e) => Err(redis::RedisError::from((
+                redis::ErrorKind::IoError,
+                "Failed to get_value",
+                e.to_string(),
+            ))),
+        }
+    }
+
+    async fn del_key(&self, key: String) -> Result<(), redis::RedisError> {
+        let mut conn = self.get_connection().await?;
+        match conn.del(key).await {
+            Ok(()) => {}
+            Err(e) => {
+                return Err(redis::RedisError::from((
+                    redis::ErrorKind::IoError,
+                    "Failed to delete Redis key:{}",
+                    e.to_string(),
+                )));
+            }
+        }
+        Ok(())
     }
 
     const JWKS_URL_KEY: &'static str = "jwksurl:8e646686-9d36-480b-95ea-1718b24c1c98";
-    pub fn set_jwks_url_content(&self, txt: String, expire_seconds: u64) {
-        let client = self.make_client();
-        if !client.is_ok() {
-            return;
-        }
 
-        let mut cl = client.unwrap();
-        let _: Result<String, _> = cl.set_ex(Self::JWKS_URL_KEY.to_string(), txt, expire_seconds);
+    pub async fn set_jwks_url_content(
+        &self,
+        txt: String,
+        expire_seconds: u64,
+    ) -> Result<(), redis::RedisError> {
+        self.set_key_value_expire(Self::JWKS_URL_KEY.to_string(), txt, expire_seconds)
+            .await
     }
 
-    pub fn get_jwks_url_content(&self) -> Result<String, redis::RedisError> {
-        let mut client = match self.make_client() {
-            Ok(client) => client,
-            Err(e) => return Err(e),
-        };
-
-        client.get::<String, String>(Self::JWKS_URL_KEY.to_string())
+    pub async fn get_jwks_url_content(&self) -> Result<String, redis::RedisError> {
+        self.get_value(Self::JWKS_URL_KEY.to_string()).await
     }
 
-    /// 生成的KEY用于将StudyUID的元数据缓存在Redis中
     pub fn key_for_study_metadata(&self, tenant_id: &str, study_uid: &str) -> String {
         format!("wado:{}:study:{}:metadata", tenant_id, study_uid)
     }
-    /// 生成的KEY用于将StudyUID 对应的实体是否在数据库中,防止因为Redis中不存在,重复查询数据库
+
     pub fn key_for_study_enity(&self, tenant_id: &str, study_uid: &str) -> String {
         format!("db:{}:study:{}:metadata", tenant_id, study_uid)
     }
 
-    /// 1小时 , 3600秒
     pub const ONE_HOUR: u64 = 3600;
-
-    /// 10分钟 , 600秒
     pub const TEN_MINULE: u64 = 600;
-    /// 1分钟 , 60秒
     pub const ONE_MINULE: u64 = 60;
-    pub fn set_study_metadata(
+
+    pub async fn set_study_metadata(
         &self,
         tenant_id: &str,
         study_uid: &str,
         metas: &[DicomStateMeta],
         expire_seconds: u64,
-    ) {
+    ) -> Result<(), redis::RedisError> {
         let key = self.key_for_study_metadata(tenant_id, study_uid);
-        let client = self.make_client();
-        if !client.is_ok() {
-            return;
-        }
-        match serde_json::to_string(&metas) {
-            Ok(serialized_metas) => {
-                let mut cl = client.unwrap();
-                let _: Result<String, _> = cl.set_ex(key, serialized_metas, expire_seconds);
-            }
-            Err(_) => {}
-        }
+        let serialized_metas = serde_json::to_string(metas).map_err(|e| {
+            redis::RedisError::from((
+                redis::ErrorKind::TypeError,
+                "Failed to serialize DicomStateMeta",
+                e.to_string(),
+            ))
+        })?;
+        self.set_key_value_expire(key, serialized_metas, expire_seconds)
+            .await
     }
 
-    pub fn del_study_metadata(&self, tenant_id: &str, study_uid: &str) {
+    pub async fn del_study_metadata(
+        &self,
+        tenant_id: &str,
+        study_uid: &str,
+    ) -> Result<(), redis::RedisError> {
         let key = self.key_for_study_metadata(tenant_id, study_uid);
-        let client = self.make_client();
-        if !client.is_ok() {
-            return;
-        }
-        let mut cl = client.unwrap();
-        let _: Result<String, _> = cl.del(key);
+        self.del_key(key).await
     }
 
-    pub fn get_study_metadata(
+    pub async fn get_study_metadata(
         &self,
         tenant_id: &str,
         study_uid: &str,
     ) -> Result<Vec<DicomStateMeta>, redis::RedisError> {
         let key = self.key_for_study_metadata(tenant_id, study_uid);
-        let mut client = match self.make_client() {
-            Ok(client) => client,
-            Err(e) => return Err(e),
-        };
-        match client.get::<String, String>(key) {
-            Ok(cached_data) => match serde_json::from_str::<Vec<DicomStateMeta>>(&cached_data) {
-                Ok(metas) => Ok(metas),
-                Err(e) => Err(redis::RedisError::from((
-                    redis::ErrorKind::TypeError,
-                    "Failed to deserialize DicomStateMeta",
-                    e.to_string(),
-                ))),
-            },
-            Err(e) => Err(e),
+
+        match self.get_value(key).await {
+            Ok(cached_data) => {
+                serde_json::from_str::<Vec<DicomStateMeta>>(&cached_data).map_err(|e| {
+                    redis::RedisError::from((
+                        redis::ErrorKind::TypeError,
+                        "Failed to deserialize DicomStateMeta",
+                        e.to_string(),
+                    ))
+                })
+            }
+            Err(_e) => Ok(vec![]),
         }
     }
 
-    pub fn set_study_entity_not_exists(
+    pub async fn set_study_entity_not_exists(
         &self,
         tenant_id: &str,
         study_uid: &str,
         expire_seconds: u64,
-    ) {
+    ) -> Result<(), redis::RedisError> {
         let key = self.key_for_study_enity(tenant_id, study_uid);
-        let client = self.make_client();
-        if !client.is_ok() {
-            return;
-        }
-        let mut cl = client.unwrap();
-        let _: Result<String, _> = cl.set_ex(key, "1", expire_seconds);
-    }
-    pub fn del_study_entity_not_exists(&self, tenant_id: &str, study_uid: &str) {
-        let key = self.key_for_study_enity(tenant_id, study_uid);
-        let client = self.make_client();
-        if !client.is_ok() {
-            return;
-        }
-        let mut cl = client.unwrap();
-        let _: Result<String, _> = cl.del(key);
+        self.set_key_value_expire(key, "1".to_string(), expire_seconds)
+            .await
     }
 
-    pub fn get_study_entity_not_exists(
+    pub async fn del_study_entity_not_exists(
+        &self,
+        tenant_id: &str,
+        study_uid: &str,
+    ) -> Result<(), redis::RedisError> {
+        let key = self.key_for_study_enity(tenant_id, study_uid);
+        self.del_key(key).await
+    }
+
+    pub async fn get_study_entity_not_exists(
         &self,
         tenant_id: &str,
         study_uid: &str,
     ) -> Result<bool, redis::RedisError> {
         let key = self.key_for_study_enity(tenant_id, study_uid);
-        let mut client = match self.make_client() {
-            Ok(client) => client,
-            Err(e) => return Err(e),
-        };
-        match client.get::<String, String>(key) {
+
+        match self.get_value(key).await {
             Ok(cached_data) => Ok(cached_data == "1"),
-            Err(e) => Err(e),
+            Err(_e) => Ok(false),
         }
-    }
-    /// 保存当前正在生成JSON元数据的标记, 最多10分钟自动过期
-    pub fn set_series_metadata_gererate(&self, tenant_id: &str, series_uid: &str) {
-        let key = format!("wado:{}:series:{}:json_generating", tenant_id, series_uid);
-        let client = self.make_client();
-        if !client.is_ok() {
-            return;
-        }
-        let mut cl = client.unwrap();
-        let _: Result<String, _> = cl.set_ex(key, "1", Self::TEN_MINULE);
     }
 
-    /// 删除当前正在生成JSON元数据的标记
-    pub fn del_series_metadata_gererate(&self, tenant_id: &str, series_uid: &str) {
+    pub async fn set_series_metadata_gererate(
+        &self,
+        tenant_id: &str,
+        series_uid: &str,
+    ) -> Result<(), redis::RedisError> {
         let key = format!("wado:{}:series:{}:json_generating", tenant_id, series_uid);
-        let client = self.make_client();
-        if !client.is_ok() {
-            return;
-        }
-        let mut cl = client.unwrap();
-        let _: Result<String, _> = cl.del(key);
+
+        self.set_key_value_expire(key, "1".to_string(), Self::TEN_MINULE)
+            .await
     }
-    /// 读取当前正在生成JSON元数据的标记,是否正在生成
-    pub fn get_series_metadata_gererate(
+
+    pub async fn del_series_metadata_gererate(
+        &self,
+        tenant_id: &str,
+        series_uid: &str,
+    ) -> Result<(), redis::RedisError> {
+        let key = format!("wado:{}:series:{}:json_generating", tenant_id, series_uid);
+        self.del_key(key).await
+    }
+
+    pub async fn get_series_metadata_gererate(
         &self,
         tenant_id: &str,
         series_uid: &str,
     ) -> Result<bool, redis::RedisError> {
         let key = format!("wado:{}:series:{}:json_generating", tenant_id, series_uid);
-        let mut client = match self.make_client() {
-            Ok(client) => client,
-            Err(e) => return Err(e),
-        };
-        match client.get::<String, String>(key) {
+
+        match self.get_value(key).await {
             Ok(cached_data) => Ok(cached_data == "1"),
-            Err(e) => Err(e),
+            Err(_) => Ok(false),
         }
     }
 }
