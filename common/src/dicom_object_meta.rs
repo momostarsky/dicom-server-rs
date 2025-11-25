@@ -148,13 +148,7 @@ pub fn make_image_info(
 
     let content_date = dicom_utils::get_date_value_dicom(dicom_obj, tags::CONTENT_DATE);
 
-    let content_time = dicom_utils::get_text_value(dicom_obj, tags::CONTENT_TIME)
-        .filter(|v| !v.is_empty())
-        .map(|v| parse_dicom_time(v.as_str()))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::InvalidTimeFormat("Failed to convert content_time".to_string())
-        })?;
+    let content_time = dicom_utils::get_time_value_dicom(dicom_obj, tags::CONTENT_TIME);
 
     let image_type = dicom_utils::get_text_value(dicom_obj, tags::IMAGE_TYPE)
         .filter(|v| !v.is_empty())
@@ -211,28 +205,28 @@ pub fn make_image_info(
 
     let rescale_intercept = dicom_utils::get_decimal_value(dicom_obj, tags::RESCALE_INTERCEPT);
     let rescale_slope = dicom_utils::get_decimal_value(dicom_obj, tags::RESCALE_SLOPE);
+
+    // 或者在 make_image_info 函数内部添加辅助闭包
+    let convert_str_64 = |value: String| -> Result<BoundedString<64>, DicomParseError> {
+        BoundedString::<64>::try_from(value)
+            .map_err(|_| DicomParseError::ConversionError("Failed to convert string".to_string()))
+    };
+
     let rescale_type = dicom_utils::get_text_value(dicom_obj, tags::RESCALE_TYPE)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert rescale type".to_string())
-        })?;
+        .map(convert_str_64)
+        .transpose()?;
 
     let window_center = dicom_utils::get_text_value(dicom_obj, tags::WINDOW_CENTER)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert window center".to_string())
-        })?;
+        .map(convert_str_64)
+        .transpose()?;
+
     let window_width = dicom_utils::get_text_value(dicom_obj, tags::WINDOW_WIDTH)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert window width".to_string())
-        })?;
+        .map(convert_str_64)
+        .transpose()?;
+
     let transfer_syntax_uid = dicom_utils::get_text_value(dicom_obj, tags::TRANSFER_SYNTAX_UID)
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| "1.2.840.10008.1.2".to_string());
@@ -394,13 +388,7 @@ pub fn make_state_info(
 
     let study_date = common_meta.study_date;
     // 检查相关信息
-    let study_time = dicom_utils::get_text_value(dicom_obj, tags::STUDY_TIME)
-        .filter(|v| !v.is_empty())
-        .map(|v| parse_dicom_time(v.as_str()))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::InvalidTimeFormat("Failed to convert study time".to_string())
-        })?;
+    let study_time = dicom_utils::get_time_value_dicom(dicom_obj, tags::STUDY_TIME);
 
     let study_id = dicom_utils::get_text_value(dicom_obj, tags::STUDY_ID)
         .filter(|v| !v.is_empty())
@@ -420,13 +408,7 @@ pub fn make_state_info(
     let series_number = dicom_utils::get_int_value(dicom_obj, tags::SERIES_NUMBER);
     let series_date = dicom_utils::get_date_value_dicom(dicom_obj, tags::SERIES_DATE);
 
-    let series_time = dicom_utils::get_text_value(dicom_obj, tags::SERIES_TIME)
-        .filter(|v| !v.is_empty())
-        .map(|v| parse_dicom_time(v.as_str()))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::InvalidTimeFormat("Failed to convert series time".to_string())
-        })?;
+    let series_time = dicom_utils::get_time_value_dicom(dicom_obj, tags::SERIES_TIME);
 
     let series_description = dicom_utils::get_text_value(dicom_obj, tags::SERIES_DESCRIPTION)
         .filter(|v| !v.is_empty())
