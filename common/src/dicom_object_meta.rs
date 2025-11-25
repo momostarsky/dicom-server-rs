@@ -23,6 +23,7 @@ pub enum DicomParseError {
     // 可以根据需要添加其他错误类型
 }
 
+#[derive(Debug)]
 struct DicomCommonMeta {
     patient_id: String,
     study_uid: String,
@@ -459,4 +460,252 @@ pub fn make_state_info(
         created_time: now,
         updated_time: now,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::NaiveDate;
+    use dicom_core::{DataElement, PrimitiveValue, VR};
+    use dicom_dictionary_std::tags;
+    use dicom_object::collector::CharacterSetOverride;
+
+    fn create_test_dicom_object_for_meta() -> InMemDicomObject {
+        // 创建一个完整的DICOM对象用于测试DicomCommonMeta和make_*函数
+        let obj = InMemDicomObject::from_element_iter([
+            // 必需字段
+            DataElement::new(tags::PATIENT_ID, VR::LO, PrimitiveValue::from("PATIENT123")),
+            DataElement::new(
+                tags::STUDY_INSTANCE_UID,
+                VR::UI,
+                PrimitiveValue::from("1.2.3.4.5.6.7.8.9"),
+            ),
+            DataElement::new(
+                tags::SERIES_INSTANCE_UID,
+                VR::UI,
+                PrimitiveValue::from("1.2.3.4.5.6.7.8.9.1"),
+            ),
+            DataElement::new(
+                tags::SOP_INSTANCE_UID,
+                VR::UI,
+                PrimitiveValue::from("1.2.3.4.5.6.7.8.9.1.1"),
+            ),
+            DataElement::new(tags::STUDY_DATE, VR::DA, PrimitiveValue::from("20230115")),
+            // 图像相关信息
+            DataElement::new(tags::INSTANCE_NUMBER, VR::IS, PrimitiveValue::from("1")),
+            DataElement::new(tags::CONTENT_DATE, VR::DA, PrimitiveValue::from("20230115")),
+            DataElement::new(tags::CONTENT_TIME, VR::TM, PrimitiveValue::from("120000")),
+            DataElement::new(
+                tags::IMAGE_TYPE,
+                VR::CS,
+                PrimitiveValue::from("ORIGINAL\\PRIMARY"),
+            ),
+            DataElement::new(
+                tags::TRANSFER_SYNTAX_UID,
+                VR::UI,
+                PrimitiveValue::from("1.2.840.10008.1.2.1"),
+            ),
+            DataElement::new(
+                tags::SOP_CLASS_UID,
+                VR::UI,
+                PrimitiveValue::from("1.2.840.10008.5.1.4.1.1.2"),
+            ),
+            // 患者信息
+            DataElement::new(tags::PATIENT_NAME, VR::PN, PrimitiveValue::from("Doe^John")),
+            DataElement::new(tags::PATIENT_SEX, VR::CS, PrimitiveValue::from("M")),
+            DataElement::new(
+                tags::PATIENT_BIRTH_DATE,
+                VR::DA,
+                PrimitiveValue::from("19800101"),
+            ),
+            // 检查信息
+            DataElement::new(
+                tags::ACCESSION_NUMBER,
+                VR::SH,
+                PrimitiveValue::from("ACC123456789"),
+            ),
+            DataElement::new(tags::STUDY_TIME, VR::TM, PrimitiveValue::from("093000")),
+            DataElement::new(tags::STUDY_ID, VR::SH, PrimitiveValue::from("STUDY123")),
+            DataElement::new(
+                tags::STUDY_DESCRIPTION,
+                VR::LO,
+                PrimitiveValue::from("胸部CT检查"),
+            ),
+            // 序列信息
+            DataElement::new(tags::MODALITY, VR::CS, PrimitiveValue::from("CT")),
+            DataElement::new(tags::SERIES_NUMBER, VR::IS, PrimitiveValue::from("1")),
+            DataElement::new(tags::SERIES_DATE, VR::DA, PrimitiveValue::from("20230115")),
+            DataElement::new(tags::SERIES_TIME, VR::TM, PrimitiveValue::from("093000")),
+            DataElement::new(
+                tags::SERIES_DESCRIPTION,
+                VR::LO,
+                PrimitiveValue::from("常规扫描"),
+            ),
+            DataElement::new(
+                tags::BODY_PART_EXAMINED,
+                VR::CS,
+                PrimitiveValue::from("CHEST"),
+            ),
+            DataElement::new(
+                tags::PROTOCOL_NAME,
+                VR::LO,
+                PrimitiveValue::from("胸部平扫"),
+            ),
+        ]);
+
+        obj
+    }
+
+    #[test]
+    fn test_extract_from_dicom_success() {
+        let obj = create_test_dicom_object_for_meta();
+        let result = DicomCommonMeta::extract_from_dicom(&obj);
+
+        assert!(result.is_ok());
+        let common_meta = result.unwrap();
+
+        assert_eq!(common_meta.patient_id, "PATIENT123");
+        assert_eq!(common_meta.study_uid, "1.2.3.4.5.6.7.8.9");
+        assert_eq!(common_meta.series_uid, "1.2.3.4.5.6.7.8.9.1");
+        assert_eq!(common_meta.sop_uid, "1.2.3.4.5.6.7.8.9.1.1");
+        assert_eq!(common_meta.study_date_str, "20230115");
+        assert_eq!(
+            common_meta.study_date,
+            NaiveDate::from_ymd_opt(2023, 1, 15).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_extract_from_dicom_missing_required_field() {
+        // 创建缺少必需字段的DICOM对象
+        let obj = InMemDicomObject::from_element_iter([DataElement::new(
+            tags::PATIENT_ID,
+            VR::LO,
+            PrimitiveValue::from("PATIENT123"),
+        )]);
+
+        let result = DicomCommonMeta::extract_from_dicom(&obj);
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            DicomParseError::MissingRequiredField(field) => {
+                assert_eq!(field, "STUDY_INSTANCE_UID");
+            }
+            _ => panic!("Expected MissingRequiredField error"),
+        }
+    }
+
+    #[test]
+    fn test_extract_from_dicom_invalid_date_format() {
+        let obj = InMemDicomObject::from_element_iter([
+            DataElement::new(tags::PATIENT_ID, VR::LO, PrimitiveValue::from("PATIENT123")),
+            DataElement::new(
+                tags::STUDY_INSTANCE_UID,
+                VR::UI,
+                PrimitiveValue::from("1.2.3.4.5.6.7.8.9"),
+            ),
+            DataElement::new(
+                tags::SERIES_INSTANCE_UID,
+                VR::UI,
+                PrimitiveValue::from("1.2.3.4.5.6.7.8.9.1"),
+            ),
+            DataElement::new(
+                tags::SOP_INSTANCE_UID,
+                VR::UI,
+                PrimitiveValue::from("1.2.3.4.5.6.7.8.9.1.1"),
+            ),
+            DataElement::new(tags::STUDY_DATE, VR::DA, PrimitiveValue::from("INVALID")),
+        ]);
+
+        let result = DicomCommonMeta::extract_from_dicom(&obj);
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            DicomParseError::InvalidDateFormat(msg) => {
+                // 修改断言以匹配实际的错误消息格式
+                assert!(msg.contains("value is not valid date format"));
+                assert!(msg.contains("INVALID"));
+            }
+            _ => panic!("Expected InvalidDateFormat error"),
+        }
+    }
+
+    #[test]
+    fn test_make_image_info_success() {
+        use dicom_test_files::path;
+
+        let liver = path("pydicom/liver.dcm").unwrap();
+        // then open the file as you will (e.g. using DICOM-rs)
+        match dicom_object::OpenFileOptions::new()
+            .charset_override(CharacterSetOverride::AnyVr)
+            .read_until(tags::PIXEL_DATA)
+            .open_file(liver.to_str().unwrap())
+        {
+            Ok(dicom_obj) => {
+                let result = make_image_info("tenant1", &dicom_obj, Some(1024));
+                assert!(result.is_ok());
+
+                // 将结果输出为 JSON 格式
+                let image_meta = result.unwrap();
+                let json_output = serde_json::to_string_pretty(&image_meta).unwrap();
+                println!("{}", json_output);
+            }
+            Err(err) => {
+                println!("Failed to open DICOM file: {}", err);
+            }
+        };
+    }
+
+    #[test]
+    fn test_make_state_info_success() {
+        let obj = create_test_dicom_object_for_meta();
+        let result = make_state_info("tenant1", &obj, None);
+
+        assert!(result.is_ok());
+        let state_meta = result.unwrap();
+
+        assert_eq!(state_meta.tenant_id.as_str(), "tenant1");
+        assert_eq!(state_meta.patient_id.as_str(), "PATIENT123");
+        assert_eq!(state_meta.study_uid.as_str(), "1.2.3.4.5.6.7.8.9");
+        assert_eq!(state_meta.series_uid.as_str(), "1.2.3.4.5.6.7.8.9.1");
+        assert_eq!(
+            state_meta.patient_name.as_ref().unwrap().as_str(),
+            "Doe^John"
+        );
+        assert_eq!(state_meta.modality.as_ref().unwrap().as_str(), "CT");
+        assert_eq!(state_meta.accession_number.as_str(), "ACC123456789");
+    }
+
+    #[test]
+    fn test_make_image_info_missing_sop_class_uid() {
+        let obj = InMemDicomObject::from_element_iter([
+            DataElement::new(tags::PATIENT_ID, VR::LO, PrimitiveValue::from("PATIENT123")),
+            DataElement::new(
+                tags::STUDY_INSTANCE_UID,
+                VR::UI,
+                PrimitiveValue::from("1.2.3.4.5.6.7.8.9"),
+            ),
+            DataElement::new(
+                tags::SERIES_INSTANCE_UID,
+                VR::UI,
+                PrimitiveValue::from("1.2.3.4.5.6.7.8.9.1"),
+            ),
+            DataElement::new(
+                tags::SOP_INSTANCE_UID,
+                VR::UI,
+                PrimitiveValue::from("1.2.3.4.5.6.7.8.9.1.1"),
+            ),
+            DataElement::new(tags::STUDY_DATE, VR::DA, PrimitiveValue::from("20230115")),
+        ]);
+
+        let result = make_image_info("tenant1", &obj, Some(1024));
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            DicomParseError::MissingRequiredField(field) => {
+                assert_eq!(field, "SOP Class UID");
+            }
+            _ => panic!("Expected MissingRequiredField error"),
+        }
+    }
 }
