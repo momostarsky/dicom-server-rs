@@ -136,6 +136,9 @@ impl RedisHelper {
         self.del_key(key).await
     }
 
+    /// Get study metadata
+    /// returns:
+    ///    If not found, return empty vector
     pub async fn get_study_metadata(
         &self,
         tenant_id: &str,
@@ -153,7 +156,7 @@ impl RedisHelper {
                     ))
                 })
             }
-            Err(_e) => Ok(vec![]),
+            Err(e) => Err(e),
         }
     }
 

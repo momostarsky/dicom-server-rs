@@ -38,22 +38,19 @@ async fn get_study_info_with_cache(
     tenant_id: &str,
     study_uid: &str,
     app_state: &web::Data<AppState>,
-    from_cache: bool,
 ) -> Result<Vec<DicomStateMeta>, HttpResponse> {
     let log = app_state.log.clone();
     // 首先尝试从 Redis 缓存中获取数据
     let rh = &app_state.redis_helper;
 
-    if from_cache {
-        match rh.get_study_metadata(tenant_id, study_uid).await {
-            Ok(metas) => {
-                info!(log, "Retrieved study_info from Redis cache");
-                if !metas.is_empty() {
-                    return Ok(metas);
-                }
+    match rh.get_study_metadata(tenant_id, study_uid).await {
+        Ok(metas) => {
+            info!(log, "Retrieved study_info from Redis cache");
+            if !metas.is_empty() {
+                return Ok(metas);
             }
-            Err(_) => {}
         }
+        Err(_) => {}
     }
 
     match app_state.db.get_state_metaes(tenant_id, study_uid).await {
@@ -185,7 +182,7 @@ async fn retrieve_study_metadata(
     }
 
     //  从缓存中加载study_info
-    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state, true).await
+    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state ).await
     {
         Ok(info) => info,
         Err(response) => return response,
@@ -320,7 +317,7 @@ async fn retrieve_study_subseries(
     }
     //  从缓存中加载study_info
     let study_info =
-        match get_study_info_with_cache(&tenant_id, &study_uid, &app_state, false).await {
+        match get_study_info_with_cache(&tenant_id, &study_uid, &app_state).await {
             Ok(info) => info,
             Err(response) => return response,
         };
@@ -412,7 +409,7 @@ async fn retrieve_series_metadata(
         ));
     }
     // ... existing code ...
-    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state, true).await
+    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state ).await
     {
         Ok(info) => info,
         Err(response) => return response,
@@ -597,7 +594,7 @@ async fn retrieve_instance_impl(
         ));
     }
     // 获取series_info (使用提取的函数)
-    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state, true).await
+    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state ).await
     {
         Ok(info) => info,
         Err(response) => return response,
