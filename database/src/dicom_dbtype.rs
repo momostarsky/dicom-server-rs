@@ -38,6 +38,26 @@ impl<const N: usize> BoundedString<N> {
             Ok(Self { value: s })
         }
     }
+    /// TODO: 这个方法会截断字符串，可能会导致数据丢失，谨慎使用
+    pub fn make(s: String) -> BoundedString<N> {
+        if s.len() > N {
+            Self {
+                value: s[..N].to_string(),
+            }
+        } else {
+            Self { value: s }
+        }
+    }
+    /// TODO: 这个方法会截断字符串，可能会导致数据丢失，谨慎使用
+    pub fn make_str(s: &str) -> BoundedString<N> {
+        if s.len() > N {
+            Self {
+                value: s[..N].to_string(),
+            }
+        } else {
+            Self { value: String::from(s) }
+        }
+    }
     pub fn from_str(s: &str) -> BoundedResult<BoundedString<N>> {
         if s.len() > N {
             Err(BoundedStringError::TooLong {
@@ -83,8 +103,6 @@ impl<const N: usize> PartialEq for BoundedString<N> {
 
 impl<const N: usize> Eq for BoundedString<N> {}
 
-
-
 impl<const N: usize> TryFrom<&str> for BoundedString<N> {
     type Error = BoundedStringError;
     fn try_from(s: &str) -> BoundedResult<Self> {
@@ -98,8 +116,6 @@ impl<const N: usize> TryFrom<String> for BoundedString<N> {
         BoundedString::new(value)
     }
 }
-
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]

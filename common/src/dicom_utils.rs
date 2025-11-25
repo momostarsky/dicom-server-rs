@@ -10,78 +10,137 @@ pub fn get_text_value(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<String> 
         .map(|s| s.trim_end_matches(|c| c == ' ' || c == '\0').to_string()) // 正确处理尾部空格和\0字符
 }
 
-pub fn get_date_value(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<String> {
-    get_text_value(dicom_obj, tag).and_then(|s| {
-        // 尝试解析DICOM日期格式 (YYYYMMDD)
-        if s.len() == 8 && s.chars().all(|c| c.is_ascii_digit()) {
-            Some(format!("{}-{}-{}", &s[0..4], &s[4..6], &s[6..8]))
-        } else {
-            None
-        }
-    })
-}
-
-pub fn get_date_value_dicom(
-    dicom_obj: &InMemDicomObject,
-    tag: Tag,
-) -> Option<NaiveDate> {
-    get_text_value(dicom_obj, tag).and_then(|s| {
-        // 尝试解析DICOM日期格式 (YYYYMMDD)
-        if s.len() == 8 && s.chars().all(|c| c.is_ascii_digit()) {
-            match NaiveDate::parse_from_str(&s[..], "%Y%m%d") {
-                Ok(date) => Some(date),
-                Err(_) => None,
+pub fn get_date_value_dicom(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<NaiveDate> {
+    match dicom_obj.element(tag) {
+        Ok(e) => match e.to_date() {
+            Ok(date) => {
+                let year: i32 = *date.year() as i32;
+                let month = if let Some(month) = date.month() {
+                    *month as u32
+                } else {
+                    1
+                };
+                let day = if let Some(day) = date.day() {
+                    *day as u32
+                } else {
+                    1
+                };
+                NaiveDate::from_ymd_opt(year, month, day)
             }
-            // Some(format!("{}-{}-{}", &s[0..4], &s[4..6], &s[6..8]))
-        } else {
-            None
-        }
-    })
+            Err(_) => None,
+        },
+        Err(_) => None,
+    }
 }
 
-
+/// 解析DICOM时间字符串，支持多种格式：
+/// - %H%M%S.%f (带毫秒)
+/// - %H%M%S. (带点但无毫秒)
+/// - %H%M%S (不带毫秒)
+// fn parse_dicom_time(time_str: &str) -> Result<NaiveTime, chrono::ParseError> {
+//     // 尝试解析带毫秒的格式 (%H%M%S.%f)
+//     NaiveTime::parse_from_str(time_str, "%H%M%S.%f")
+//         .or_else(|_| {
+//             // 尝试解析带点但无毫秒的格式 (%H%M%S.)
+//             NaiveTime::parse_from_str(time_str, "%H%M%S.")
+//         })
+//         .or_else(|_| {
+//             // 尝试解析不带毫秒的格式 (%H%M%S)
+//             NaiveTime::parse_from_str(time_str, "%H%M%S")
+//         })
+// }
 pub fn get_time_value_dicom(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<NaiveTime> {
-    get_text_value(dicom_obj, tag).and_then(|s| {
-        // 简单处理时间格式，实际可能需要更复杂的解析
-
-        if !s.is_empty() {
-            match NaiveTime::parse_from_str(&s[..], "%H%M%S%.f") {
-                Ok(date) => Some(date),
-                Err(_) => None,
+    match dicom_obj.element(tag) {
+        Ok(e) => match e.to_time() {
+            Ok(date) => {
+                let year = *date.hour() as u32;
+                let month = *date.minute().unwrap() as u32;
+                let day = *date.second().unwrap() as u32;
+                let mrs = date.millisecond().unwrap();
+                NaiveTime::from_hms_micro_opt(year, month, day, mrs)
             }
-        } else {
-            None
-        }
-    })
+            Err(_) => None,
+        },
+        Err(_) => None,
+    }
+
+    // get_text_value(dicom_obj, tag).and_then(|s| {
+    //     // 简单处理时间格式，实际可能需要更复杂的解析
+    //     if !s.is_empty() {
+    //         match parse_dicom_time(&s[..]) {
+    //             Ok(date) => Some(date),
+    //             Err(_) => None,
+    //         }
+    //     } else {
+    //         None
+    //     }
+    // })
 }
 
 pub fn get_datetime_value_dicom(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<NaiveDateTime> {
-    get_text_value(dicom_obj, tag).and_then(|s| {
-        // 简单处理时间格式，实际可能需要更复杂的解析
+    match dicom_obj.element(tag) {
+        Ok(e) => match e.to_datetime() {
+            Ok(datetime) => {
+                let date = datetime.date();
+                let time = datetime.time();
+                let year = *date.year() as i32;
+                let month = if let Some(month) = date.month() {
+                    *month as u32
+                } else {
+                    1
+                };
 
-        if !s.is_empty() {
-            match NaiveDateTime::parse_from_str(&s[..], "%Y%m%d%H%M%S%.f") {
-                Ok(date) => Some(date),
-                Err(_) => None,
+                let day = if let Some(day) = date.day() {
+                    *day as u32
+                } else {
+                    1
+                };
+
+                let d = NaiveDate::from_ymd_opt(year, month, day).unwrap();
+                if let Some(time) = time {
+                    let hour = *time.hour() as u32;
+                    let minute = if let Some(minute) = time.minute() {
+                        *minute as u32
+                    } else {
+                        0
+                    };
+
+                    let second = if let Some(second) = time.second() {
+                        *second as u32
+                    } else {
+                        0
+                    };
+
+                    let microsecond = if let Some(microsecond) = time.millisecond() {
+                        microsecond
+                    } else {
+                        0
+                    };
+                    let t =
+                        NaiveTime::from_hms_milli_opt(hour, minute, second, microsecond).unwrap();
+                    Option::from(NaiveDateTime::new(d, t))
+                } else {
+                    let t = NaiveTime::from_hms_milli_opt(0, 0, 0, 0).unwrap();
+                    Option::from(NaiveDateTime::new(d, t))
+                }
             }
-        } else {
-            None
-        }
-    })
-}
-
-pub fn parse_dicom_date_from_str(s: &str) -> Option<NaiveDate> {
-    match NaiveDate::parse_from_str(&s[..], "%Y-%m-%d") {
-        Ok(date) => Some(date),
+            Err(_) => None,
+        },
         Err(_) => None,
     }
-}
 
-pub  fn parse_dicom_time_from_str(s: &str) -> Option<NaiveTime> {
-    match NaiveTime::parse_from_str(&s[..], "%H:%M:%S%.f") {
-        Ok(date) => Some(date),
-        Err(_) => None,
-    }
+    // get_text_value(dicom_obj, tag).and_then(|s| {
+    //     // 简单处理时间格式，实际可能需要更复杂的解析
+    //
+    //     if !s.is_empty() {
+    //         match NaiveDateTime::parse_from_str(&s[..], "%Y%m%d%H%M%S%.f") {
+    //             Ok(date) => Some(date),
+    //             Err(_) => None,
+    //         }
+    //     } else {
+    //         None
+    //     }
+    // })
 }
 
 pub fn get_int_value(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<i32> {

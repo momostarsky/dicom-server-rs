@@ -2,7 +2,7 @@ use crate::dicom_utils;
 
 use crate::storage_config::hash_uid;
 use crate::utils::get_current_time;
-use chrono::{NaiveDate, NaiveTime};
+use chrono::NaiveDate;
 use database::dicom_dbtype::{BoundedString, DicomDateString};
 use database::dicom_meta::{DicomImageMeta, DicomStateMeta};
 use dicom_dictionary_std::tags;
@@ -133,6 +133,14 @@ impl DicomCommonMeta {
         })
     }
 }
+// 在文件顶部添加辅助函数
+fn convert_bounded_string<const N: usize>(
+    value: String,
+) -> Result<BoundedString<N>, DicomParseError> {
+    BoundedString::<N>::try_from(value.clone()).map_err(|_| {
+        DicomParseError::ConversionError(format!("Failed to convert string:{}", &value))
+    })
+}
 
 /// 对 Vec<DicomStateMeta> 进行去重处理
 
@@ -152,32 +160,20 @@ pub fn make_image_info(
 
     let image_type = dicom_utils::get_text_value(dicom_obj, tags::IMAGE_TYPE)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<128>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert image type".to_string())
-        })?;
+        .map(convert_bounded_string::<128>)
+        .transpose()?;
 
     let image_orientation_patient =
         dicom_utils::get_text_value(dicom_obj, tags::IMAGE_ORIENTATION_PATIENT)
             .filter(|v| !v.is_empty())
-            .map(|v| BoundedString::<128>::try_from(v))
-            .transpose()
-            .map_err(|_| {
-                DicomParseError::ConversionError(
-                    "Failed to convert image orientation patient".to_string(),
-                )
-            })?;
+            .map(convert_bounded_string::<128>)
+            .transpose()?;
+
     let image_position_patient =
         dicom_utils::get_text_value(dicom_obj, tags::IMAGE_POSITION_PATIENT)
             .filter(|v| !v.is_empty())
-            .map(|v| BoundedString::<64>::try_from(v))
-            .transpose()
-            .map_err(|_| {
-                DicomParseError::ConversionError(
-                    "Failed to convert image position patient".to_string(),
-                )
-            })?;
+            .map(convert_bounded_string::<64>)
+            .transpose()?;
 
     let slice_thickness = dicom_utils::get_decimal_value(dicom_obj, tags::SLICE_THICKNESS);
     let spacing_between_slices =
@@ -188,13 +184,8 @@ pub fn make_image_info(
     let photometric_interpretation =
         dicom_utils::get_text_value(dicom_obj, tags::PHOTOMETRIC_INTERPRETATION)
             .filter(|v| !v.is_empty())
-            .map(|v| BoundedString::<32>::try_from(v))
-            .transpose()
-            .map_err(|_| {
-                DicomParseError::ConversionError(
-                    "Failed to convert photometric interpretation".to_string(),
-                )
-            })?;
+            .map(convert_bounded_string::<32>)
+            .transpose()?;
 
     let width = dicom_utils::get_int_value(dicom_obj, tags::ROWS);
     let columns = dicom_utils::get_int_value(dicom_obj, tags::COLUMNS);
@@ -206,25 +197,19 @@ pub fn make_image_info(
     let rescale_intercept = dicom_utils::get_decimal_value(dicom_obj, tags::RESCALE_INTERCEPT);
     let rescale_slope = dicom_utils::get_decimal_value(dicom_obj, tags::RESCALE_SLOPE);
 
-    // 或者在 make_image_info 函数内部添加辅助闭包
-    let convert_str_64 = |value: String| -> Result<BoundedString<64>, DicomParseError> {
-        BoundedString::<64>::try_from(value)
-            .map_err(|_| DicomParseError::ConversionError("Failed to convert string".to_string()))
-    };
-
     let rescale_type = dicom_utils::get_text_value(dicom_obj, tags::RESCALE_TYPE)
         .filter(|v| !v.is_empty())
-        .map(convert_str_64)
+        .map(convert_bounded_string::<64>)
         .transpose()?;
 
     let window_center = dicom_utils::get_text_value(dicom_obj, tags::WINDOW_CENTER)
         .filter(|v| !v.is_empty())
-        .map(convert_str_64)
+        .map(convert_bounded_string::<64>)
         .transpose()?;
 
     let window_width = dicom_utils::get_text_value(dicom_obj, tags::WINDOW_WIDTH)
         .filter(|v| !v.is_empty())
-        .map(convert_str_64)
+        .map(convert_bounded_string::<64>)
         .transpose()?;
 
     let transfer_syntax_uid = dicom_utils::get_text_value(dicom_obj, tags::TRANSFER_SYNTAX_UID)
@@ -235,33 +220,22 @@ pub fn make_image_info(
         .filter(|v| !v.is_empty())
         .ok_or_else(|| DicomParseError::MissingRequiredField("SOP Class UID".to_string()))?;
 
-    let image_status = Some(BoundedString::<32>::from_str("ACTIVE").unwrap());
+    let image_status = Some(BoundedString::<32>::make_str("ACTIVE"));
 
     // 计算哈希值
-    let study_uid_hash = BoundedString::<20>::from_str(&hash_uid(&common_meta.study_uid)).unwrap();
-    let series_uid_hash =
-        BoundedString::<20>::from_str(&hash_uid(&common_meta.series_uid)).unwrap();
+    let study_uid_hash = BoundedString::<20>::make(hash_uid(&common_meta.study_uid));
+    let series_uid_hash = BoundedString::<20>::make(hash_uid(&common_meta.series_uid));
 
     let space_size = fsize;
     // 时间戳
     let now = get_current_time();
 
     Ok(DicomImageMeta {
-        tenant_id: BoundedString::<64>::try_from(tenant_id.to_string()).map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert tenant ID".to_string())
-        })?,
-        patient_id: BoundedString::<64>::try_from(common_meta.patient_id).map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert patient ID".to_string())
-        })?,
-        study_uid: BoundedString::<64>::from_str(&common_meta.study_uid).map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert study UID".to_string())
-        })?,
-        series_uid: BoundedString::<64>::from_str(&common_meta.series_uid).map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert series UID".to_string())
-        })?,
-        sop_uid: BoundedString::<64>::from_str(&common_meta.sop_uid).map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert SOP UID".to_string())
-        })?,
+        tenant_id: BoundedString::<64>::make(tenant_id.to_string()),
+        patient_id: BoundedString::<64>::make(common_meta.patient_id),
+        study_uid: BoundedString::<64>::make(common_meta.study_uid),
+        series_uid: BoundedString::<64>::make(common_meta.series_uid),
+        sop_uid: BoundedString::<64>::make(common_meta.sop_uid),
         study_uid_hash,
         series_uid_hash,
 
@@ -290,12 +264,10 @@ pub fn make_image_info(
         window_center,
         window_width,
 
-        transfer_syntax_uid: BoundedString::<64>::try_from(transfer_syntax_uid).unwrap(),
+        transfer_syntax_uid: BoundedString::<64>::make(transfer_syntax_uid),
         pixel_data_location: None,
         thumbnail_location: None,
-        sop_class_uid: BoundedString::<64>::try_from(sop_class_uid).map_err(|_| {
-            DicomParseError::SopClassUidIsEmpty("SOP Class UID is empty".to_string())
-        })?,
+        sop_class_uid: BoundedString::<64>::make(sop_class_uid),
         image_status,
         space_size,
         created_time: now,
@@ -312,22 +284,7 @@ fn make_crc32(tenante_id: &str, study_uid: Option<&str>) -> u32 {
     }
     const_crc32::crc32(&data)
 }
-/// 解析DICOM时间字符串，支持多种格式：
-/// - %H%M%S.%f (带毫秒)
-/// - %H%M%S. (带点但无毫秒)
-/// - %H%M%S (不带毫秒)
-fn parse_dicom_time(time_str: &str) -> Result<NaiveTime, chrono::ParseError> {
-    // 尝试解析带毫秒的格式 (%H%M%S.%f)
-    NaiveTime::parse_from_str(time_str, "%H%M%S.%f")
-        .or_else(|_| {
-            // 尝试解析带点但无毫秒的格式 (%H%M%S.)
-            NaiveTime::parse_from_str(time_str, "%H%M%S.")
-        })
-        .or_else(|_| {
-            // 尝试解析不带毫秒的格式 (%H%M%S)
-            NaiveTime::parse_from_str(time_str, "%H%M%S")
-        })
-}
+
 pub fn make_state_info(
     tenant_id: &str,
     dicom_obj: &InMemDicomObject,
@@ -340,48 +297,32 @@ pub fn make_state_info(
 
     let acc_num = dicom_utils::get_text_value(dicom_obj, tags::ACCESSION_NUMBER)
         .filter(|v| !v.is_empty() && v.len() <= 16)
-        .unwrap_or_else(|| format!("X32CRC{}", make_crc32(tenant_id, msg_study_uid))); // 当为空时设置默认值"X12333"
+        .unwrap_or_else(|| format!("ACC{}", make_crc32(tenant_id, msg_study_uid))); // 当为空时设置默认值"X12333"
     let modality = dicom_utils::get_text_value(dicom_obj, tags::MODALITY)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<16>::try_from(v))
-        .transpose()
-        .map_err(|_| DicomParseError::ConversionError("Failed to convert modality".to_string()))?;
+        .map(convert_bounded_string::<16>)
+        .transpose()?;
 
     // 患者相关信息
     let patient_name = dicom_utils::get_text_value(dicom_obj, tags::PATIENT_NAME)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert patient name".to_string())
-        })?;
+        .map(convert_bounded_string::<64>)
+        .transpose()?;
 
     let patient_sex = dicom_utils::get_text_value(dicom_obj, tags::PATIENT_SEX)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<1>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert patient sex".to_string())
-        })?;
+        .map(convert_bounded_string::<1>)
+        .transpose()?;
 
     let patient_birth_date = dicom_utils::get_date_value_dicom(dicom_obj, tags::PATIENT_BIRTH_DATE);
 
-    let patient_birth_time = dicom_utils::get_text_value(dicom_obj, tags::PATIENT_BIRTH_TIME)
-        .filter(|v| !v.is_empty())
-        .map(|v| parse_dicom_time(v.as_str()))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::InvalidTimeFormat("Failed to convert patient birth time".to_string())
-        })?;
+    let patient_birth_time = dicom_utils::get_time_value_dicom(dicom_obj, tags::PATIENT_BIRTH_TIME);
 
     // 患者其他信息
     let patient_age = dicom_utils::get_text_value(dicom_obj, tags::PATIENT_AGE)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<16>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert patient age".to_string())
-        })?;
+        .map(convert_bounded_string::<16>)
+        .transpose()?;
 
     let patient_size = dicom_utils::get_decimal_value(dicom_obj, tags::PATIENT_SIZE);
     let patient_weight = dicom_utils::get_decimal_value(dicom_obj, tags::PATIENT_WEIGHT);
@@ -392,17 +333,13 @@ pub fn make_state_info(
 
     let study_id = dicom_utils::get_text_value(dicom_obj, tags::STUDY_ID)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<16>::try_from(v))
-        .transpose()
-        .map_err(|_| DicomParseError::ConversionError("Failed to convert study ID".to_string()))?;
+        .map(convert_bounded_string::<16>)
+        .transpose()?;
 
     let study_description = dicom_utils::get_text_value(dicom_obj, tags::STUDY_DESCRIPTION)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert study description".to_string())
-        })?;
+        .map(convert_bounded_string::<64>)
+        .transpose()?;
     // 序列相关信息
 
     let series_number = dicom_utils::get_int_value(dicom_obj, tags::SERIES_NUMBER);
@@ -412,27 +349,18 @@ pub fn make_state_info(
 
     let series_description = dicom_utils::get_text_value(dicom_obj, tags::SERIES_DESCRIPTION)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<256>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert series description".to_string())
-        })?;
+        .map(convert_bounded_string::<256>)
+        .transpose()?;
 
     let body_part_examined = dicom_utils::get_text_value(dicom_obj, tags::BODY_PART_EXAMINED)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert body part examined".to_string())
-        })?;
+        .map(convert_bounded_string::<64>)
+        .transpose()?;
 
     let protocol_name = dicom_utils::get_text_value(dicom_obj, tags::PROTOCOL_NAME)
         .filter(|v| !v.is_empty())
-        .map(|v| BoundedString::<64>::try_from(v))
-        .transpose()
-        .map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert protocol name".to_string())
-        })?;
+        .map(convert_bounded_string::<64>)
+        .transpose()?;
 
     // let operators_name = dicom_utils::get_text_value(dicom_obj, tags::OPERATORS_NAME)
     //     .filter(|v| !v.is_empty())
@@ -477,19 +405,21 @@ pub fn make_state_info(
 
     // 计算哈希值
     // 计算哈希值
-    let study_uid_hash = BoundedString::<20>::from_str(&hash_uid(&common_meta.study_uid)).unwrap();
-    let series_uid_hash =
-        BoundedString::<20>::from_str(&hash_uid(&common_meta.series_uid)).unwrap();
+    let study_uid_hash = BoundedString::<20>::make_str(&hash_uid(&common_meta.study_uid));
+    let series_uid_hash = BoundedString::<20>::make_str(&hash_uid(&common_meta.series_uid));
 
     // 时间戳
     let now = chrono::Local::now().naive_local();
     let study_date_origin = DicomDateString::from_str(&common_meta.study_date_str).unwrap();
 
-    let tenant_id = BoundedString::<64>::from_str(tenant_id).unwrap();
-    let patient_id = BoundedString::<64>::from_str(&common_meta.patient_id).unwrap();
-    let study_uid = BoundedString::<64>::from_str(&common_meta.study_uid).unwrap();
-    let series_uid = BoundedString::<64>::from_str(&common_meta.series_uid).unwrap();
-    let accession_number = BoundedString::<16>::from_str(acc_num.as_str()).unwrap();
+    let tenant_id = BoundedString::<64>::make_str(tenant_id);
+    let patient_id = BoundedString::<64>::make(common_meta.patient_id);
+    let study_uid = BoundedString::<64>::make(common_meta.study_uid);
+    let series_uid = BoundedString::<64>::make(common_meta.series_uid);
+    //
+    //https://dicom.nema.org/medical/dicom/current/output/chtml/part05/sect_6.2.html
+    //
+    let accession_number = BoundedString::<16>::make(acc_num);
 
     Ok(DicomStateMeta {
         tenant_id,
