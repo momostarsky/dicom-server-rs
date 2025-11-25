@@ -8,7 +8,7 @@ pub mod cornerstonejs;
 
 pub mod database_factory;
 
-pub mod database_provider_base;
+pub mod extraction_error;
 pub mod dicom_json_helper;
 pub mod dicom_object_meta;
 pub mod dicom_utils;

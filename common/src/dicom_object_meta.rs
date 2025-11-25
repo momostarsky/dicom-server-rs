@@ -1,6 +1,7 @@
 use crate::dicom_utils;
 
 use crate::storage_config::hash_uid;
+use crate::utils::get_current_time;
 use chrono::{NaiveDate, NaiveTime};
 use database::dicom_dbtype::{BoundedString, DicomDateString};
 use database::dicom_meta::{DicomImageMeta, DicomStateMeta};
@@ -32,51 +33,103 @@ struct DicomCommonMeta {
 }
 
 impl DicomCommonMeta {
+    const KEY_TAGS: &'static [dicom_core::Tag] = &[
+        tags::PATIENT_ID,
+        tags::STUDY_INSTANCE_UID,
+        tags::SERIES_INSTANCE_UID,
+        tags::SOP_INSTANCE_UID,
+        tags::STUDY_DATE,
+    ];
     fn extract_from_dicom(dicom_obj: &InMemDicomObject) -> Result<Self, DicomParseError> {
-        // 提取 patient_id
-        let patient_id_str = dicom_utils::get_text_value(dicom_obj, tags::PATIENT_ID)
-            .filter(|v| !v.is_empty() && v.len() <= 64)
-            .ok_or_else(|| DicomParseError::MissingRequiredField("PATIENT_ID".to_string()))?;
+        let mut patient_id_str: Option<String> = None;
+        let mut study_uid_str: Option<String> = None;
+        let mut series_uid_str: Option<String> = None;
+        let mut sop_uid_str: Option<String> = None;
+        let mut study_date: Option<(String, NaiveDate)> = None;
 
-        // 提取 study_uid
-        let study_uid = dicom_utils::get_text_value(dicom_obj, tags::STUDY_INSTANCE_UID)
-            .filter(|v| !v.is_empty() && v.len() <= 64)
-            .ok_or_else(|| {
-                DicomParseError::MissingRequiredField("STUDY_INSTANCE_UID".to_string())
-            })?;
+        // 验证所有必需的标签是否存在且符合长度要求
+        for &tag in Self::KEY_TAGS {
+            let value = match dicom_utils::get_text_value(dicom_obj, tag) {
+                Some(value) => value,
+                None => {
+                    // 标签不存在
+                    let tag_name = match tag {
+                        tags::PATIENT_ID => "PATIENT_ID",
+                        tags::STUDY_INSTANCE_UID => "STUDY_INSTANCE_UID",
+                        tags::SERIES_INSTANCE_UID => "SERIES_INSTANCE_UID",
+                        tags::SOP_INSTANCE_UID => "SOP_INSTANCE_UID",
+                        tags::STUDY_DATE => "STUDY_DATE",
+                        _ => "UNKNOWN_TAG",
+                    };
+                    return Err(DicomParseError::MissingRequiredField(tag_name.to_string()));
+                }
+            };
 
-        // 提取 series_uid
-        let series_uid = dicom_utils::get_text_value(dicom_obj, tags::SERIES_INSTANCE_UID)
-            .filter(|v| !v.is_empty() && v.len() <= 64)
-            .ok_or_else(|| {
-                DicomParseError::MissingRequiredField("SERIES_INSTANCE_UID".to_string())
-            })?;
-
-        // 提取 sop_uid (仅对 DicomImageMeta 需要)
-        let sop_uid = dicom_utils::get_text_value(dicom_obj, tags::SOP_INSTANCE_UID)
-            .filter(|v| !v.is_empty() && v.len() <= 64)
-            .ok_or_else(|| DicomParseError::MissingRequiredField("SOP_INSTANCE_UID".to_string()))?;
-
-        // 提取 study_date_str
-        let study_date_str = dicom_utils::get_text_value(dicom_obj, tags::STUDY_DATE)
-            .ok_or_else(|| DicomParseError::MissingRequiredField("STUDY_DATE".to_string()))?;
-        let study_date_v = match NaiveDate::parse_from_str(&study_date_str, "%Y%m%d") {
-            Ok(date) => date,
-            Err(_) => {
-                return Err(DicomParseError::InvalidDateFormat(format!(
-                    "Study Date must be in YYYYMMDD format, got: {}",
-                    study_date_str
+            // 检查值是否为空
+            if value.is_empty() {
+                return Err(DicomParseError::MissingRequiredField(format!(
+                    "Tag {:?} has empty value",
+                    tag
                 )));
             }
-        };
+
+            // 检查特定标签的长度限制
+            let max_length = match tag {
+                tags::PATIENT_ID => 64,
+                tags::STUDY_INSTANCE_UID => 64,
+                tags::SERIES_INSTANCE_UID => 64,
+                tags::SOP_INSTANCE_UID => 64,
+                tags::STUDY_DATE => 8, // YYYYMMDD format
+                _ => usize::MAX,       // 其他标签不限制长度
+            };
+            if value.len() > max_length {
+                return Err(DicomParseError::InvalidFormat(format!(
+                    "Tag {:?} value exceeds maximum length {}: {}",
+                    tag, max_length, value
+                )));
+            }
+
+            // 在验证STUDY_DATE时保存解析结果
+            if tag == tags::STUDY_DATE {
+                match NaiveDate::parse_from_str(&value, "%Y%m%d") {
+                    Ok(date) => {
+                        // 保存解析结果供后续使用
+                        study_date = Some((value.clone(), date));
+                    }
+                    Err(_) => {
+                        return Err(DicomParseError::InvalidDateFormat(format!(
+                            "Tag {:?} value is not valid date format:YYYYMMDD {}",
+                            tag, value
+                        )));
+                    }
+                }
+            }
+
+            // 赋值给相应变量
+            match tag {
+                tags::PATIENT_ID => patient_id_str = Some(value),
+                tags::STUDY_INSTANCE_UID => study_uid_str = Some(value),
+                tags::SERIES_INSTANCE_UID => series_uid_str = Some(value),
+                tags::SOP_INSTANCE_UID => sop_uid_str = Some(value),
+                _ => {}
+            }
+        }
+
+        // 安全解包Option值
+        let patient_id = patient_id_str.unwrap();
+        let study_uid = study_uid_str.unwrap();
+        let series_uid = series_uid_str.unwrap();
+        let sop_uid = sop_uid_str.unwrap();
+        // 解包时
+        let (study_date_str_value, study_date_v) = study_date.unwrap();
 
         Ok(DicomCommonMeta {
-            patient_id: patient_id_str,
+            patient_id,
             study_uid,
             series_uid,
             sop_uid,
             study_date: study_date_v,
-            study_date_str,
+            study_date_str: study_date_str_value,
         })
     }
 }
@@ -188,27 +241,16 @@ pub fn make_image_info(
         .filter(|v| !v.is_empty())
         .ok_or_else(|| DicomParseError::MissingRequiredField("SOP Class UID".to_string()))?;
 
-    let image_status = Some(
-        BoundedString::<32>::try_from("ACTIVE".to_string()).map_err(|_| {
-            DicomParseError::ConversionError("Failed to convert image status".to_string())
-        })?,
-    );
+    let image_status = Some(BoundedString::<32>::from_str("ACTIVE").unwrap());
 
     // 计算哈希值
-    // 计算哈希值
-    let study_uid_hash = BoundedString::<20>::from_str(&hash_uid(&common_meta.study_uid)).map_err(|_| {
-        DicomParseError::ConversionError("Failed to convert study UID hash".to_string())
-    })?;
-    let series_uid_hash = BoundedString::<20>::from_str(&hash_uid(&common_meta.series_uid)).map_err(|_| {
-        DicomParseError::ConversionError("Failed to convert series UID hash".to_string())
-    })?;
+    let study_uid_hash = BoundedString::<20>::from_str(&hash_uid(&common_meta.study_uid)).unwrap();
+    let series_uid_hash =
+        BoundedString::<20>::from_str(&hash_uid(&common_meta.series_uid)).unwrap();
 
-    let mut space_size = Some(0i64);
-    if fsize.is_some() {
-        space_size = Some(fsize.unwrap() as i64);
-    }
+    let space_size = fsize;
     // 时间戳
-    let now = chrono::Local::now().naive_local();
+    let now = get_current_time();
 
     Ok(DicomImageMeta {
         tenant_id: BoundedString::<64>::try_from(tenant_id.to_string()).map_err(|_| {
@@ -262,7 +304,7 @@ pub fn make_image_info(
         })?,
         image_status,
         space_size,
-        created_time:  now,
+        created_time: now,
         updated_time: now,
     })
 }
@@ -294,7 +336,6 @@ fn parse_dicom_time(time_str: &str) -> Result<NaiveTime, chrono::ParseError> {
 }
 pub fn make_state_info(
     tenant_id: &str,
-
     dicom_obj: &InMemDicomObject,
     msg_study_uid: Option<&str>,
 ) -> Result<DicomStateMeta, DicomParseError> {
@@ -374,37 +415,6 @@ pub fn make_state_info(
         .map_err(|_| {
             DicomParseError::ConversionError("Failed to convert study description".to_string())
         })?;
-
-    // let referring_physician_name =
-    //     dicom_utils::get_text_value(dicom_obj, tags::REFERRING_PHYSICIAN_NAME)
-    //         .filter(|v| !v.is_empty())
-    //         .map(|v| BoundedString::<64>::try_from(v))
-    //         .transpose()
-    //         .map_err(|_| {
-    //             DicomParseError::ConversionError(
-    //                 "Failed to convert referring physician name".to_string(),
-    //             )
-    //         })?;
-    //
-    // let admission_id = dicom_utils::get_text_value(dicom_obj, tags::ADMISSION_ID)
-    //     .filter(|v| !v.is_empty())
-    //     .map(|v| BoundedString::<64>::try_from(v))
-    //     .transpose()
-    //     .map_err(|_| {
-    //         DicomParseError::ConversionError("Failed to convert admission ID".to_string())
-    //     })?;
-    //
-    // let performing_physician_name =
-    //     dicom_utils::get_text_value(dicom_obj, tags::PERFORMING_PHYSICIAN_NAME)
-    //         .filter(|v| !v.is_empty())
-    //         .map(|v| BoundedString::<64>::try_from(v))
-    //         .transpose()
-    //         .map_err(|_| {
-    //             DicomParseError::ConversionError(
-    //                 "Failed to convert performing physician name".to_string(),
-    //             )
-    //         })?;
-
     // 序列相关信息
 
     let series_number = dicom_utils::get_int_value(dicom_obj, tags::SERIES_NUMBER);
@@ -485,18 +495,15 @@ pub fn make_state_info(
 
     // 计算哈希值
     // 计算哈希值
-    let study_uid_hash = BoundedString::<20>::from_str(&hash_uid(&common_meta.study_uid)).map_err(|_| {
-        DicomParseError::ConversionError("Failed to convert study UID hash".to_string())
-    })?;
-    let series_uid_hash = BoundedString::<20>::from_str(&hash_uid(&common_meta.series_uid)).map_err(|_| {
-        DicomParseError::ConversionError("Failed to convert series UID hash".to_string())
-    })?;
+    let study_uid_hash = BoundedString::<20>::from_str(&hash_uid(&common_meta.study_uid)).unwrap();
+    let series_uid_hash =
+        BoundedString::<20>::from_str(&hash_uid(&common_meta.series_uid)).unwrap();
 
     // 时间戳
     let now = chrono::Local::now().naive_local();
-    let study_date_origin = DicomDateString::try_from(&common_meta.study_date_str).unwrap();
+    let study_date_origin = DicomDateString::from_str(&common_meta.study_date_str).unwrap();
 
-    let tenant_id = BoundedString::<64>::try_from(tenant_id.to_string()).unwrap();
+    let tenant_id = BoundedString::<64>::from_str(tenant_id).unwrap();
     let patient_id = BoundedString::<64>::from_str(&common_meta.patient_id).unwrap();
     let study_uid = BoundedString::<64>::from_str(&common_meta.study_uid).unwrap();
     let series_uid = BoundedString::<64>::from_str(&common_meta.series_uid).unwrap();

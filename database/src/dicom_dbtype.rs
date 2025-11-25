@@ -83,6 +83,8 @@ impl<const N: usize> PartialEq for BoundedString<N> {
 
 impl<const N: usize> Eq for BoundedString<N> {}
 
+
+
 impl<const N: usize> TryFrom<&str> for BoundedString<N> {
     type Error = BoundedStringError;
     fn try_from(s: &str) -> BoundedResult<Self> {
@@ -96,6 +98,8 @@ impl<const N: usize> TryFrom<String> for BoundedString<N> {
         BoundedString::new(value)
     }
 }
+
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -134,6 +138,18 @@ impl DicomDateString {
             }
         })?;
         Ok(Self { value: s })
+    }
+    pub fn from_str(s: &str) -> BoundedResult<DicomDateString> {
+        // 使用 NaiveDate 验证日期格式和有效性
+        chrono::NaiveDate::parse_from_str(&s, "%Y%m%d").map_err(|_| {
+            BoundedStringError::LengthError {
+                fixlen: 8,
+                len: s.len(),
+            }
+        })?;
+        Ok(Self {
+            value: s.to_string(),
+        })
     }
 }
 
@@ -226,7 +242,7 @@ impl<const N: usize> FixedLengthString<N> {
             Ok(Self { value: s.clone() })
         }
     }
- 
+
     pub fn as_str(&self) -> &str {
         &self.value
     }
