@@ -259,6 +259,28 @@ impl<const N: usize> FixedLengthString<N> {
         }
     }
 
+    /// TODO: 这个方法会截断字符串，可能会导致数据丢失，谨慎使用
+    pub fn make(s: String) -> FixedLengthString<N> {
+        if s.len() > N {
+            Self {
+                value: s[..N].to_string(),
+            }
+        } else {
+            Self { value: s }
+        }
+    }
+    /// TODO: 这个方法会截断字符串，可能会导致数据丢失，谨慎使用
+    pub fn make_str(s: &str) -> FixedLengthString<N> {
+        if s.len() > N {
+            Self {
+                value: s[..N].to_string(),
+            }
+        } else {
+            Self { value: String::from(s) }
+        }
+    }
+    
+
     pub fn as_str(&self) -> &str {
         &self.value
     }

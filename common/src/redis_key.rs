@@ -288,7 +288,7 @@ mod tests {
             patient_weight: Option::from(37.0),
             study_date: NaiveDate::parse_from_str("2020-03-01", "%Y-%m-%d").unwrap(),
             study_time: Option::from(NaiveTime::parse_from_str("120346", "%H%M%S").unwrap()),
-            accession_number: BoundedString::<16>::from_str("8328989").unwrap(),
+            accession_number: Some(  BoundedString::<16>::make_str("8328989")),
             study_id: Option::from(BoundedString::<16>::from_str("8328989").unwrap()),
             study_description: Option::from(BoundedString::<64>::from_str("8328989").unwrap()),
             modality: Some(BoundedString::<16>::from_str("CT").unwrap()),

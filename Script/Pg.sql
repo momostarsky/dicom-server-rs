@@ -19,7 +19,7 @@ create table dicom_state_meta
     study_date               date        not null,
     study_date_origin        varchar(8)  not null,
     study_time               time,
-    accession_number         varchar(16) not null,
+    accession_number         varchar(16),
     study_id                 varchar(16),
     study_description        varchar(64),
     modality                 varchar(16),

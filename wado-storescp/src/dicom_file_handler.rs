@@ -1,6 +1,5 @@
-use chrono::NaiveDate;
 
-use common::dicom_utils::get_tag_value;
+use common::dicom_utils::{get_bounder_string, get_date_value_dicom, get_tag_value};
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::storage_config::{hash_uid, StorageConfig};
 use common::utils::get_logger;
@@ -8,7 +7,7 @@ use common::{server_config, storage_config};
 use database::dicom_dbtype::{BoundedString, FixedLengthString};
 use database::dicom_meta::{DicomStoreMeta, TransferStatus};
 use dicom_dictionary_std::tags;
-use dicom_encoding::snafu::{ResultExt, Whatever};
+use dicom_encoding::snafu::{whatever, ResultExt, Whatever};
 use dicom_encoding::TransferSyntaxIndex;
 use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
 use dicom_pixeldata::Transcode;
@@ -19,65 +18,6 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use uuid::Uuid;
-
-/// 校验 DICOM StudyDate 格式是否符合 YYYYMMDD 格式
-fn validate_study_date_format(date_str: &str) -> Result<(), &'static str> {
-    if date_str.len() != 8 {
-        return Err("StudyDate must be exactly 8 characters long");
-    }
-
-    // 检查是否全部为数字
-    if !date_str.chars().all(|c| c.is_ascii_digit()) {
-        return Err("StudyDate must contain only digits");
-    }
-
-    // 提取年、月、日部分
-    let year = &date_str[0..4];
-    let month = &date_str[4..6];
-    let day = &date_str[6..8];
-
-    // 检查月份范围
-    let month_val = month.parse::<u32>().map_err(|_| "Invalid month format")?;
-    if month_val < 1 || month_val > 12 {
-        return Err("Month must be between 01 and 12");
-    }
-
-    // 检查日期范围
-    let day_val = day.parse::<u32>().map_err(|_| "Invalid day format")?;
-    if day_val < 1 || day_val > 31 {
-        return Err("Day must be between 01 and 31");
-    }
-
-    // 更严格的日期有效性检查
-    let year_val = year.parse::<i32>().map_err(|_| "Invalid year format")?;
-    if !is_valid_date(year_val, month_val, day_val) {
-        return Err("Invalid date");
-    }
-
-    Ok(())
-}
-
-/// 检查给定的年月日是否构成有效日期
-fn is_valid_date(year: i32, month: u32, day: u32) -> bool {
-    if month == 0 || month > 12 || day == 0 || day > 31 {
-        return false;
-    }
-
-    let days_in_month = match month {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        2 => {
-            if (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) {
-                29 // 闰年
-            } else {
-                28 // 平年
-            }
-        }
-        _ => return false,
-    };
-
-    day <= days_in_month
-}
 static JS_SUPPORTED_TS: LazyLock<HashSet<String>> = LazyLock::new(|| {
     // 在这里初始化，可以从配置文件读取
     // load_config 是INIT_ONCE 封装的, 不会重新加载
@@ -102,6 +42,7 @@ pub(crate) async fn process_dicom_file(
     tenant_id: &String,        //机构ID,或是医院ID, 用于区分多个医院.
     ts: &String,               //传输语法
     sop_instance_uid: &String, //当前文件的SOP实例ID
+    sop_class_uid: &String,    //当前文件的SOP实例ID
     ip: String,
     client_ae: String,
     storage_config: &StorageConfig,
@@ -114,94 +55,68 @@ pub(crate) async fn process_dicom_file(
     )
     .whatever_context("failed to read DICOM data object")?;
     info!(logger, "DICOM data object read successfully");
-    let pat_id = obj
-        .element(tags::PATIENT_ID)
-        .whatever_context("Missing PatientID")?
-        .to_str()
-        .whatever_context("could not retrieve PatientID")?
-        .trim_end_matches("\0")
-        .to_string();
+    let pat_id = match get_bounder_string::<64>(&obj, tags::PATIENT_ID) {
+        Some(v) => v,
+        None => {
+            whatever!("Missing PatientID or PatientID value length is exceeded 64 characters")
+        }
+    };
 
-    let study_uid = obj
-        .element(tags::STUDY_INSTANCE_UID)
-        .whatever_context("Missing StudyID")?
-        .to_str()
-        .whatever_context("could not retrieve STUDY_INSTANCE_UID")?
-        .trim_end_matches("\0")
-        .to_string();
+    let study_uid = match get_bounder_string::<64>(&obj, tags::STUDY_INSTANCE_UID) {
+        Some(v) => v,
+        None => {
+            whatever!("Missing StudyID or StudyID value length is exceeded 64 characters")
+        }
+    };
 
-    let series_uid = obj
-        .element(tags::SERIES_INSTANCE_UID)
-        .whatever_context("Missing SeriesID")?
-        .to_str()
-        .whatever_context("could not retrieve SERIES_INSTANCE_UID")?
-        .trim_end_matches("\0")
-        .to_string();
+    let series_uid = match get_bounder_string::<64>(&obj, tags::SERIES_INSTANCE_UID) {
+        Some(v) => v,
+        None => {
+            whatever!("Missing SeriesID or SeriesID value length is exceeded 64 characters")
+        }
+    };
 
-    let accession_number = obj
-        .element(tags::ACCESSION_NUMBER)
-        .whatever_context("Missing ACCESSION_NUMBER")?
-        .to_str()
-        .whatever_context("could not retrieve ACCESSION_NUMBER")?
-        .trim_end_matches("\0")
-        .to_string();
+    let accession_number =   get_bounder_string::<16>(&obj, tags::ACCESSION_NUMBER) ;
 
-    let study_date = obj
-        .element(tags::STUDY_DATE)
-        .whatever_context("Missing STUDY_DATE")?
-        .to_str()
-        .whatever_context("could not retrieve STUDY_DATE")?
-        .trim_end_matches("\0")
-        .to_string();
-    // 校验StudyDate格式是否正确. YYYYMMDD 格式
-    validate_study_date_format(&study_date).whatever_context("Invalid StudyDate format")?;
-    let modality = obj
-        .element(tags::MODALITY)
-        .whatever_context("Missing MODALITY")?
-        .to_str()
-        .whatever_context("could not retrieve MODALITY")?
-        .trim_end_matches("\0")
-        .to_string();
+    let study_date = match get_date_value_dicom(&obj, tags::STUDY_DATE) {
+        Some(v) => v,
+        None => {
+            whatever!("Missing STUDY_DATE or STUDY_DATE value is not invalid format YYYYMMDD")
+        }
+    };
+
+ 
 
     let frames = get_tag_value(tags::NUMBER_OF_FRAMES, &obj, 1);
     info!(
         logger,
-        "TenantID:{} ,PatientID: {}, StudyUID: {}, AccessionNumber: {}, StudyDate: {}, Modality: {}, Frames: {}",
+        "TenantID:{} ,PatientID: {}, StudyUID: {},   StudyDate: {},  Frames: {}",
         tenant_id,
         pat_id,
         study_uid,
-        accession_number,
         study_date,
-        modality,
+
         frames
     );
 
     let file_meta = FileMetaTableBuilder::new()
-        .media_storage_sop_class_uid(
-            obj.element(tags::SOP_CLASS_UID)
-                .whatever_context("missing SOP Class UID")?
-                .to_str()
-                .whatever_context("could not retrieve SOP Class UID")?,
-        )
-        .media_storage_sop_instance_uid(
-            obj.element(tags::SOP_INSTANCE_UID)
-                .whatever_context("missing SOP Instance UID")?
-                .to_str()
-                .whatever_context("missing SOP Instance UID")?,
-        )
+        .media_storage_sop_class_uid(sop_class_uid)
+        .media_storage_sop_instance_uid(sop_instance_uid)
         .transfer_syntax(ts)
         .build()
         .whatever_context("failed to build DICOM meta file information")?;
     let mut file_obj = obj.with_exact_meta(file_meta);
 
-    let dir_path = storage_config.make_series_dicom_dir(
-        tenant_id,
-        &study_date,
-        &study_uid,
-        &series_uid,
-        true,
-    )
-    .whatever_context(format!(
+    let study_date_str = study_date.format("%Y%m%d").to_string();
+    let dir_path = storage_config
+        .make_series_dicom_dir(
+            tenant_id,
+            &*study_date_str,
+            study_uid.as_str(),
+            series_uid.as_str(),
+            true,
+        )
+        .whatever_context(format!(
         "failed to get dicom series dir: tenant_id={}, study_date={}, study_uid={}, series_uid={}",
         tenant_id, study_date, study_uid, series_uid
     ))?;
@@ -251,44 +166,27 @@ pub(crate) async fn process_dicom_file(
     let cdate = chrono::Local::now().naive_local();
 
     Ok(DicomStoreMeta {
-        trace_id: FixedLengthString::<36>::from_string(&trace_uid)
-            .with_whatever_context(|err| format!("Failed to create trace_id: {}", err))?,
-        worker_node_id: BoundedString::<64>::try_from("DICOM_STORE_SCP")
-            .with_whatever_context(|err| format!("Failed to create worker_node_id: {}", err))?,
-        tenant_id: BoundedString::<64>::from_string(&tenant_id)
-            .with_whatever_context(|err| format!("Failed to create tenant_id: {}", err))?,
-        patient_id: BoundedString::<64>::from_string(&pat_id)
-            .with_whatever_context(|err| format!("Failed to create patient_id: {}", err))?,
-        study_uid: BoundedString::<64>::try_from(study_uid)
-            .with_whatever_context(|err| format!("Failed to create study_uid: {}", err))?,
-        series_uid: BoundedString::<64>::try_from(series_uid)
-            .with_whatever_context(|err| format!("Failed to create series_uid: {}", err))?,
-        sop_uid: BoundedString::<64>::from_string(&sop_instance_uid)
-            .with_whatever_context(|err| format!("Failed to create sop_uid: {}", err))?,
-        file_path: BoundedString::try_from(saved_path.to_str().unwrap())
-            .with_whatever_context(|err| format!("Failed to create file_path: {}", err))?,
+        trace_id: FixedLengthString::<36>::make(trace_uid),
+        worker_node_id: BoundedString::<64>::make_str("DICOM_STORE_SCP"),
+        tenant_id: BoundedString::<64>::make_str(&tenant_id),
+        patient_id: pat_id,
+        study_uid,
+        series_uid,
+        sop_uid: BoundedString::<64>::make_str(&sop_instance_uid),
+        file_path: BoundedString::<512>::make_str(saved_path.to_str().unwrap()),
         file_size: fsize as i64,
-        transfer_syntax_uid: BoundedString::<64>::from_string(ts).with_whatever_context(|err| {
-            format!("Failed to create transfer_syntax_uid: {}", err)
-        })?,
-        target_ts: BoundedString::<64>::try_from(final_ts)
-            .with_whatever_context(|err| format!("Failed to create target_ts: {}", err))?,
-        study_date: NaiveDate::parse_from_str(study_date.as_str(), "%Y%m%d")
-            .with_whatever_context(|err| format!("Failed to create study_date: {}", err))?,
+        transfer_syntax_uid: BoundedString::<64>::make_str(ts),
+        target_ts: BoundedString::<64>::make_str(&final_ts),
+        study_date,
         transfer_status: transcode_status,
         number_of_frames: frames,
         created_time: cdate,
         // 修改为使用 from_string 方法创建 BoundedString<20>
-        series_uid_hash: BoundedString::<20>::from_string(&series_uid_hash_v)
-            .with_whatever_context(|err| format!("Failed to create series_uid_hash: {}", err))?,
-        study_uid_hash: BoundedString::<20>::from_string(&study_uid_hash_v)
-            .with_whatever_context(|err| format!("Failed to create study_uid_hash: {}", err))?,
-        accession_number: BoundedString::try_from(accession_number)
-            .with_whatever_context(|err| format!("Failed to create accession_number: {}", err))?,
-        source_ip: BoundedString::try_from(ip)
-            .with_whatever_context(|err| format!("Failed to create source_ip: {}", err))?,
-        source_ae: BoundedString::try_from(client_ae)
-            .with_whatever_context(|err| format!("Failed to create source_ae: {}", err))?,
+        series_uid_hash: BoundedString::<20>::make_str(&series_uid_hash_v),
+        study_uid_hash: BoundedString::<20>::make_str(&study_uid_hash_v),
+        accession_number,
+        source_ip: BoundedString::<24>::make_str(&ip),
+        source_ae: BoundedString::<64>::make_str(&client_ae),
     })
 }
 

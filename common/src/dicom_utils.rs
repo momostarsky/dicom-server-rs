@@ -1,13 +1,35 @@
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+use database::dicom_dbtype::BoundedString;
 use dicom_core::Tag;
 use dicom_object::InMemDicomObject;
 
+const PADDING_STRING: &[char] = &[' ', '\0'];
 pub fn get_text_value(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<String> {
     dicom_obj
         .element(tag)
         .ok()
         .and_then(|e| e.to_str().ok())
-        .map(|s| s.trim_end_matches(|c| c == ' ' || c == '\0').to_string()) // 正确处理尾部空格和\0字符
+        .map(|s| s.trim_end_matches(PADDING_STRING).to_string()) // 正确处理尾部空格和\0字符
+}
+
+pub fn get_bounder_string<const N: usize>(
+    dicom_obj: &InMemDicomObject,
+    tag: Tag,
+) -> Option<BoundedString<N>> {
+    dicom_obj
+        .element(tag)
+        .ok()
+        .and_then(|e| e.to_str().ok())
+        .map(|s| s.trim_end_matches(PADDING_STRING).to_string())
+        .and_then(|s| {
+            if s.len() <= N {
+                Some(s)
+            } else {
+                // 可选：截取前N个字符，或者返回None
+                Some(s[..N].to_string())
+            }
+        })
+        .map(|s| BoundedString::<N>::make(s))
 }
 
 pub fn get_date_value_dicom(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<NaiveDate> {
@@ -31,7 +53,6 @@ pub fn get_time_value_dicom(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<Na
             NaiveTime::from_hms_milli_opt(hour, minute, second, millisecond)
         })
     })
-
 }
 
 pub fn get_datetime_value_dicom(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<NaiveDateTime> {
@@ -82,7 +103,7 @@ where
         .ok()
         .flatten()
         .and_then(|e| e.to_str().ok())
-        .map(|s| s.trim_end_matches(|c| c == ' ' || c == '\0').to_string()) // 正确处理尾部空格和\0字符
+        .map(|s| s.trim_end_matches(PADDING_STRING).to_string()) // 正确处理尾部空格和\0字符
         .and_then(|s| s.parse::<T>().ok())
         .unwrap_or(def_value)
 }
@@ -96,7 +117,7 @@ where
         .ok()
         .flatten()
         .and_then(|e| e.to_str().ok())
-        .map(|s| s.trim_end_matches(|c| c == ' ' || c == '\0').to_string()) // 正确处理尾部空格和\0字符
+        .map(|s| s.trim_end_matches(PADDING_STRING).to_string()) // 正确处理尾部空格和\0字符
         .and_then(|s| {
             let mut result = vec![];
             for s in s.trim_end().split("\\") {
@@ -109,15 +130,14 @@ where
         .unwrap_or_else(|| vec![])
 }
 
-
- #[cfg(test)]
+#[cfg(test)]
 mod tests {
-     use super::*;
-     use chrono::{NaiveDate, NaiveTime};
-     use dicom_core::{DataElement, PrimitiveValue, VR};
-     use dicom_dictionary_std::tags;
+    use super::*;
+    use chrono::{NaiveDate, NaiveTime};
+    use dicom_core::{DataElement, PrimitiveValue, VR};
+    use dicom_dictionary_std::tags;
 
-     fn create_test_dicom_object() -> InMemDicomObject {
+    fn create_test_dicom_object() -> InMemDicomObject {
         // 构建一个包含特定数据元素的 InMemDicomObject
         let obj = InMemDicomObject::from_element_iter([
             DataElement::new(
@@ -261,13 +281,11 @@ mod tests {
     #[test]
     fn test_trim_end_characters() {
         // 创建带有尾部空格和null字符的测试数据
-        let obj = InMemDicomObject::from_element_iter([
-            DataElement::new(
-                tags::PATIENT_NAME,
-                VR::PN,
-                PrimitiveValue::from("Doe^John \0"),
-            ),
-        ]);
+        let obj = InMemDicomObject::from_element_iter([DataElement::new(
+            tags::PATIENT_NAME,
+            VR::PN,
+            PrimitiveValue::from("Doe^John \0"),
+        )]);
 
         let patient_name = get_text_value(&obj, tags::PATIENT_NAME);
         assert_eq!(patient_name, Some("Doe^John".to_string()));

@@ -992,7 +992,7 @@ mod tests {
             patient_weight: Some(70.2),
             study_date,
             study_time,
-            accession_number,
+            accession_number:Some(accession_number),
             study_id,
             study_description,
             modality,
@@ -1160,7 +1160,7 @@ mod tests {
             patient_weight: Some(60.2),
             study_date,
             study_time,
-            accession_number,
+            accession_number:Some(accession_number),
             study_id,
             study_description,
             modality,
@@ -1278,7 +1278,7 @@ mod tests {
         let number_of_frames = 1;
         let series_uid_hash = BoundedString::<20>::from_str("0BA07C2AA455BEB01D5A").unwrap();
         let study_uid_hash = BoundedString::<20>::from_str("0BB07C2AA455BEB01D5A").unwrap();
-        let accession_number = BoundedString::<64>::try_from("ACC123458".to_string())?;
+        let accession_number = BoundedString::<16>::try_from("ACC123458".to_string())?;
         let target_ts = BoundedString::<64>::try_from("1.2.840.10008.1.2.1".to_string())?;
         let study_date = NaiveDate::from_ymd_opt(2023, 12, 5).unwrap();
         let transfer_status = TransferStatus::Success;
@@ -1300,7 +1300,7 @@ mod tests {
             number_of_frames,
             series_uid_hash,
             study_uid_hash,
-            accession_number,
+            accession_number:Some(accession_number),
             target_ts,
             study_date,
             transfer_status,

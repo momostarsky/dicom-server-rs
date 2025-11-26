@@ -1,5 +1,4 @@
 use chrono::{NaiveDate, NaiveTime};
-use database::dicom_dbtype::BoundedString;
 use database::dicom_meta::DicomStateMeta;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -60,48 +59,81 @@ pub struct SubSeriesMeta {
 
 impl SubSeriesMeta {
     pub fn new(dicom_state_meta: &DicomStateMeta) -> Self {
+        let accession_number_value = match &dicom_state_meta.accession_number {
+            None => "".to_string(),
+            Some(s) => s.to_string(),
+        };
+
+        let pat_name = match &dicom_state_meta.patient_name {
+            None => None,
+            Some(s) => Some(s.to_string()),
+        };
+
+        let sex_value = match &dicom_state_meta.patient_sex {
+            None => None,
+            Some(s) => Some(s.to_string()),
+        };
+
+        let age_value = match &dicom_state_meta.patient_age {
+            None => None,
+            Some(s) => Some(s.to_string()),
+        };
+
+        let study_id_value = match &dicom_state_meta.study_id {
+            None => None,
+            Some(s) => Some(s.to_string()),
+        };
+
+        let study_desc_value = match &dicom_state_meta.study_description {
+            None => None,
+            Some(s) => Some(s.to_string()),
+        };
+
+        let modality_value = match &dicom_state_meta.modality {
+            None => None,
+            Some(s) => Some(s.to_string()),
+        };
+
+        let series_desc_value = match &dicom_state_meta.series_description {
+            None => None,
+            Some(s) => Some(s.to_string()),
+        };
+
+        let body_part_examined_value = match &dicom_state_meta.body_part_examined {
+            None => None,
+            Some(s) => Some(s.to_string()),
+        };
+
+        let protocol_name_value = match &dicom_state_meta.protocol_name {
+            None => None,
+            Some(s) => Some(s.to_string()),
+        };
+
         Self {
             tenant_id: dicom_state_meta.tenant_id.to_string(),
             patient_id: dicom_state_meta.patient_id.to_string(),
             study_uid: dicom_state_meta.study_uid.to_string(),
             series_uid: dicom_state_meta.series_uid.to_string(),
-            patient_name: dicom_state_meta
-                .patient_name
-                .clone()
-                .unwrap_or(BoundedString::<64>::default())
-                .to_string()
-                .into(),
-            patient_sex: dicom_state_meta.patient_sex.clone().map(|s| s.to_string()),
+            patient_name: pat_name,
+            patient_sex: sex_value,
             patient_birth_date: dicom_state_meta.patient_birth_date,
             patient_birth_time: dicom_state_meta.patient_birth_time,
-            patient_age: dicom_state_meta.patient_age.clone().map(|s| s.to_string()),
+            patient_age: age_value,
             patient_size: dicom_state_meta.patient_size,
             patient_weight: dicom_state_meta.patient_weight,
             study_date: dicom_state_meta.study_date,
             study_time: dicom_state_meta.study_time,
-            accession_number: dicom_state_meta.accession_number.to_string(),
-            study_id: dicom_state_meta.study_id.clone().map(|s| s.to_string()),
-            study_description: dicom_state_meta
-                .study_description
-                .clone()
-                .map(|s| s.to_string()),
+            accession_number: accession_number_value,
+            study_id: study_id_value,
+            study_description: study_desc_value,
             series_related_instances: dicom_state_meta.series_related_instances,
-            modality: dicom_state_meta.modality.clone().map(|s| s.to_string()),
+            modality: modality_value,
             series_number: dicom_state_meta.series_number,
             series_date: dicom_state_meta.series_date,
             series_time: dicom_state_meta.series_time,
-            series_description: dicom_state_meta
-                .series_description
-                .clone()
-                .map(|s| s.to_string()),
-            body_part_examined: dicom_state_meta
-                .body_part_examined
-                .clone()
-                .map(|s| s.to_string()),
-            protocol_name: dicom_state_meta
-                .protocol_name
-                .clone()
-                .map(|s| s.to_string()),
+            series_description: series_desc_value,
+            body_part_examined: body_part_examined_value,
+            protocol_name: protocol_name_value,
         }
     }
 }

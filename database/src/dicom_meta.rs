@@ -24,6 +24,8 @@ impl Display for TransferStatus {
 
 /// DicomStoreMeta 用于DICOM-CStoreSCP服务记录收图日志.
 /// 包含了所有必要的元数据字段.每一个DicomStoreMeta实例标识接收一个DICOM文件.并成功写入磁盘.
+/// Accession Number (0008, 0050)  如果该检查没有对应的预约或登记号，则可以不包含此标签。
+/// Modality (0008, 0060) 是有可能为空的.对于某些非图像 IODs (如 Structured Report)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DicomStoreMeta {
     #[serde(rename = "trace_id")]
@@ -55,7 +57,7 @@ pub struct DicomStoreMeta {
     #[serde(rename = "study_uid_hash")]
     pub study_uid_hash: BoundedString<20>,
     #[serde(rename = "accession_number")]
-    pub accession_number: BoundedString<64>,
+    pub accession_number: Option<BoundedString<16>>,
     #[serde(rename = "target_ts")]
     pub target_ts: BoundedString<64>,
     #[serde(rename = "study_date")]
@@ -149,7 +151,7 @@ pub struct DicomStateMeta {
     #[serde(rename = "study_time")]
     pub study_time: Option<NaiveTime>,
     #[serde(rename = "accession_number")]
-    pub accession_number: BoundedString<16>,
+    pub accession_number: Option<BoundedString<16>>,
     #[serde(rename = "study_id")]
     pub study_id: Option<BoundedString<16>>,
     #[serde(rename = "study_description")]

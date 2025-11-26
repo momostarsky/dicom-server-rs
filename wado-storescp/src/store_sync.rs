@@ -200,6 +200,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                     &tenant_id,
                                     ts,
                                     &sop_instance_uid,
+                                    &sop_class_uid,
                                     ip_address.clone(),
                                     client_ae_title.clone(),
                                     &storage_config
