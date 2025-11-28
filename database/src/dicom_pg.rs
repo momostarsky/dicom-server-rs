@@ -561,7 +561,8 @@ impl DbProvider for PgDbProvider {
             json_meta_list.len()
         );
 
-        let statement = transaction
+        // 第一个语句：插入或更新 dicom_json_meta
+        let insert_statement = transaction
             .prepare(
                 "INSERT INTO dicom_json_meta (
                 tenant_id,
@@ -571,9 +572,10 @@ impl DbProvider for PgDbProvider {
                 series_uid_hash,
                 study_date_origin,
                 flag_time,
-                created_time,json_status,retry_times
-
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7,$8,$9,$10)
+                created_time,
+                json_status,
+                retry_times
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             ON CONFLICT (tenant_id, study_uid, series_uid)
             DO UPDATE SET
                 study_uid_hash = EXCLUDED.study_uid_hash,
@@ -582,20 +584,42 @@ impl DbProvider for PgDbProvider {
                 flag_time = EXCLUDED.flag_time,
                 created_time = EXCLUDED.created_time,
                 json_status = EXCLUDED.json_status,
-                retry_times = EXCLUDED.retry_times
-                ",
+                retry_times = EXCLUDED.retry_times",
             )
             .await
             .map_err(|e| {
-                println!("Error transaction.prepare: {:?}", e);
+                println!("Error preparing insert statement: {:?}", e);
+                DbError::DatabaseError(e.to_string())
+            })?;
+
+        // 第二个语句：更新 dicom_state_meta 中的 series_related_instances
+        let update_statement = transaction
+            .prepare(
+                "WITH image_counts AS (
+                SELECT tenant_id, study_uid, series_uid, COUNT(*) AS count
+                FROM dicom_image_meta
+                WHERE tenant_id = $1 AND study_uid = $2 AND series_uid = $3
+                GROUP BY tenant_id, study_uid, series_uid
+            )
+            UPDATE dicom_state_meta dsm
+            SET series_related_instances = c.count
+            FROM image_counts c
+            WHERE dsm.tenant_id = c.tenant_id
+              AND dsm.study_uid = c.study_uid
+              AND dsm.series_uid = c.series_uid",
+            )
+            .await
+            .map_err(|e| {
+                println!("Error preparing update statement: {:?}", e);
                 DbError::DatabaseError(e.to_string())
             })?;
 
         // 遍历所有 DicomJsonMeta 对象并执行插入操作
         for json_meta in json_meta_list {
+            // 插入或更新 dicom_json_meta
             transaction
                 .execute(
-                    &statement,
+                    &insert_statement,
                     &[
                         &json_meta.tenant_id,
                         &json_meta.study_uid,
@@ -611,14 +635,30 @@ impl DbProvider for PgDbProvider {
                 )
                 .await
                 .map_err(|e| {
-                    println!("Error transaction.execute: {:?}", e);
+                    println!("Error inserting into dicom_json_meta: {:?}", e);
+                    DbError::DatabaseError(e.to_string())
+                })?;
+
+            // 更新 dicom_state_meta
+            transaction
+                .execute(
+                    &update_statement,
+                    &[
+                        &json_meta.tenant_id,
+                        &json_meta.study_uid,
+                        &json_meta.series_uid,
+                    ],
+                )
+                .await
+                .map_err(|e| {
+                    println!("Error updating dicom_state_meta: {:?}", e);
                     DbError::DatabaseError(e.to_string())
                 })?;
         }
 
         // 提交事务
         transaction.commit().await.map_err(|e| {
-            println!("Error transaction.commit: {:?}", e);
+            println!("Error committing transaction: {:?}", e);
             DbError::DatabaseError(e.to_string())
         })?;
 
@@ -992,7 +1032,7 @@ mod tests {
             patient_weight: Some(70.2),
             study_date,
             study_time,
-            accession_number:Some(accession_number),
+            accession_number: Some(accession_number),
             study_id,
             study_description,
             modality,
@@ -1160,7 +1200,7 @@ mod tests {
             patient_weight: Some(60.2),
             study_date,
             study_time,
-            accession_number:Some(accession_number),
+            accession_number: Some(accession_number),
             study_id,
             study_description,
             modality,
@@ -1300,7 +1340,7 @@ mod tests {
             number_of_frames,
             series_uid_hash,
             study_uid_hash,
-            accession_number:Some(accession_number),
+            accession_number: Some(accession_number),
             target_ts,
             study_date,
             transfer_status,

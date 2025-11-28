@@ -103,19 +103,26 @@ async fn execute_background_json_generation(
         let tenant_id = record.tenant_id.clone().to_string();
         let series_uid = record.series_uid.clone().to_string();
 
-        match   app_state.redis_helper.set_series_metadata_gererate(&tenant_id, &series_uid)
-        .await {
+        match app_state
+            .redis_helper
+            .set_series_metadata_gererate(&tenant_id, &series_uid)
+            .await
+        {
             Ok(_) => {
                 info!(
                     app_state.log,
-                    "Set series metadata generate for study: {}, series: {}", record.study_uid, record.series_uid
+                    "Set series metadata generate for study: {}, series: {}",
+                    record.study_uid,
+                    record.series_uid
                 );
             }
             Err(e) => {
                 error!(
                     app_state.log,
                     "Failed to set series metadata generate for study: {}, series: {}: {}",
-                    record.study_uid, record.series_uid,e
+                    record.study_uid,
+                    record.series_uid,
+                    e
                 )
             }
         };
@@ -164,38 +171,44 @@ async fn execute_background_json_generation(
         }
 
         // 删除redis中的记录,无论生成成功与否
-        match app_state.redis_helper.del_series_metadata_gererate(&tenant_id, &series_uid)
-            .await 
-            {
+        match app_state
+            .redis_helper
+            .del_series_metadata_gererate(&tenant_id, &series_uid)
+            .await
+        {
             Ok(_) => {
                 info!(
                     app_state.log,
-                    "Set series metadata generate for study: {}, series: {}", record.study_uid, record.series_uid
+                    "Set series metadata generate for study: {}, series: {}",
+                    record.study_uid,
+                    record.series_uid
                 );
             }
             Err(e) => {
                 error!(
                     app_state.log,
                     "Failed to set series metadata generate for study: {}, series: {}: {}",
-                    record.study_uid, record.series_uid,e
+                    record.study_uid,
+                    record.series_uid,
+                    e
                 )
             }
         }
     }
-    if !json_mets.is_empty() {
-        match app_state.db.save_json_list(&json_mets).await {
-            Ok(_) => {
-                info!(
-                    app_state.log,
-                    "Saved {} JSON metadata records",
-                    json_mets.len()
-                );
-            }
-            Err(_) => {
-                error!(app_state.log, "Failed to save JSON metadata records");
-            }
+
+    match app_state.db.save_json_list(&json_mets).await {
+        Ok(_) => {
+            info!(
+                app_state.log,
+                "Saved {} JSON metadata records",
+                json_mets.len()
+            );
+        }
+        Err(_) => {
+            error!(app_state.log, "Failed to save JSON metadata records");
         }
     }
+
 
     info!(
         app_state.log,
