@@ -148,8 +148,8 @@ impl DbProvider for PgDbProvider {
     async fn save_state_info(&self, state_meta: &DicomStateMeta) -> Result<(), DbError> {
         let client = self.make_client().await?;
         let statement = client
-                .prepare(
-                    "INSERT INTO dicom_state_meta (
+            .prepare(
+                "INSERT INTO dicom_state_meta (
                        tenant_id,
                        patient_id,
                        study_uid,
@@ -207,9 +207,9 @@ impl DbProvider for PgDbProvider {
                        protocol_name = EXCLUDED.protocol_name,
                        series_related_instances = EXCLUDED.series_related_instances,
                        updated_time = EXCLUDED.updated_time"
-                )
-                .await
-                .map_err(|e| DbError::DatabaseError(e.to_string()))?;
+            )
+            .await
+            .map_err(|e| DbError::DatabaseError(e.to_string()))?;
 
         client
             .execute(
@@ -265,8 +265,8 @@ impl DbProvider for PgDbProvider {
         );
 
         let statement = transaction
-        .prepare(
-            "INSERT INTO dicom_state_meta (
+            .prepare(
+                "INSERT INTO dicom_state_meta (
                 tenant_id,
                 patient_id,
                 study_uid,
@@ -324,12 +324,12 @@ impl DbProvider for PgDbProvider {
                 protocol_name = EXCLUDED.protocol_name,
                 series_related_instances = EXCLUDED.series_related_instances,
                 updated_time = EXCLUDED.updated_time"
-        )
-        .await
-        .map_err(|e| {
-            println!("Error transaction.prepare: {:?}", e);
-            DbError::DatabaseError(e.to_string())
-        })?;
+            )
+            .await
+            .map_err(|e| {
+                println!("Error transaction.prepare: {:?}", e);
+                DbError::DatabaseError(e.to_string())
+            })?;
 
         // 遍历所有 DicomStateMeta 对象并执行插入操作
         for state_meta in state_meta_list {
@@ -994,7 +994,7 @@ mod tests {
         let study_uid_hash = BoundedString::<20>::make_str("1.2.3.4.5.6.7.8.9");
         let series_uid_hash = BoundedString::<20>::make_str("9.8.7.6.5.4.3.2.1");
         let study_date_origin = DicomDateString::from_str("20231201")?;
-        let accession_number = BoundedString::<16>::make_str("ACC123456" );
+        let accession_number = BoundedString::<16>::make_str("ACC123456");
         let modality = Some(BoundedString::<16>::make_str("CT"));
         let series_number = Some(1);
         let series_date = Some(NaiveDate::from_ymd_opt(2023, 12, 1).unwrap());
@@ -1415,18 +1415,14 @@ mod tests {
         let pixel_representation = Some(0);
         let rescale_intercept = Some(0.0);
         let rescale_slope = Some(1.0);
-        let rescale_type = Some(BoundedString::<64>::try_from("US".to_string())?);
-        let window_center = Some(BoundedString::<64>::try_from("50".to_string())?);
-        let window_width = Some(BoundedString::<64>::try_from("400".to_string())?);
-        let transfer_syntax_uid = BoundedString::<64>::try_from("1.2.840.10008.1.2.1".to_string())?;
-        let pixel_data_location = Some(BoundedString::<512>::try_from(
-            "/data/pixel/1234567890".to_string(),
-        )?);
-        let thumbnail_location = Some(BoundedString::<512>::try_from(
-            "/data/thumb/1234567890".to_string(),
-        )?);
-        let sop_class_uid = BoundedString::<64>::try_from("1.2.840.10008.5.1.4.1.1.2".to_string())?;
-        let image_status = Some(BoundedString::<32>::try_from("AVAILABLE".to_string())?);
+        let rescale_type = Some(BoundedString::<64>::make_str("US"));
+        let window_center = Some(BoundedString::<64>::make_str("50"));
+        let window_width = Some(BoundedString::<64>::make_str("400"));
+        let transfer_syntax_uid = BoundedString::<64>::make_str("1.2.840.10008.1.2.1");
+        let pixel_data_location = Some(BoundedString::<512>::make_str("/data/pixel/1234567890"));
+        let thumbnail_location = Some(BoundedString::<512>::make_str("/data/thumb/1234567890"));
+        let sop_class_uid = BoundedString::<64>::make_str("1.2.840.10008.5.1.4.1.1.2");
+        let image_status = Some(BoundedString::<32>::make_str("AVAILABLE"));
         let space_size = Some(2049i64);
         let created_time = current_time();
         let updated_time = current_time();
