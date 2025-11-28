@@ -981,7 +981,7 @@ mod tests {
         }
 
         let t_id = "test_tenant_123";
-        let db_provider = PgDbProvider::new(sql_cnn.unwrap());
+        let db_provider = PgDbProvider::new(sql_cnn?);
         // 构造 TestCleanup 实例
         let mut cleanup = TestCleanup::new(db_provider.clone());
         // 注册需要清理的 tenant_id
@@ -991,11 +991,11 @@ mod tests {
         let patient_id = BoundedString::<64>::try_from("test_patient_456".to_string())?;
         let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9".to_string())?;
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1".to_string())?;
-        let study_uid_hash = BoundedString::<20>::from_str("1.2.3.4.5.6.7.8.9").unwrap();
-        let series_uid_hash = BoundedString::<20>::from_str("9.8.7.6.5.4.3.2.1").unwrap();
-        let study_date_origin = DicomDateString::new("20231201".to_string()).unwrap();
-        let accession_number = BoundedString::<16>::try_from("ACC123456".to_string())?;
-        let modality = Some(BoundedString::<16>::try_from("CT".to_string())?);
+        let study_uid_hash = BoundedString::<20>::make_str("1.2.3.4.5.6.7.8.9");
+        let series_uid_hash = BoundedString::<20>::make_str("9.8.7.6.5.4.3.2.1");
+        let study_date_origin = DicomDateString::from_str("20231201")?;
+        let accession_number = BoundedString::<16>::make_str("ACC123456" );
+        let modality = Some(BoundedString::<16>::make_str("CT"));
         let series_number = Some(1);
         let series_date = Some(NaiveDate::from_ymd_opt(2023, 12, 1).unwrap());
         let series_time = Some(NaiveTime::parse_from_str("120000", "%H%M%S")?);
@@ -1069,7 +1069,7 @@ mod tests {
             return Ok(());
         }
 
-        let db_provider = PgDbProvider::new(sql_cnn.unwrap());
+        let db_provider = PgDbProvider::new(sql_cnn?);
 
         let tenant_id = "1234567890";
         let study_uid = "1.2.156.112605.0.1685486876.2025061710152134339.2.1.1";
@@ -1084,7 +1084,7 @@ mod tests {
             result.err()
         );
 
-        let state_meta_list = result.unwrap();
+        let state_meta_list = result?;
 
         // 验证返回结果不为空
         assert!(!state_meta_list.is_empty(), "Expected non-empty result");
@@ -1108,7 +1108,7 @@ mod tests {
             return Ok(());
         }
 
-        let db_provider = PgDbProvider::new(sql_cnn.unwrap());
+        let db_provider = PgDbProvider::new(sql_cnn?);
 
         let cd = current_time();
         let cd = cd.sub(chrono::Duration::minutes(3));
@@ -1122,7 +1122,7 @@ mod tests {
             result.err()
         );
 
-        let state_meta_list = result.unwrap();
+        let state_meta_list = result?;
 
         // 验证返回结果不为空
         assert!(!state_meta_list.is_empty(), "Expected non-empty result");
@@ -1147,7 +1147,7 @@ mod tests {
             return Ok(());
         }
 
-        let db_provider = PgDbProvider::new(sql_cnn.unwrap());
+        let db_provider = PgDbProvider::new(sql_cnn?);
         // 创建测试数据列表
         let mut state_meta_list = Vec::new();
 
@@ -1156,8 +1156,8 @@ mod tests {
         let patient_id = BoundedString::<64>::try_from("test_patient_list_456".to_string())?;
         let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9.list".to_string())?;
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.list".to_string())?;
-        let study_uid_hash = BoundedString::<20>::from_str("0AA07C2AA455BEB01D5A").unwrap();
-        let series_uid_hash = BoundedString::<20>::from_str("0AB07C2AA455BEB01D5A").unwrap();
+        let study_uid_hash = BoundedString::<20>::from_str("0AA07C2AA455BEB01D5A")?;
+        let series_uid_hash = BoundedString::<20>::from_str("0AB07C2AA455BEB01D5A")?;
         let study_date_origin = DicomDateString::from_db("20231202");
         let accession_number = BoundedString::<16>::try_from("ACC123457".to_string())?;
         let modality = Some(BoundedString::<16>::try_from("MRI".to_string())?);
@@ -1248,7 +1248,7 @@ mod tests {
             return Ok(());
         }
 
-        let db_provider = PgDbProvider::new(sql_cnn.unwrap());
+        let db_provider = PgDbProvider::new(sql_cnn?);
 
         // 创建测试数据列表
         let mut json_meta_list = Vec::new();
@@ -1257,8 +1257,8 @@ mod tests {
         let tenant_id = BoundedString::<64>::try_from("test_tenant_json_123".to_string())?;
         let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9.json".to_string())?;
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.json".to_string())?;
-        let study_uid_hash = BoundedString::<20>::from_str("0AC07C2AA455BEB01D5A").unwrap();
-        let series_uid_hash = BoundedString::<20>::from_str("0AD07C2AA455BEB01D5A").unwrap();
+        let study_uid_hash = BoundedString::<20>::from_str("0AC07C2AA455BEB01D5A")?;
+        let series_uid_hash = BoundedString::<20>::from_str("0AD07C2AA455BEB01D5A")?;
         let study_date_origin = DicomDateString::from_db("20231203");
         let flag_time = current_time();
         let created_time = current_time();
@@ -1301,7 +1301,7 @@ mod tests {
             return Ok(());
         }
 
-        let db_provider = PgDbProvider::new(sql_cnn.unwrap());
+        let db_provider = PgDbProvider::new(sql_cnn?);
 
         // 创建测试数据
         let trace_id = FixedLengthString::<36>::from_str("123e4567-e89b-12d3-a456-426614174000")?;
@@ -1316,8 +1316,8 @@ mod tests {
         let file_path = BoundedString::<512>::try_from("/data/test/file.dcm".to_string())?;
         let transfer_syntax_uid = BoundedString::<64>::try_from("1.2.840.10008.1.2.1".to_string())?;
         let number_of_frames = 1;
-        let series_uid_hash = BoundedString::<20>::from_str("0BA07C2AA455BEB01D5A").unwrap();
-        let study_uid_hash = BoundedString::<20>::from_str("0BB07C2AA455BEB01D5A").unwrap();
+        let series_uid_hash = BoundedString::<20>::from_str("0BA07C2AA455BEB01D5A")?;
+        let study_uid_hash = BoundedString::<20>::from_str("0BB07C2AA455BEB01D5A")?;
         let accession_number = BoundedString::<16>::try_from("ACC123458".to_string())?;
         let target_ts = BoundedString::<64>::try_from("1.2.840.10008.1.2.1".to_string())?;
         let study_date = NaiveDate::from_ymd_opt(2023, 12, 5).unwrap();
@@ -1374,7 +1374,7 @@ mod tests {
             return Ok(());
         }
 
-        let db_provider = PgDbProvider::new(sql_cnn.unwrap());
+        let db_provider = PgDbProvider::new(sql_cnn?);
 
         // 创建测试数据列表
         let mut image_meta_list = Vec::new();
@@ -1386,8 +1386,8 @@ mod tests {
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.image".to_string())?;
         let sop_uid =
             BoundedString::<64>::try_from("1.3.6.1.4.1.5962.1.1.0.0.0.1234567890".to_string())?;
-        let study_uid_hash = BoundedString::<20>::from_str("0AE07C2AA455BEB01D5A").unwrap();
-        let series_uid_hash = BoundedString::<20>::from_str("0AF07C2AA455BEB01D5A").unwrap();
+        let study_uid_hash = BoundedString::<20>::from_str("0AE07C2AA455BEB01D5A")?;
+        let series_uid_hash = BoundedString::<20>::from_str("0AF07C2AA455BEB01D5A")?;
 
         let content_date = Some(NaiveDate::parse_from_str("20231204", "%Y%m%d")?);
         let content_time = Some(NaiveTime::parse_from_str("120000", "%H%M%S")?);
