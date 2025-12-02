@@ -2,6 +2,7 @@ use crate::AppState;
 use common::dicom_json_helper::generate_series_json;
 use common::server_config::WebWorkerConfig;
 use database::dicom_dbprovider::current_time;
+use database::dicom_dbtype::BoundedString;
 use database::dicom_meta::DicomJsonMeta;
 use slog::{error, info};
 use std::ops::Sub;
@@ -100,8 +101,9 @@ async fn execute_background_json_generation(
     let mut json_mets = vec![];
     // 逐个处理记录
     for record in pending_records {
-        let tenant_id = record.tenant_id.clone().to_string();
-        let series_uid = record.series_uid.clone().to_string();
+        let tenant_id = record.tenant_id.as_str();
+        let study_uid = record.study_uid.as_str();
+        let series_uid = record.series_uid.as_str();
 
         match app_state
             .redis_helper
@@ -148,9 +150,9 @@ async fn execute_background_json_generation(
             }
         };
         json_mets.push(DicomJsonMeta {
-            tenant_id: record.tenant_id,
-            study_uid: record.study_uid.clone(),
-            series_uid: record.series_uid.clone(),
+            tenant_id: BoundedString::<64>::make_str(tenant_id),
+            study_uid: BoundedString::<64>::make_str(study_uid),
+            series_uid: BoundedString::<64>::make_str(series_uid),
             study_uid_hash: record.study_uid_hash,
             series_uid_hash: record.series_uid_hash,
             study_date_origin: record.study_date_origin,
@@ -169,17 +171,15 @@ async fn execute_background_json_generation(
             Ok(_) => {
                 info!(
                     app_state.log,
-                    "Set series metadata generate for study: {}, series: {}",
-                    record.study_uid,
-                    record.series_uid
+                    "Set series metadata generate for study: {}, series: {}", study_uid, series_uid
                 );
             }
             Err(e) => {
                 error!(
                     app_state.log,
                     "Failed to set series metadata generate for study: {}, series: {}: {}",
-                    record.study_uid,
-                    record.series_uid,
+                    study_uid,
+                    series_uid
                     e
                 )
             }
