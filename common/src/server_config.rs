@@ -3,7 +3,8 @@ use dicom_encoding::TransferSyntaxIndex;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dotenv::dotenv;
 use serde::Deserialize;
-use std::env;
+use std::{env, fs};
+use std::path::PathBuf;
 use std::sync::Once;
 
 #[derive(Debug, Deserialize, Clone)]
@@ -133,6 +134,47 @@ static APP_PREFIX: &str = "DICOM";
 // 全局配置实例和初始化状态
 static INIT: Once = Once::new();
 static mut CONFIG: Option<AppConfig> = None;
+fn validate_and_create_path(path: &str, path_name: &str) -> Result<(), ConfigError> {
+    if path.len() > 64 {
+        return Err(ConfigError::Message(format!(
+            "{} length must be less than 64 characters", path_name
+        )));
+    }
+
+    match fs::exists(path) {
+        Ok(exists) => {
+            if !exists {
+                fs::create_dir_all(path)
+                    .map_err(|e| ConfigError::Message(format!(
+                        "Could not create {} directory: {}", path_name, e
+                    )))?;
+            }
+        }
+        Err(e) => {
+            return Err(ConfigError::Message(format!(
+                "Could not check if {} directory exists: {}", path_name, e
+            )));
+        }
+    }
+
+    // 测试写入权限
+    let test_dir = format!("{}/{}/{}/{}", path, "test", "sub", "dir");
+    fs::create_dir_all(&test_dir)
+        .map_err(|e| ConfigError::Message(format!(
+            "Could not create test directory in {}: {}", path_name, e
+        )))?;
+
+    let test_file = format!("{}/test.tmp", test_dir);
+    fs::write(&test_file, b"test")
+        .map_err(|e| ConfigError::Message(format!(
+            "Could not write test file in {}: {}", path_name, e
+        )))?;
+
+    fs::remove_file(&test_file).ok();
+    fs::remove_dir_all(&test_dir).ok();
+
+    Ok(())
+}
 
 pub fn load_config() -> Result<AppConfig, ConfigError> {
     // 使用 Once 确保只初始化一次
@@ -141,27 +183,22 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
             // 1. 加载 .env 文件
             dotenv().ok();
             // 打印当前工作目录
-            let cdir = match env::current_dir() {
-                Ok(path) => {
-                    println!("Current working directory: {:?}", path);
-                    path
-                }
-                Err(e) => {
-                    println!("Failed to get current directory: {}", e);
-                    std::path::PathBuf::from("./")
-                }
+            let cdir = {
+                // try current_dir, then CARGO_MANIFEST_DIR, then fallback to "."
+                let candidate = env::current_dir()
+                    .or_else(|_| env::var("CARGO_MANIFEST_DIR").map(PathBuf::from))
+                    .unwrap_or_else(|e| {
+                        eprintln!("Failed to determine current dir: {}. Falling back to '.'", e);
+                        PathBuf::from(".")
+                    });
+                // try to canonicalize (make absolute / normalize). If canonicalize fails, keep candidate.
+                fs::canonicalize(&candidate).unwrap_or(candidate)
             };
             // 2. 从 .env 获取当前环境 (默认 dev)
             let env = env::var(APP_ENV).unwrap_or_else(|_| "dev".into());
-
-            // ISSUER_URL=https://keycloak.medical.org:8443/realms/dicom-org-cn
-            //     AUDIENCE=wado-rs-api
-            // SERVER_PORT=8080
-            // JWKS_URL: "https://keycloak.medical.org:8443/realms/dicom-org-cn/protocol/openid-connect/certs",
-
             // 3. 动态加载配置文件 (如 application.dev.json)
             let config_path = format!("{}/application.{}.json", cdir.display(), env);
-
+            println!("application configuration file path :{}", config_path);
             // 4. 使用 config 库加载配置
             let settings = Config::builder()
                 // 加载 JSON 配置文件 (如 application.dev.json)
@@ -238,10 +275,10 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
                 panic!("dicm_store_path length must be less than 64 characters");
             }
 
-            match std::fs::exists(&app_config.local_storage.dicm_store_path) {
+            match fs::exists(&app_config.local_storage.dicm_store_path) {
                 Ok(exists) => {
                     if !exists {
-                        std::fs::create_dir_all(&app_config.local_storage.dicm_store_path)
+                        fs::create_dir_all(&app_config.local_storage.dicm_store_path)
                             .unwrap_or_else(|e| {
                                 panic!("Could not create dicm_store_path directory: {}", e);
                             });
@@ -251,75 +288,28 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
                     panic!("Could not check if dicm_store_path directory exists: {}", e);
                 }
             }
-            // TODO :验证能否在dicom_storage_path 下面创建目录及写入文件
-            let test_dir = format!(
-                "{}/{}/{}/{}",
-                app_config.local_storage.dicm_store_path, "1.222", "1.444", "3.5555"
-            );
-            std::fs::create_dir_all(&test_dir).unwrap_or_else(|e| {
-                panic!("Could not create test_dir directory: {}", e);
-            });
-            let test_file = format!("{}/test.dcm", test_dir);
-            std::fs::write(
-                &test_file,
-                b"903290903234092409383404903409289899889jkkallklkj",
-            )
-            .unwrap_or_else(|e| {
-                panic!("Could not write test_file file: {}", e);
-            });
-            std::fs::remove_file(&test_file).unwrap_or_else(|e| {
-                panic!("Could not remove test_file file: {}", e);
-            });
-            std::fs::remove_dir_all(&test_dir).unwrap_or_else(|e| {
-                panic!("Could not remove test_dir directory: {}", e);
+            // 验证本地存储路径
+            validate_and_create_path(
+                &app_config.local_storage.dicm_store_path,
+                "dicm_store_path"
+            ).unwrap_or_else(|e| {
+                panic!("{}", e);
             });
 
-            println!(
-                "local_storage:json_store_path {:?}",
-                app_config.local_storage.json_store_path
-            );
-            if app_config.local_storage.json_store_path.ends_with("/") {
+            if app_config.local_storage.dicm_store_path.ends_with('/') {
+                app_config.local_storage.dicm_store_path.pop();
+            }
+
+            validate_and_create_path(
+                &app_config.local_storage.json_store_path,
+                "json_store_path"
+            ).unwrap_or_else(|e| {
+                panic!("{}", e);
+            });
+
+            if app_config.local_storage.json_store_path.ends_with('/') {
                 app_config.local_storage.json_store_path.pop();
             }
-            if app_config.local_storage.json_store_path.len() > 64 {
-                panic!("json_store_path length must be less than 64 characters");
-            }
-
-            match std::fs::exists(&app_config.local_storage.json_store_path) {
-                Ok(exists) => {
-                    if !exists {
-                        std::fs::create_dir_all(&app_config.local_storage.json_store_path)
-                            .unwrap_or_else(|e| {
-                                panic!("Could not create json_store_path directory: {}", e);
-                            });
-                    }
-                }
-                Err(e) => {
-                    panic!("Could not check if json_store_path directory exists: {}", e);
-                }
-            }
-            // TODO :验证能否在json_store_path 下面创建目录及写入文件
-            let json_test_dir = format!(
-                "{}/{}/{}/{}",
-                app_config.local_storage.json_store_path, "1.222", "2.444", "3.555"
-            );
-            std::fs::create_dir_all(&json_test_dir).unwrap_or_else(|e| {
-                panic!("Could not create json_test_dir directory: {}", e);
-            });
-            let json_test_file = format!("{}/test.json", json_test_dir);
-            std::fs::write(
-                &json_test_file,
-                b"903290903234092409383404903409289899889jkkallklkj",
-            )
-            .unwrap_or_else(|e| {
-                panic!("Could not write json_test_file file: {}", e);
-            });
-            std::fs::remove_file(&json_test_file).unwrap_or_else(|e| {
-                panic!("Could not remove json_test_file file: {}", e);
-            });
-            std::fs::remove_dir_all(&json_test_dir).unwrap_or_else(|e| {
-                panic!("Could not remove json_test_dir directory: {}", e);
-            });
 
             println!("dicom_store_scp:port {:?}", app_config.dicom_store_scp.port);
             println!(
