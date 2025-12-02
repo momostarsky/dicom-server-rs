@@ -101,9 +101,9 @@ pub struct OAuth2Config {
 pub struct WebWorkerConfig {
     ///series_lastUpdateTime + X 分钟内没有更新
     pub interval_minute: u16,
-    /// cpu 使用率
+    /// 最大cpu 使用率
     pub cpu_usage: u16,
-    /// 内存使用率
+    /// 最大内存使用率
     pub memory_usage: u16,
 }
 
