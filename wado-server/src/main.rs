@@ -1,11 +1,11 @@
 pub mod common_utils;
 
 mod auth_middleware_kc;
+mod common_controller;
 mod constants;
 mod stow_rs_controller_v1;
 mod wado_rs_controller_v1;
 mod wado_rs_models;
-mod common_controller;
 
 // use crate::wado_rs_controller_v1::{
 //     echo_v1, retrieve_instance, retrieve_instance_frames, retrieve_series_metadata,
@@ -26,6 +26,7 @@ use database::dicom_dbprovider::DbProvider;
 use slog;
 use slog::{Logger, error, info};
 use std::sync::Arc;
+use utoipa::OpenApi;
 use utoipa_actix_web::{AppExt, scope};
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -45,21 +46,28 @@ fn configure_log() -> Logger {
     info!(log, "Wado server started");
     log.clone()
 }
-// 定义应用状态
-// #[derive(OpenApi)]
-// #[openapi(
-//     tags((name = "WADO-RS", description = "WADO-RS API接口")),
-//     paths(
-//         wado_rs_controller::retrieve_study_metadata,
-//         wado_rs_controller::retrieve_study_subseries,
-//         wado_rs_controller::retrieve_series_metadata,
-//         wado_rs_controller::retrieve_instance,
-//         wado_rs_controller::retrieve_instance_frames,
-//         wado_rs_controller::echo_v1,
-//         wado_rs_controller::echo_v2,
-//     )
-// )]
-// struct ApiDoc;
+#[derive(OpenApi)]
+#[openapi(
+    info(
+        title = "DICOMWeb API",
+        description = "DICOMWeb services for WADO-RS and STOW-RS"
+    ),
+    paths(
+        // 注册所有 API 路径
+        common_controller::echo,
+        stow_rs_controller_v1::store_instances,
+        stow_rs_controller_v1::store_instances_to_study,
+        // 添加其他路径...
+    ),
+    components(
+        schemas()
+    ),
+    tags(
+        (name = "STOW-RS", description = "STOW-RS API接口"),
+        (name = "WADO-RS", description = "WADO-RS API接口")
+    )
+)]
+struct ApiDoc;
 #[derive(Clone)]
 struct AppState {
     log: Logger,
@@ -210,7 +218,8 @@ async fn main() -> std::io::Result<()> {
         server_config.host,
         server_config.port
     );
-
+    // 添加这一行以消除警告
+    let _api = ApiDoc::openapi();
     HttpServer::new(move || {
         // 创建统一的 CORS 配置
         let cors_config = || {
@@ -255,7 +264,7 @@ async fn main() -> std::io::Result<()> {
 
         let (app, mut api) = App::new()
             .into_utoipa_app()
-            // .service(common_controller::echo)
+            .service(common_controller::echo)
             .service(
                 scope::scope(WADO_RS_CONTEXT_PATH)
                     .wrap(wado_rs_cors)
@@ -272,8 +281,7 @@ async fn main() -> std::io::Result<()> {
                             .service(wado_rs_controller_v1::retrieve_series_metadata)
                             .service(wado_rs_controller_v1::retrieve_instance)
                             .service(wado_rs_controller_v1::retrieve_instance_frames),
-                    )
-                    .service(common_controller::echo),
+                    ),
             )
             .service(
                 scope::scope(STOW_RS_CONTEXT_PATH)
@@ -288,10 +296,8 @@ async fn main() -> std::io::Result<()> {
                             // })
                             .service(stow_rs_controller_v1::store_instances)
                             .service(stow_rs_controller_v1::store_instances_to_study), // .service(stow_rs_controller_v1::echo_v1)
-                    )
-                    .service(common_controller::echo)
+                    ),
             )
-
             .split_for_parts();
         api.info.title = "DICOMWeb API".to_string();
         app.wrap(middleware::Compress::default())
@@ -299,7 +305,6 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(app_state.clone()))
             .service(SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-docs/openapi.json", api))
             .route("/hey", web::get().to(manual_hello))
-
     })
     .bind((server_config.host, server_config.port))?
     .run()

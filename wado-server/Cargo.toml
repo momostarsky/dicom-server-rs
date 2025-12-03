@@ -47,3 +47,6 @@ permission-macros = { path = "../permission-macros" }
 jsonpath-rust = "1.0.4"
 jsonpath_lib = "0.3.0"
 log = "0.4.28"
+actix-multipart = "0.7.2"
+tempfile = "3.23.0"
+install = "0.0.0"
