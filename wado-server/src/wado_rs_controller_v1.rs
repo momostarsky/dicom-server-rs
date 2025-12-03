@@ -652,19 +652,7 @@ async fn retrieve_instance_impl(
         Err(_) => HttpResponse::NotFound().body(format!("DICOM file not found: {}", &dicom_file)),
     }
 }
-// Echo endpoint - 如果你也想让它出现在API文档里:
-#[utoipa::path(
-    get,
-    responses(
-        (status = 200, description = "Echo Success"),
-    ),
-    tag = WADO_RS_TAG,
-    description = "Echo endpoint"
-)]
-#[get("/echo")]
-async fn echo_v1() -> impl Responder {
-    HttpResponse::Ok().body("Success")
-}
+
 
 use crate::auth_middleware_kc::Claims; // 确保能访问Claims结构
 

@@ -2,8 +2,10 @@ pub mod common_utils;
 
 mod auth_middleware_kc;
 mod constants;
+mod stow_rs_controller_v1;
 mod wado_rs_controller_v1;
 mod wado_rs_models;
+mod common_controller;
 
 // use crate::wado_rs_controller_v1::{
 //     echo_v1, retrieve_instance, retrieve_instance_frames, retrieve_series_metadata,
@@ -14,7 +16,7 @@ use actix_web::{App, HttpResponse, HttpServer, Responder, middleware, web};
 
 // use crate::auth_middleware_kc::AuthMiddleware;
 use crate::auth_middleware_kc::{AuthMiddleware, update_jwks_task};
-use crate::constants::WADO_RS_CONTEXT_PATH;
+use crate::constants::{STOW_RS_CONTEXT_PATH, WADO_RS_CONTEXT_PATH};
 use common::license_manager::validate_client_certificate;
 use common::redis_key::RedisHelper;
 use common::server_config::AppConfig;
@@ -202,8 +204,11 @@ async fn main() -> std::io::Result<()> {
 
     info!(
         log,
-        "Starting the server at {}:{}  visits:http://{}:{}/swagger-ui/", server_config.host, server_config.port,
-         server_config.host, server_config.port
+        "Starting the server at {}:{}  visits:http://{}:{}/swagger-ui/",
+        server_config.host,
+        server_config.port,
+        server_config.host,
+        server_config.port
     );
 
     HttpServer::new(move || {
@@ -246,9 +251,11 @@ async fn main() -> std::io::Result<()> {
 
         let cors = configure_origin(cors_config());
         let wado_rs_cors = configure_origin(cors_config());
+        let stow_rs_cors = configure_origin(cors_config());
 
         let (app, mut api) = App::new()
             .into_utoipa_app()
+            .service(common_controller::echo)
             .service(
                 scope::scope(WADO_RS_CONTEXT_PATH)
                     .wrap(wado_rs_cors)
@@ -265,16 +272,32 @@ async fn main() -> std::io::Result<()> {
                             .service(wado_rs_controller_v1::retrieve_series_metadata)
                             .service(wado_rs_controller_v1::retrieve_instance)
                             .service(wado_rs_controller_v1::retrieve_instance_frames),
-                    )
-                    .service(scope::scope("/v1").service(wado_rs_controller_v1::echo_v1)),
+                    ),
             )
+            .service(
+                scope::scope(STOW_RS_CONTEXT_PATH)
+                    .wrap(stow_rs_cors)
+                    .service(
+                        scope::scope("/v1")
+                            // 关闭权限验证
+                            // .wrap(AuthMiddleware {
+                            //     logger: app_state.log.clone(),
+                            //     redis: app_state.redis_helper.clone(),
+                            //     config: app_state.config.clone(),
+                            // })
+                            .service(stow_rs_controller_v1::store_instances)
+                            .service(stow_rs_controller_v1::store_instances_to_study), // .service(stow_rs_controller_v1::echo_v1)
+                    ),
+            )
+
             .split_for_parts();
-        api.info.title = "WADO API".to_string();
+        api.info.title = "DICOMWeb API".to_string();
         app.wrap(middleware::Compress::default())
             .wrap(cors)
             .app_data(web::Data::new(app_state.clone()))
             .service(SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-docs/openapi.json", api))
             .route("/hey", web::get().to(manual_hello))
+
     })
     .bind((server_config.host, server_config.port))?
     .run()
