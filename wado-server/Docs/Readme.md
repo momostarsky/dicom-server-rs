@@ -37,3 +37,18 @@ curl -X POST http://localhost:9000/stow-rs/v1/studies \
      --data-binary @dcm3.dcm \
      --data-binary $'\r\n--DICOM_BOUNDARY--\r\n'
 ```
+
+```bash
+curl -X POST http://localhost:9000/stow-rs/v1/studies \
+     -H "Content-Type: multipart/related; boundary=DICOM_BOUNDARY; type=application/json" \
+     -H "Accept: application/json" \
+     --data-binary $'--DICOM_BOUNDARY\r\nContent-Type: application/json\r\n\r\n' \
+     --data-binary @metadata.json \
+     --data-binary $'\r\n--DICOM_BOUNDARY\r\nContent-Type: application/dicom\r\n\r\n' \
+     --data-binary @dcm1.dcm \
+     --data-binary $'\r\n--DICOM_BOUNDARY\r\nContent-Type: application/dicom\r\n\r\n' \
+     --data-binary @dcm2.dcm \
+     --data-binary $'\r\n--DICOM_BOUNDARY\r\nContent-Type: application/dicom\r\n\r\n' \
+     --data-binary @dcm3.dcm \
+     --data-binary $'\r\n--DICOM_BOUNDARY--\r\n'
+```

@@ -1,5 +1,6 @@
 use actix_web::{HttpRequest, HttpResponse, Result, http::header, post, web};
-use futures_util::StreamExt as _;
+
+use futures_util::{StreamExt as _, TryStreamExt};
 // use dicom_object::open_file; // 如果需要解析 DICOM，取消注释
 use crate::AppState;
 use crate::constants::STOW_RS_TAG;
@@ -12,6 +13,8 @@ use actix_multipart::{
         tempfile::{TempFile, TempFileConfig},
     },
 };
+use uuid::Uuid;
+
 const MULTIPART_CONTENT_TYPE: &str = "multipart/related"; // multipart/related
 
 
@@ -21,7 +24,28 @@ struct StowMetadata {
     patient_id: String,
     study_uid: String,
 }
+fn parse_multipart_related_content_type(content_type: &str) -> Option<(String,Option<String>, Option<String>)> {
+    let parts: Vec<&str> = content_type.split(';').collect();
+    let mime_type = parts[0].trim().to_lowercase();
 
+    if mime_type != "multipart/related" {
+        return None;
+    }
+
+    let mut boundary = None;
+    let mut subtype = None;
+
+    for part in &parts[1..] {
+        let trimmed = part.trim();
+        if trimmed.starts_with("boundary=") {
+            boundary = Some(trimmed[9..].trim_matches('"').to_string());
+        } else if trimmed.starts_with("type=") {
+            subtype = Some(trimmed[5..].trim_matches('"').to_string());
+        }
+    }
+
+    Some((mime_type, subtype, boundary))
+}
 /// 处理 /studies 端点的 POST 请求
 /// 接收 multipart/related 数据流并保存 DICOM 实例
 #[utoipa::path(
@@ -55,15 +79,20 @@ async fn store_instances(
 
     match content_type_header {
         Some(ct_header_value) => {
+            info!(log, "xxxContent-Type: {:?}", ct_header_value);
             if let Ok(ct_str) = ct_header_value.to_str() {
-                // 简单检查是否包含 multipart/related
-                // 更严格的检查需要解析整个 Content-Type header (e.g., boundary)
-                if !ct_str.to_lowercase().starts_with(MULTIPART_CONTENT_TYPE) {
-                    warn!(log, "Invalid Content-Type for STOW-RS: {}", ct_str);
-                    return Ok(HttpResponse::UnsupportedMediaType()
-                        .body("Content-Type must be multipart/related"));
+                match parse_multipart_related_content_type(ct_str) {
+                    Some((_mime_type,subtype, boundary)) => {
+                        info!(log, "Content-Type confirmed as multipart/related");
+                        info!(log, "Content-Type subtype: {:?}", subtype);
+                        info!(log, "Content-Type boundary:{:?}", boundary);
+                    },
+                    None => {
+                        warn!(log, "Invalid Content-Type for STOW-RS: {}", ct_str);
+                        return Ok(HttpResponse::UnsupportedMediaType()
+                            .body("Content-Type must be multipart/related"));
+                    }
                 }
-                info!(log, "Content-Type confirmed as multipart/related");
             } else {
                 error!(log, "Failed to parse Content-Type header value");
                 return Ok(HttpResponse::BadRequest().body("Malformed Content-Type header"));
@@ -74,46 +103,33 @@ async fn store_instances(
             return Ok(HttpResponse::BadRequest().body("Missing Content-Type header"));
         }
     }
+    // 用于存储解析出的元数据和文件信息
+    // let mut metadata: Option<StowMetadata> = None;
+    // let mut dicom_files_saved: Vec<String> = Vec::new();
+    // 迭代 multipart 流中的所有部分
+    while let Some(mut field) = payload.try_next().await? {
+        // A multipart/form-data stream has to contain `content_disposition`
+        let Some(content_disposition) = field.content_disposition() else {
+            continue;
+        };
+        info!(log, "Content-Disposition: {:?}", content_disposition);
 
-    // 2. 处理 multipart payload
-    // Actix-web 提供了 Multipart extractor，但它更适合 form-data。
-    // 对于 multipart/related，我们需要手动处理流。
-    // 这里我们简化处理，直接读取 payload 并尝试写入文件。
+        let filename = content_disposition
+            .get_filename()
+            .map_or_else(|| Uuid::new_v4().to_string(), |name| name.to_string());
+        let filepath = format!("./tmp/{filename}.dcm");
+        info!(log, "Content-filepath: {:?}", filepath);
+        // File::create is blocking operation, use threadpool
+        let mut f = web::block(|| std::fs::File::create(filepath)).await??;
 
-    // --- 简化版处理逻辑 ---
-    // 实际应用中，你需要根据 Content-Type 中的 boundary 来正确分割 parts.
-    // 这个例子只是将整个流保存下来作为一个示例。
-
-    let mut file_data = Vec::new();
-    while let Some(chunk) = payload.next().await {
-        match chunk {
-            Ok(data) => {
-                file_data.extend_from_slice(&data);
-            }
-            Err(e) => {
-                error!(log,"Error reading payload chunk: {}", e);
-                return Ok(HttpResponse::InternalServerError().body("Error reading data"));
-            }
+        // Field in turn is stream of *Bytes* object
+        while let Some(chunk) = field.try_next().await? {
+            // filesystem operations are blocking, we have to use threadpool
+            f = web::block(move || f.write_all(&chunk).map(|_| f)).await??;
         }
     }
 
-    // --- 模拟处理: 将接收到的数据保存到文件 ---
-    // 注意：真实的 STOW-RS 需要解析 multipart/related，提取每个 DICOM part，
-    // 验证 DICOM 格式，并存储到合适的 Study/Series 结构中。
-    let filename = format!("received_stow_data_{}.bin", uuid::Uuid::new_v4()); // 简单命名
-    match std::fs::File::create(&filename) {
-        Ok(mut file) => {
-            if let Err(e) = file.write_all(&file_data) {
-                error!(log,"Failed to write received data to file {}: {}", filename, e);
-                return Ok(HttpResponse::InternalServerError().body("Failed to save data"));
-            }
-            info!(log,"Saved raw multipart/related data to {}", filename);
-        }
-        Err(e) => {
-            error!(log,"Failed to create file {}: {}", filename, e);
-            return Ok(HttpResponse::InternalServerError().body("Failed to create storage file"));
-        }
-    }
+
 
     // 3. 构造简单的成功响应 (实际应包含 StoreInstanceResponse XML/JSON)
     // 参考 DICOM PS3.18 Annex CC.2.2 for response format
@@ -159,21 +175,31 @@ async fn store_instances_to_study(
 
     // 1. 检查 Content-Type 是否为 multipart/related (同上)
     let content_type_header = req.headers().get(header::CONTENT_TYPE);
-    if let Some(ct_header_value) = content_type_header {
-        if let Ok(ct_str) = ct_header_value.to_str() {
-            if !ct_str.to_lowercase().starts_with("multipart/related") {
-                warn!(log,"Invalid Content-Type for STOW-RS: {}", ct_str);
-                return Ok(HttpResponse::UnsupportedMediaType()
-                    .body("Content-Type must be multipart/related"));
+    match content_type_header {
+        Some(ct_header_value) => {
+            info!(log, "xxxContent-Type: {:?}", ct_header_value);
+            if let Ok(ct_str) = ct_header_value.to_str() {
+                match parse_multipart_related_content_type(ct_str) {
+                    Some((_mime_type,subtype, boundary)) => {
+                        info!(log, "Content-Type confirmed as multipart/related");
+                        info!(log, "Content-Type subtype: {:?}", subtype);
+                        info!(log, "Content-Type boundary:{:?}", boundary);
+                    },
+                    None => {
+                        warn!(log, "Invalid Content-Type for STOW-RS: {}", ct_str);
+                        return Ok(HttpResponse::UnsupportedMediaType()
+                            .body("Content-Type must be multipart/related"));
+                    }
+                }
+            } else {
+                error!(log, "Failed to parse Content-Type header value");
+                return Ok(HttpResponse::BadRequest().body("Malformed Content-Type header"));
             }
-            info!(log,"Content-Type confirmed as multipart/related for specific study");
-        } else {
-            error!(log,"Failed to parse Content-Type header value");
-            return Ok(HttpResponse::BadRequest().body("Malformed Content-Type header"));
         }
-    } else {
-        warn!(log,"Missing Content-Type header");
-        return Ok(HttpResponse::BadRequest().body("Missing Content-Type header"));
+        None => {
+            warn!(log, "Missing Content-Type header");
+            return Ok(HttpResponse::BadRequest().body("Missing Content-Type header"));
+        }
     }
 
     // 2. 处理 multipart payload (同上 - 简化版)
