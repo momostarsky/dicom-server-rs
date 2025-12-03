@@ -117,6 +117,8 @@ async fn get_series_json_meta(
         }
     }
 }
+
+/// 获取指定检查的元数据,是当前所有DICOM文件的原始数据. 不建议调用此接口. 速度太慢.
 #[utoipa::path(
 
     get,
@@ -256,6 +258,7 @@ async fn retrieve_study_metadata(
         )),
     }
 }
+/// 获取指定检查下面有多少个序列. 并以JSON格式返回.
 #[utoipa::path(
     get,
     params(
@@ -342,7 +345,7 @@ async fn retrieve_study_subseries(
         )),
     }
 }
-
+/// 获取指定序列下的所有DICOM文件除开PIXEL_DATA的元素.并以JSON数组格式返回
 #[utoipa::path(
     get,
 
@@ -484,6 +487,7 @@ async fn retrieve_series_metadata(
         )),
     }
 }
+/// 获取指定的DICOM文件的PIXEL_DATA
 #[utoipa::path(
     get,
 
@@ -515,6 +519,7 @@ async fn retrieve_instance(
     retrieve_instance_impl(study_uid, series_uid, sop_uid, 1, req, app_state).await
 }
 
+/// 获取指定DICOM文件的指定帧的PIXEL_DATA,默认为第1帧 ,当前不支持多帧.
 #[utoipa::path(
     get,
 

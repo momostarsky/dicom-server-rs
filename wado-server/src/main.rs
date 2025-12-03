@@ -255,7 +255,7 @@ async fn main() -> std::io::Result<()> {
 
         let (app, mut api) = App::new()
             .into_utoipa_app()
-            .service(common_controller::echo)
+            // .service(common_controller::echo)
             .service(
                 scope::scope(WADO_RS_CONTEXT_PATH)
                     .wrap(wado_rs_cors)
@@ -272,7 +272,8 @@ async fn main() -> std::io::Result<()> {
                             .service(wado_rs_controller_v1::retrieve_series_metadata)
                             .service(wado_rs_controller_v1::retrieve_instance)
                             .service(wado_rs_controller_v1::retrieve_instance_frames),
-                    ),
+                    )
+                    .service(common_controller::echo),
             )
             .service(
                 scope::scope(STOW_RS_CONTEXT_PATH)
@@ -287,7 +288,8 @@ async fn main() -> std::io::Result<()> {
                             // })
                             .service(stow_rs_controller_v1::store_instances)
                             .service(stow_rs_controller_v1::store_instances_to_study), // .service(stow_rs_controller_v1::echo_v1)
-                    ),
+                    )
+                    .service(common_controller::echo)
             )
 
             .split_for_parts();
