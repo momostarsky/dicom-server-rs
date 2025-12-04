@@ -23,6 +23,8 @@ sudo update-ca-certificates
   --data-binary @test.dcm
 ```
 
+**下面的两个测试脚步,curl 命令会自动为文件添加前导字符$ , 建议采用STIW-RS-Test.sh 脚本**
+
 ```bash
 curl -X POST http://localhost:9000/stow-rs/v1/studies \
      -H "Content-Type: multipart/related; boundary=DICOM_BOUNDARY; type=application/json" \

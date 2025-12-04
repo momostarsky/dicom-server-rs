@@ -77,7 +77,7 @@ async fn store_instances(
     responses(
         (status = 200, description = "Store DICOM Instance  successfully", content_type = "application/json"),
         (status = 404, description = "Study not found"),
-        (status = 406, description = " Accept header must be multipart/related"),
+        (status = 406, description = "Accept header must be multipart/related"),
         (status = 500, description = "Internal server error")
     ),
     tag =  STOW_RS_TAG,
@@ -157,7 +157,9 @@ async fn process_and_store_instances(
         Err(response) => return Ok(response),
     };
 
-    let content_length = req.headers().get(header::CONTENT_LENGTH)
+    let content_length = req
+        .headers()
+        .get(header::CONTENT_LENGTH)
         .and_then(|hv| hv.to_str().ok())
         .and_then(|s| s.parse::<usize>().ok());
 
@@ -169,7 +171,6 @@ async fn process_and_store_instances(
         }
         _ => 512 * 1024, // 默认 512KB
     };
-
 
     info!(log, "Initial capacity: {}", initial_capacity);
     // 收集 multipart 数据到内存缓冲区
@@ -212,11 +213,13 @@ async fn process_and_store_instances(
                 if !(field_content_type == "application/json"
                     || field_content_type == "application/dicom")
                 {
-                    warn!(
+                    error!(
                         log,
-                        "Field content type is missing, defaulting to application/dicom"
+                        "Unsupported field content type: {}, only application/json and application/dicom are supported",
+                        field_content_type
                     );
-                    continue;
+                    return Ok(HttpResponse::BadRequest()
+                        .body(format!("Unsupported content type: {}", field_content_type)));
                 }
 
                 let mut field_bytes_len = 0;
@@ -225,33 +228,43 @@ async fn process_and_store_instances(
                         Ok(Some(field_chunk)) => {
                             // 保存 DICOM 文件
                             let filename = uuid::Uuid::new_v4().to_string();
-                            let filepath = match field_content_type.as_str() {
-                                "application/dicom" => {
-                                    if let Some(ref uid) = study_instance_uid {
-                                        format!("./{}_{}.dcm", uid, filename)
-                                    } else {
-                                        format!("./{}.dcm", filename)
-                                    }
+                            let filepath = if field_content_type == "application/dicom" {
+                                if let Some(ref uid) = study_instance_uid {
+                                    format!("./{}_{}.dcm", uid, filename)
+                                } else {
+                                    format!("./{}.dcm", filename)
                                 }
-                                "application/json" => {
-                                    if let Some(ref uid) = study_instance_uid {
-                                        format!("./{}_{}.json", uid, filename)
-                                    } else {
-                                        format!("./{}.json", filename)
-                                    }
+                            } else {
+                                // application/json 类型
+                                if let Some(ref uid) = study_instance_uid {
+                                    format!("./{}_{}.json", uid, filename)
+                                } else {
+                                    format!("./{}.json", filename)
                                 }
-                                _ => {
-                                    if let Some(ref uid) = study_instance_uid {
-                                        format!("./{}_{}.data", uid, filename)
-                                    } else {
-                                        format!("./{}.data", filename)
-                                    }
-                                }
+                            };
+                            let end_position = field_chunk.len();
+                            // 在主逻辑中使用
+                            let start_position = match validate_and_find_start_position(
+                                field_content_type.as_str(),
+                                &field_chunk,
+                                end_position,
+                            ) {
+                                Ok(pos) => pos,
+                                Err(response) => return Ok(response),
                             };
 
                             match std::fs::File::create(&filepath) {
                                 Ok(mut file) => {
-                                    if let Err(e) = file.write_all(&field_chunk) {
+                                    info!(
+                                        log,
+                                        "Saving DICOM file to: {} , with length:{}",
+                                        filepath,
+                                        field_chunk.len()
+                                    );
+                                    if let Err(e) = file.write_all(
+                                        &field_chunk
+                                            [start_position..(end_position - start_position)],
+                                    ) {
                                         error!(
                                             log,
                                             "Failed to write DICOM file {}: {}", filepath, e
@@ -303,4 +316,44 @@ async fn process_and_store_instances(
 
     Ok(HttpResponse::Ok()
         .body("<NativeDicomModel><Message><Status>Success</Status></Message></NativeDicomModel>"))
+}
+
+// 提取验证逻辑到独立函数
+fn validate_and_find_start_position(
+    field_content_type: &str,
+    field_chunk: &[u8],
+    end_position: usize,
+) -> Result<usize, HttpResponse> {
+    match field_content_type {
+        "application/dicom" => {
+            // 检查标准DICOM文件（DICM在128字节偏移处）
+            if field_chunk.len() >= 132 && &field_chunk[128..132] == b"DICM" {
+                Ok(0)
+            } else if field_chunk.len() >= 133
+                && field_chunk[0] == b'$'
+                && field_chunk[end_position - 1] == b'$'
+                && &field_chunk[129..133] == b"DICM"
+            {
+                Ok(1)
+            } else {
+                Err(HttpResponse::BadRequest().body("Invalid DICOM data"))
+            }
+        }
+        "application/json" => {
+            // 验证JSON数据
+            if serde_json::from_slice::<serde_json::Value>(field_chunk).is_ok() {
+                Ok(0)
+            } else if field_chunk.len() >= 2
+                && field_chunk[0] == b'$'
+                && field_chunk[end_position - 1] == b'$'
+                && serde_json::from_slice::<serde_json::Value>(&field_chunk[1..end_position - 1])
+                    .is_ok()
+            {
+                Ok(1)
+            } else {
+                Err(HttpResponse::BadRequest().body("Invalid JSON data"))
+            }
+        }
+        _ => Ok(0),
+    }
 }
