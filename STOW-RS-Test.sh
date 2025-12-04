@@ -45,4 +45,4 @@ curl -X POST http://localhost:9000/stow-rs/v1/studies \
      --data-binary @"$TEMP_FILE"
 
 # 11. 清理临时文件
-rm "$TEMP_FILE"
+#rm "$TEMP_FILE"

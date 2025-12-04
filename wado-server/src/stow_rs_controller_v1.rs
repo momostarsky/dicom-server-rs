@@ -330,8 +330,8 @@ fn validate_and_find_start_position(
             if field_chunk.len() >= 132 && &field_chunk[128..132] == b"DICM" {
                 Ok(0)
             } else if field_chunk.len() >= 133
-                && field_chunk[0] == b'$'
-                && field_chunk[end_position - 1] == b'$'
+                && field_chunk[0] == b'&'
+                && field_chunk[end_position - 1] == b'&'
                 && &field_chunk[129..133] == b"DICM"
             {
                 Ok(1)
@@ -339,13 +339,13 @@ fn validate_and_find_start_position(
                 Err(HttpResponse::BadRequest().body("Invalid DICOM data"))
             }
         }
-        "application/json" => {
+        "application/json" => { 
             // 验证JSON数据
-            if serde_json::from_slice::<serde_json::Value>(field_chunk).is_ok() {
+            if serde_json::from_slice::<serde_json::Value>(&field_chunk).is_ok() {
                 Ok(0)
             } else if field_chunk.len() >= 2
-                && field_chunk[0] == b'$'
-                && field_chunk[end_position - 1] == b'$'
+                && field_chunk[0] == b'&'
+                && field_chunk[end_position - 1] == b'&'
                 && serde_json::from_slice::<serde_json::Value>(&field_chunk[1..end_position - 1])
                     .is_ok()
             {
