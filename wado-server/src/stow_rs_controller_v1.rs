@@ -1,22 +1,14 @@
 use actix_web::{HttpRequest, HttpResponse, Result, http::header, post, web};
 
-use futures_util::{StreamExt as _, TryStreamExt};
+use futures_util::StreamExt as _;
 // use dicom_object::open_file; // 如果需要解析 DICOM，取消注释
 use crate::AppState;
 use crate::constants::STOW_RS_TAG;
+use multer::{Multipart, bytes};
 use slog::{error, info, warn};
 use std::io::Write;
-use actix_multipart::{
-    Multipart,
-    form::{
-        MultipartForm,
-        tempfile::{TempFile, TempFileConfig},
-    },
-};
-use uuid::Uuid;
 
 const MULTIPART_CONTENT_TYPE: &str = "multipart/related"; // multipart/related
-
 
 /// 假设的元数据结构（根据您的实际 STOW-RS 需求调整）
 #[derive(serde::Deserialize, Debug)]
@@ -24,7 +16,9 @@ struct StowMetadata {
     patient_id: String,
     study_uid: String,
 }
-fn parse_multipart_related_content_type(content_type: &str) -> Option<(String,Option<String>, Option<String>)> {
+fn parse_multipart_related_content_type(
+    content_type: &str,
+) -> Option<(String, Option<String>, Option<String>)> {
     let parts: Vec<&str> = content_type.split(';').collect();
     let mime_type = parts[0].trim().to_lowercase();
 
@@ -46,6 +40,57 @@ fn parse_multipart_related_content_type(content_type: &str) -> Option<(String,Op
 
     Some((mime_type, subtype, boundary))
 }
+// 移除之前的 unfold 代码，改用 multer 的流式处理
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use tokio::io::{AsyncRead, ReadBuf};
+
+// 创建一个适配器将 actix-web Payload 转换为 AsyncRead
+struct PayloadReader {
+    payload: web::Payload,
+    buffer: Option<bytes::Bytes>,
+}
+
+impl PayloadReader {
+    fn new(payload: web::Payload) -> Self {
+        Self {
+            payload,
+            buffer: None,
+        }
+    }
+}
+
+impl AsyncRead for PayloadReader {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        loop {
+            if let Some(data) = self.buffer.as_mut() {
+                let len = std::cmp::min(buf.remaining(), data.len());
+                buf.put_slice(&data[..len]);
+                if len < data.len() {
+                    *data = data.split_off(len);
+                } else {
+                    self.buffer = None;
+                }
+                return Poll::Ready(Ok(()));
+            }
+
+            match futures_util::ready!(self.payload.poll_next_unpin(cx)) {
+                Some(Ok(bytes)) => {
+                    self.buffer = Some(bytes);
+                }
+                Some(Err(e)) => {
+                    return Poll::Ready(Err(std::io::Error::new(std::io::ErrorKind::Other, e)));
+                }
+                None => return Poll::Ready(Ok(())),
+            }
+        }
+    }
+}
+
 /// 处理 /studies 端点的 POST 请求
 /// 接收 multipart/related 数据流并保存 DICOM 实例
 #[utoipa::path(
@@ -68,7 +113,7 @@ fn parse_multipart_related_content_type(content_type: &str) -> Option<(String,Op
 async fn store_instances(
     req: HttpRequest,
     app_state: web::Data<AppState>,
-    mut payload: Multipart,
+    mut payload: web::Payload,
 ) -> Result<HttpResponse> {
     let log = app_state.log.clone();
     info!(log, "Received POST request on /studies");
@@ -77,16 +122,17 @@ async fn store_instances(
     let content_type_header = req.headers().get(header::CONTENT_TYPE);
     info!(log, "Content-Type: {:?}", content_type_header);
 
-    match content_type_header {
+    let boundary = match content_type_header {
         Some(ct_header_value) => {
             info!(log, "xxxContent-Type: {:?}", ct_header_value);
             if let Ok(ct_str) = ct_header_value.to_str() {
                 match parse_multipart_related_content_type(ct_str) {
-                    Some((_mime_type,subtype, boundary)) => {
-                        info!(log, "Content-Type confirmed as multipart/related");
+                    Some((_mime_type, subtype, boundary)) => {
+                        info!(log, "Content-Type maintype:{:?}", _mime_type);
                         info!(log, "Content-Type subtype: {:?}", subtype);
                         info!(log, "Content-Type boundary:{:?}", boundary);
-                    },
+                        boundary
+                    }
                     None => {
                         warn!(log, "Invalid Content-Type for STOW-RS: {}", ct_str);
                         return Ok(HttpResponse::UnsupportedMediaType()
@@ -102,39 +148,145 @@ async fn store_instances(
             warn!(log, "Missing Content-Type header");
             return Ok(HttpResponse::BadRequest().body("Missing Content-Type header"));
         }
+    };
+    if boundary.is_none() {
+        warn!(log, "Missing boundary in Content-Type header");
+        return Ok(HttpResponse::BadRequest().body("Missing boundary in Content-Type header"));
     }
-    // 用于存储解析出的元数据和文件信息
-    // let mut metadata: Option<StowMetadata> = None;
-    // let mut dicom_files_saved: Vec<String> = Vec::new();
-    // 迭代 multipart 流中的所有部分
-    while let Some(mut field) = payload.try_next().await? {
-        // A multipart/form-data stream has to contain `content_disposition`
-        let Some(content_disposition) = field.content_disposition() else {
-            continue;
-        };
-        info!(log, "Content-Disposition: {:?}", content_disposition);
 
-        let filename = content_disposition
-            .get_filename()
-            .map_or_else(|| Uuid::new_v4().to_string(), |name| name.to_string());
-        let filepath = format!("./tmp/{filename}.dcm");
-        info!(log, "Content-filepath: {:?}", filepath);
-        // File::create is blocking operation, use threadpool
-        let mut f = web::block(|| std::fs::File::create(filepath)).await??;
+    // 替换现有的文件数据收集逻辑
+    let boundary = boundary.unwrap(); // 已经检查过不为 None
 
-        // Field in turn is stream of *Bytes* object
-        while let Some(chunk) = field.try_next().await? {
-            // filesystem operations are blocking, we have to use threadpool
-            f = web::block(move || f.write_all(&chunk).map(|_| f)).await??;
+    // 使用临时文件缓冲整个 payload
+    let temp_file_path = format!("./temp_payload_{}.dat", uuid::Uuid::new_v4());
+    {
+        let temp_file_path_write = temp_file_path.clone();
+        let mut file = web::block(move || std::fs::File::create(temp_file_path_write)).await??;
+        while let Some(chunk) = payload.next().await {
+            match chunk {
+                Ok(data) => {
+                    info!(log, "Received chunk of size: {}", data.len());
+                    let prefix = format!("Received chunk of size: {:?}",String::from_utf8(data[0..30].to_vec()));
+                    info!(log, "{}", prefix);
+
+                    file = web::block(move || file.write_all(&data).map(|_| file)).await??;
+                }
+                Err(e) => {
+                    error!(log, "Error reading payload chunk: {}", e);
+                    // 清理临时文件
+                    let _ = std::fs::remove_file(&temp_file_path);
+                    return Ok(HttpResponse::InternalServerError().body("Error reading data"));
+                }
+            }
         }
     }
 
 
+    // 从临时文件读取数据并处理 multipart
+    let file_content = {
+        let temp_file_path_read = temp_file_path.clone();
+        web::block(move || std::fs::read(temp_file_path_read)).await??
+    };
+    // 清理临时文件
+    let _ = std::fs::remove_file(&temp_file_path);
 
-    // 3. 构造简单的成功响应 (实际应包含 StoreInstanceResponse XML/JSON)
-    // 参考 DICOM PS3.18 Annex CC.2.2 for response format
-    // 这里仅返回 200 OK 作为示意
-    info!(log,"STOW-RS request processed successfully (simplified)");
+    // Create a `Multipart` instance from that async reader and the boundary.
+    // 使用 multer 处理流
+    let mut multipart = Multipart::with_reader(file_content.as_slice(), boundary.as_str());
+    // 在清理后添加调试信息
+
+    // Iterate over the fields, use `next_field()` to get the next field.
+    // 在循环中处理错误
+    // 将原来的 while let 循环替换为:
+    loop {
+        match multipart.next_field().await {
+            Ok(Some(mut field)) => {
+                // 处理字段内容
+                // 使用 match 表达式更清晰地处理
+                let field_name = match field.name() {
+                    Some(name) => name.to_string(),
+                    _ => "UN".to_string(),
+                };
+                let field_content_type = match field.content_type() {
+                    Some(content_type) => content_type.to_string(),
+                    _ => "UN".to_string(),
+                };
+                info!(
+                    log,
+                    "Processing field: name={:?}, content_type={:?}",
+                    field_name,
+                    field_content_type
+                );
+                if !(field_content_type == "application/json"
+                    || field_content_type == "application/dicom")
+                {
+                    warn!(
+                        log,
+                        "Field content type is missing, defaulting to application/dicom"
+                    );
+                    continue;
+                }
+                let mut field_bytes_len = 0;
+                loop {
+                    match field.chunk().await {
+                        Ok(Some(field_chunk)) => {
+                            // 保存 DICOM 文件
+                            let filename = uuid::Uuid::new_v4().to_string();
+                            let filepath = match field_content_type.as_str() {
+                                "application/dicom" => {
+                                    format!("./{}.dcm", filename)
+                                }
+                                "application/json" => {
+                                    format!("./{}.json", filename)
+                                }
+                                _ => {
+                                    format!("./{}.data", filename)
+                                }
+                            };
+
+                            match std::fs::File::create(&filepath) {
+                                Ok(mut file) => {
+                                    if let Err(e) = file.write_all(&field_chunk) {
+                                        error!(
+                                            log,
+                                            "Failed to write DICOM file {}: {}", filepath, e
+                                        );
+                                        return Ok(HttpResponse::InternalServerError()
+                                            .body("Failed to save DICOM file"));
+                                    }
+                                    info!(log, "Saved DICOM file to: {}", filepath);
+                                }
+                                Err(e) => {
+                                    error!(log, "Failed to create file {}: {}", filepath, e);
+                                    return Ok(HttpResponse::InternalServerError()
+                                        .body("Failed to create storage file"));
+                                }
+                            }
+
+                            field_bytes_len += field_chunk.len();
+                        }
+                        Ok(None) => break, // 没有更多数据块了
+                        Err(e) => {
+                            error!(log, "Error reading field chunk: {}", e);
+                            return Ok(HttpResponse::BadRequest()
+                                .body(format!("Error reading field data: {}", e)));
+                        }
+                    }
+                }
+
+                info!(log, "Field Bytes Length: {:?}", field_bytes_len);
+            }
+            Ok(None) => break, // 没有更多字段了
+            Err(e) => {
+                error!(log, "Error parsing multipart field: {}", e);
+                return Ok(
+                    HttpResponse::BadRequest().body(format!("Error parsing multipart data: {}", e))
+                );
+            }
+        }
+    }
+
+    info!(log, "STOW-RS request processed successfully (simplified)");
     Ok(HttpResponse::Ok()
         // .content_type("application/dicom+xml") // 或 application/json 根据实际情况
         .body("<NativeDicomModel><Message><Status>Success</Status></Message></NativeDicomModel>")) // 简化的 XML 响应
@@ -180,11 +332,11 @@ async fn store_instances_to_study(
             info!(log, "xxxContent-Type: {:?}", ct_header_value);
             if let Ok(ct_str) = ct_header_value.to_str() {
                 match parse_multipart_related_content_type(ct_str) {
-                    Some((_mime_type,subtype, boundary)) => {
+                    Some((_mime_type, subtype, boundary)) => {
                         info!(log, "Content-Type confirmed as multipart/related");
                         info!(log, "Content-Type subtype: {:?}", subtype);
                         info!(log, "Content-Type boundary:{:?}", boundary);
-                    },
+                    }
                     None => {
                         warn!(log, "Invalid Content-Type for STOW-RS: {}", ct_str);
                         return Ok(HttpResponse::UnsupportedMediaType()
@@ -210,7 +362,7 @@ async fn store_instances_to_study(
                 file_data.extend_from_slice(&data);
             }
             Err(e) => {
-                error!(log,"Error reading payload chunk: {}", e);
+                error!(log, "Error reading payload chunk: {}", e);
                 return Ok(HttpResponse::InternalServerError().body("Error reading data"));
             }
         }
@@ -225,25 +377,27 @@ async fn store_instances_to_study(
     match std::fs::File::create(&filename) {
         Ok(mut file) => {
             if let Err(e) = file.write_all(&file_data) {
-                error!(log,"Failed to write received data to file {}: {}", filename, e);
+                error!(
+                    log,
+                    "Failed to write received data to file {}: {}", filename, e
+                );
                 return Ok(HttpResponse::InternalServerError().body("Failed to save data"));
             }
-            info!(log,
-                "Saved raw multipart/related data for study {} to {}",
-                study_instance_uid,
-                filename
+            info!(
+                log,
+                "Saved raw multipart/related data for study {} to {}", study_instance_uid, filename
             );
         }
         Err(e) => {
-            error!(log,"Failed to create file {}: {}", filename, e);
+            error!(log, "Failed to create file {}: {}", filename, e);
             return Ok(HttpResponse::InternalServerError().body("Failed to create storage file"));
         }
     }
 
     // 3. 构造简单的成功响应 (同上)
-    info!(log,
-        "STOW-RS request for study {} processed successfully (simplified)",
-        study_instance_uid
+    info!(
+        log,
+        "STOW-RS request for study {} processed successfully (simplified)", study_instance_uid
     );
     Ok(HttpResponse::Ok()
         // .content_type("application/dicom+xml")
