@@ -34,10 +34,14 @@ cat dcm3.dcm >> "$TEMP_FILE"
 # 9. 写入请求体的结束分隔符
 printf -- "\r\n--%s--\r\n" "$BOUNDARY" >> "$TEMP_FILE"
 
+# 10. 计算文件大小
+CONTENT_LENGTH=$(wc -c < "$TEMP_FILE" | tr -d ' ')
+
 # 10. 使用单个 --data-binary 发送合并后的临时文件
 curl -X POST http://localhost:9000/stow-rs/v1/studies \
      -H "Content-Type: multipart/related; boundary=$BOUNDARY; type=application/json" \
      -H "Accept: application/json" \
+     -H "Content-Length: $CONTENT_LENGTH" \
      --data-binary @"$TEMP_FILE"
 
 # 11. 清理临时文件
