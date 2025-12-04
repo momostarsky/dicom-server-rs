@@ -29,7 +29,6 @@ use std::sync::Arc;
 use utoipa::OpenApi;
 use utoipa_actix_web::{AppExt, scope};
 use utoipa_swagger_ui::SwaggerUi;
-
 // use crate::auth_middleware::AuthMiddleware;
 // 将原来的简单结构体定义替换为完整的 OpenApi 配置
 

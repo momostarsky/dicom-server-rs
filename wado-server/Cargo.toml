@@ -51,3 +51,8 @@ actix-multipart = "0.7.2"
 multer = { version = "3.1.0", features = ["tokio-io"] }
 tempfile = "3.23.0"
 install = "0.0.0"
+bytes = "1.10.1"
+tokio-util = "0.7.16"
+hyper = "1.7.0"
+async-stream = "0.3.6"
+send_wrapper = "0.6.0"

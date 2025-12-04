@@ -516,6 +516,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-stream"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b5a71a6f37880a80d1d7f19efd781e4b5de42c88f0722cc13bcb6cc2cfe8476"
+dependencies = [
+ "async-stream-impl",
+ "futures-core",
+ "pin-project-lite",
+]
+
+[[package]]
+name = "async-stream-impl"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7c24de15d275a1ecfd47a380fb4d5ec9bfe0933f309ed5e705b775596a3574d"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.106",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4853,6 +4875,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
 
 [[package]]
+name = "send_wrapper"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
+
+[[package]]
 name = "serde"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6384,7 +6412,9 @@ dependencies = [
  "actix-cors",
  "actix-multipart",
  "actix-web",
+ "async-stream",
  "axum",
+ "bytes",
  "chrono",
  "common",
  "database",
@@ -6400,6 +6430,7 @@ dependencies = [
  "gdcm_conv",
  "http 0.2.12",
  "http-body-util",
+ "hyper",
  "install",
  "jsonpath-rust",
  "jsonpath_lib",
@@ -6411,6 +6442,7 @@ dependencies = [
  "permission-macros",
  "redis 0.27.6",
  "reqwest",
+ "send_wrapper",
  "serde",
  "serde_json",
  "serde_qs",
@@ -6421,6 +6453,7 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-util",
  "url",
  "urlencoding",
  "utoipa",
