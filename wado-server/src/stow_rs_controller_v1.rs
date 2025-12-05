@@ -179,7 +179,7 @@ async fn process_and_store_instances(
     let content_length = match req.headers().get(header::CONTENT_LENGTH) {
         Some(header_value) => match header_value.to_str() {
             Ok(value_str) => match value_str.parse::<usize>() {
-                Ok(length) => length,
+                Ok(length) => length + 4096, // 添加 4096 字节,以防止边界情况
                 Err(_) => {
                     error!(
                         log,
@@ -226,17 +226,9 @@ async fn process_and_store_instances(
     );
 
     if use_memory_mapping {
-        // 处理大文件: 使用内存映射文件
-        let temp_file_path = format!("./temp_multipart_{}.dat", uuid::Uuid::new_v4());
-
-        let file = match std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&temp_file_path)
-        {
-            Ok(f) => f,
+        // 处理大文件: 使用临时文件和内存映射
+        let temp_file = match tempfile::NamedTempFile::new() {
+            Ok(file) => file,
             Err(e) => {
                 error!(
                     log,
@@ -248,16 +240,24 @@ async fn process_and_store_instances(
             }
         };
 
+        let file = match temp_file.reopen() {
+            Ok(f) => f,
+            Err(e) => {
+                error!(log, "Failed to reopen temporary file: {}", e);
+                return Ok(HttpResponse::InternalServerError().body("Failed to reopen file"));
+            }
+        };
+
         // 设置文件大小
         if let Err(e) = file.set_len(content_length as u64) {
             error!(log, "Failed to set temporary file size: {}", e);
-            let _ = std::fs::remove_file(&temp_file_path); // 尝试清理
             return Ok(HttpResponse::InternalServerError().body("Failed to set file size"));
         }
 
         // 创建内存映射并在作用域内处理
-        {
-            let mmap = match unsafe { memmap2::MmapMut::map_mut(&file) } {
+        let result = {
+            let mmap_result = unsafe { memmap2::MmapMut::map_mut(&file) };
+            match mmap_result {
                 Ok(mut mmap) => {
                     // 读取数据到内存映射区域
                     let mut position = 0;
@@ -269,14 +269,12 @@ async fn process_and_store_instances(
                                     position += data.len();
                                 } else {
                                     error!(log, "Payload larger than Content-Length");
-                                    let _ = std::fs::remove_file(&temp_file_path);
                                     return Ok(HttpResponse::BadRequest()
                                         .body("Payload larger than Content-Length"));
                                 }
                             }
                             Err(e) => {
                                 error!(log, "Error reading payload chunk: {}", e);
-                                let _ = std::fs::remove_file(&temp_file_path);
                                 return Ok(
                                     HttpResponse::InternalServerError().body("Error reading data")
                                 );
@@ -285,47 +283,50 @@ async fn process_and_store_instances(
                     }
 
                     // 注意：这里不调用 flush()，因为我们只需要读取数据，不需要持久化到磁盘
-                    mmap.make_read_only()
-                        .unwrap_or_else(|_| unsafe { memmap2::Mmap::map(&file).unwrap() })
+                    let readonly_mmap = match mmap.make_read_only() {
+                        Ok(mmap) => mmap,
+                        Err(_) => unsafe {
+                            match memmap2::Mmap::map(&file) {
+                                Ok(mmap) => mmap,
+                                Err(e) => {
+                                    error!(log, "Failed to create readonly memory mapping: {}", e);
+                                    return Ok(HttpResponse::InternalServerError()
+                                        .body("Failed to create memory mapping"));
+                                }
+                            }
+                        },
+                    };
+
+                    // 在 mmap 作用域内处理 multipart 字段
+                    let mut multipart =
+                        Multipart::with_reader(&readonly_mmap[..], boundary.as_str());
+                    let process_result = process_multipart_fields(
+                        &mut multipart,
+                        &app_state,
+                        &study_instance_uid,
+                        &tenant_id,
+                    )
+                    .await;
+
+                    // 显式释放资源
+                    drop(multipart);
+                    drop(readonly_mmap);
+
+                    process_result
                 }
                 Err(e) => {
                     error!(log, "Failed to create memory mapping: {}", e);
-                    let _ = std::fs::remove_file(&temp_file_path);
-                    return Ok(
-                        HttpResponse::InternalServerError().body("Failed to create memory mapping")
-                    );
+                    Err(HttpResponse::InternalServerError().body("Failed to create memory mapping"))
                 }
-            };
-
-            // 在 mmap 作用域内处理 multipart 字段
-            let mut multipart = Multipart::with_reader(&mmap[..], boundary.as_str());
-            if let Err(err) = process_multipart_fields(
-                &mut multipart,
-                &app_state,
-                &study_instance_uid,
-                &tenant_id,
-            )
-            .await
-            {
-                // mmap 会在作用域结束时自动释放
-                if let Err(e) = std::fs::remove_file(&temp_file_path) {
-                    warn!(
-                        log,
-                        "Failed to remove temporary file {}: {}", temp_file_path, e
-                    );
-                }
-                return Ok(err);
             }
-            // multipart 会在作用域结束时自动释放，然后 mmap 才会被释放
-        } // mmap 的作用域结束，确保在这里释放
+        }; // mmap 的作用域结束，确保在这里释放
 
-        // 处理完成后清理临时文件
-        if let Err(e) = std::fs::remove_file(&temp_file_path) {
-            warn!(
-                log,
-                "Failed to remove temporary file {}: {}", temp_file_path, e
-            );
+        // 处理结果
+        if let Err(err) = result {
+            return Ok(err);
         }
+
+        // temp_file 会在离开作用域时自动清理
     } else {
         // 处理小文件: 直接使用内存缓冲区
         let mut buffer = Vec::with_capacity(initial_capacity);

@@ -14,7 +14,6 @@ use std::{
     net::{Ipv4Addr, SocketAddrV4},
 };
 
-mod dicom_file_handler;
 mod store_async;
 mod store_sync;
 mod transfer;

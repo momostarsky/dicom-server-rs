@@ -1,11 +1,11 @@
 use crate::{
-    create_cecho_response, create_cstore_response, dicom_file_handler, transfer::ABSTRACT_SYNTAXES,
+    create_cecho_response, create_cstore_response,   transfer::ABSTRACT_SYNTAXES,
     App,
 };
 use dicom_core::Tag;
 
 use common::message_sender_kafka::KafkaMessagePublisher;
-use common::server_config;
+use common::{dicom_file_handler, server_config};
 use common::utils::get_logger;
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu::{OptionExt, Report, ResultExt, Whatever};
@@ -13,10 +13,9 @@ use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dicom_ul::{pdu::PDataValueType, Pdu};
 use slog::o;
-
-use crate::dicom_file_handler::classify_and_publish_dicom_messages;
 use database::dicom_meta::DicomStoreMeta;
 use slog::{debug, info, warn};
+use common::dicom_file_handler::classify_and_publish_dicom_messages;
 use common::storage_config::StorageConfig;
 
 pub async fn run_store_async(
@@ -252,7 +251,7 @@ pub async fn run_store_async(
                                     }
                                 }
                                 if dicom_message_lists.len() >= 10 {
-                                    match classify_and_publish_dicom_messages(
+                                    match dicom_file_handler::classify_and_publish_dicom_messages(
                                         &dicom_message_lists,
                                         &storage_producer,
                                         &log_producer,

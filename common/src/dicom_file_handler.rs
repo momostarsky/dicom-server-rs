@@ -1,9 +1,4 @@
-
-use common::dicom_utils::{get_bounder_string, get_date_value_dicom, get_tag_value};
-use common::message_sender_kafka::KafkaMessagePublisher;
-use common::storage_config::{hash_uid, StorageConfig};
-use common::utils::get_logger;
-use common::{server_config, storage_config};
+use crate::utils;
 use database::dicom_dbtype::{BoundedString, FixedLengthString};
 use database::dicom_meta::{DicomStoreMeta, TransferStatus};
 use dicom_dictionary_std::tags;
@@ -18,6 +13,12 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use uuid::Uuid;
+use crate::dicom_utils::{get_bounder_string, get_date_value_dicom, get_tag_value};
+use crate::{server_config, storage_config};
+use crate::message_sender_kafka::KafkaMessagePublisher;
+use crate::storage_config::{hash_uid, StorageConfig};
+use crate::utils::get_logger;
+
 static JS_SUPPORTED_TS: LazyLock<HashSet<String>> = LazyLock::new(|| {
     // 在这里初始化，可以从配置文件读取
     // load_config 是INIT_ONCE 封装的, 不会重新加载
@@ -37,7 +38,7 @@ static JS_CHANGE_TO_TS: LazyLock<String> = LazyLock::new(|| {
     config.dicom_store_scp.unsupported_ts_change_to.clone()
 });
 
-pub(crate) async fn process_dicom_file(
+pub async fn process_dicom_file(
     instance_buffer: &[u8],    //DICOM文件的字节数组或是二进制流
     tenant_id: &String,        //机构ID,或是医院ID, 用于区分多个医院.
     ts: &String,               //传输语法
@@ -199,7 +200,7 @@ pub(crate) async fn process_dicom_file(
 /// * `logger` - 日志记录器
 /// * `queue_topic_main` - 主题名称（用于storage_consumer）
 /// * `queue_topic_log` - 主题名称（用于日志提取）
-pub(crate) async fn classify_and_publish_dicom_messages(
+pub async fn classify_and_publish_dicom_messages(
     dicom_message_lists: &Vec<DicomStoreMeta>,
     storage_producer: &KafkaMessagePublisher,
     log_producer: &KafkaMessagePublisher,
@@ -213,7 +214,7 @@ pub(crate) async fn classify_and_publish_dicom_messages(
 
     let topic_name = storage_producer.topic();
 
-    match common::utils::publish_messages(storage_producer, &dicom_message_lists).await {
+    match  utils::publish_messages(storage_producer, &dicom_message_lists).await {
         Ok(_) => {
             info!(
                 logger,
@@ -231,7 +232,7 @@ pub(crate) async fn classify_and_publish_dicom_messages(
     }
 
     let log_topic_name = log_producer.topic();
-    match common::utils::publish_messages(log_producer, &dicom_message_lists).await {
+    match utils::publish_messages(log_producer, &dicom_message_lists).await {
         Ok(_) => {
             info!(
                 logger,
