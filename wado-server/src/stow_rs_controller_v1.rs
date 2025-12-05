@@ -59,11 +59,8 @@ async fn store_instances(
     app_state: web::Data<AppState>,
     payload: web::Payload,
 ) -> Result<HttpResponse> {
-    let log = app_state.log.clone();
-    info!(log, "Received POST request on /studies");
-
     // 处理请求并保存实例
-    process_and_store_instances(req, payload, log, None).await
+    process_and_store_instances(req, payload, app_state, None).await
 }
 
 /// 处理 /studies/{study_instance_uid} 端点的 POST 请求
@@ -94,15 +91,9 @@ async fn store_instances_to_study(
     path: web::Path<String>, // 获取 study_instance_uid
     payload: web::Payload,
 ) -> Result<HttpResponse> {
-    let log = app_state.log.clone();
     let study_instance_uid = path.into_inner(); // 提取路径参数
-    info!(
-        log,
-        "Received POST request on /studies/{}", study_instance_uid
-    );
-
     // 处理请求并保存实例到指定study
-    process_and_store_instances(req, payload, log, Some(study_instance_uid)).await
+    process_and_store_instances(req, payload, app_state, Some(study_instance_uid)).await
 }
 
 /// 解析 Content-Type 中的 boundary 信息
@@ -150,15 +141,26 @@ async fn parse_boundary_info(
 
 /// 处理并存储 DICOM 实例的主逻辑
 /// 处理并存储 DICOM 实例的主逻辑
- /// 处理并存储 DICOM 实例的主逻辑
+/// 处理并存储 DICOM 实例的主逻辑
 async fn process_and_store_instances(
     req: HttpRequest,
     mut payload: web::Payload,
-    log: slog::Logger,
+    app_state: web::Data<AppState>,
     study_instance_uid: Option<String>,
 ) -> Result<HttpResponse> {
     // 记录开始时间
     let start_time = std::time::Instant::now();
+    let log = app_state.log.clone();
+    // 使用 as_ref() 获取引用而不是消耗值
+    if let Some(uid) = &study_instance_uid {
+        info!(
+            log,
+            "Received POST request on /studies/{}", uid
+        );
+    } else {
+        // 处理并保存实例
+        info!(log, "Received POST request on /studies");
+    }
 
     // 解析 boundary 信息
     let boundary = match parse_boundary_info(&req, &log).await {
@@ -286,7 +288,9 @@ async fn process_and_store_instances(
 
             // 在 mmap 作用域内处理 multipart 字段
             let mut multipart = Multipart::with_reader(&mmap[..], boundary.as_str());
-            if let Err(err) = process_multipart_fields(&mut multipart, &log, &study_instance_uid).await {
+            if let Err(err) =
+                process_multipart_fields(&mut multipart, &app_state, &study_instance_uid).await
+            {
                 // mmap 会在作用域结束时自动释放
                 if let Err(e) = std::fs::remove_file(&temp_file_path) {
                     warn!(
@@ -322,7 +326,9 @@ async fn process_and_store_instances(
         }
 
         let mut multipart = Multipart::with_reader(buffer.as_slice(), boundary.as_str());
-        if let Err(err) = process_multipart_fields(&mut multipart, &log, &study_instance_uid).await {
+        if let Err(err) =
+            process_multipart_fields(&mut multipart, &app_state, &study_instance_uid ).await
+        {
             return Ok(err);
         }
     }
@@ -331,7 +337,7 @@ async fn process_and_store_instances(
     let duration = start_time.elapsed();
 
     // 构造响应
-    if let Some(uid) = study_instance_uid {
+    if let Some(uid) = study_instance_uid  {
         info!(
             log,
             "STOW-RS request for study {} processed successfully (simplified)", uid;
@@ -353,16 +359,14 @@ async fn process_and_store_instances(
         .body("<NativeDicomModel><Message><Status>Success</Status></Message></NativeDicomModel>"))
 }
 
-
-
-
 // 抽离处理 multipart 字段的逻辑
 // 抽离处理 multipart 字段的逻辑
 async fn process_multipart_fields(
     multipart: &mut Multipart<'_>,
-    log: &slog::Logger,
+    app_state: &web::Data<AppState>,
     study_instance_uid: &Option<String>,
 ) -> Result<(), HttpResponse> {
+    let log = &app_state.log;
     loop {
         match multipart.next_field().await {
             Ok(Some(mut field)) => {
