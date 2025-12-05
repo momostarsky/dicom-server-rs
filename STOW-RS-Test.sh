@@ -31,8 +31,9 @@ CONTENT_LENGTH=$(wc -c < "$TEMP_FILE" | tr -d ' ')
 
 # 10. 使用单个 --data-binary 发送合并后的临时文件
 curl -X POST http://localhost:9000/stow-rs/v1/studies \
-     -H "Content-Type: multipart/related; boundary=$BOUNDARY; type=application/dicom+json" \
+     -H "Content-Type: multipart/related; boundary=$BOUNDARY; type=application/dicom" \
      -H "Accept: application/json" \
+     -H "x-tenant: 1234567890" \
      -H "Content-Length: $CONTENT_LENGTH" \
      --data-binary @"$TEMP_FILE"
 

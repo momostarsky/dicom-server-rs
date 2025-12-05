@@ -62,6 +62,7 @@ echo "Total content length: $CONTENT_LENGTH bytes"
 curl -X POST http://localhost:9000/stow-rs/v1/studies \
      -H "Content-Type: multipart/related; boundary=$BOUNDARY; type=application/dicom" \
      -H "Accept: application/json" \
+     -H "x-tenant: 1234567890" \
      -H "Content-Length: $CONTENT_LENGTH" \
      --data-binary @"$TEMP_FILE"
 

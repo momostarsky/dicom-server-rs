@@ -4,9 +4,11 @@ use futures_util::StreamExt as _;
 // use dicom_object::open_file; // 如果需要解析 DICOM，取消注释
 use crate::AppState;
 use crate::constants::STOW_RS_TAG;
+use dicom_dictionary_std::tags;
+use dicom_object::DefaultDicomObject;
+use futures_util::io::Cursor;
 use multer::Multipart;
 use slog::{error, info, warn};
-use std::io::Write;
 
 fn parse_multipart_related_content_type(
     content_type: &str,
@@ -59,6 +61,7 @@ async fn store_instances(
     app_state: web::Data<AppState>,
     payload: web::Payload,
 ) -> Result<HttpResponse> {
+    // TODO: 获取请求头的Content-Length 和 x-tenant 没有这两个参数则返回HTTP 请求格式不对的错误
     // 处理请求并保存实例
     process_and_store_instances(req, payload, app_state, None).await
 }
@@ -140,8 +143,6 @@ async fn parse_boundary_info(
 }
 
 /// 处理并存储 DICOM 实例的主逻辑
-/// 处理并存储 DICOM 实例的主逻辑
-/// 处理并存储 DICOM 实例的主逻辑
 async fn process_and_store_instances(
     req: HttpRequest,
     mut payload: web::Payload,
@@ -159,10 +160,19 @@ async fn process_and_store_instances(
         info!(log, "Received POST request on /studies");
     }
 
-    // 解析 boundary 信息
-    let boundary = match parse_boundary_info(&req, &log).await {
-        Ok(boundary) => boundary,
-        Err(response) => return Ok(response),
+    // 获取并验证 x-tenant 头
+    let tenant_id = match req.headers().get("x-tenant") {
+        Some(header_value) => match header_value.to_str() {
+            Ok(value) => value.to_string(),
+            Err(_) => {
+                error!(log, "Failed to convert x-tenant header to string");
+                return Ok(HttpResponse::BadRequest().body("Malformed x-tenant header"));
+            }
+        },
+        None => {
+            error!(log, "Missing x-tenant header");
+            return Ok(HttpResponse::BadRequest().body("x-tenant header is required"));
+        }
     };
 
     // 修改为必须存在的 Content-Length
@@ -190,7 +200,11 @@ async fn process_and_store_instances(
             return Ok(HttpResponse::BadRequest().body("Content-Length header is required"));
         }
     };
-
+    // 解析 boundary 信息
+    let boundary = match parse_boundary_info(&req, &log).await {
+        Ok(boundary) => boundary,
+        Err(response) => return Ok(response),
+    };
     // 根据 Content-Length 动态设置容量
     let initial_capacity = if content_length > 0 && content_length < 50 * 1024 * 1024 {
         // 使用实际长度的 1.2 倍作为容量，但不超过 10MB
@@ -285,8 +299,13 @@ async fn process_and_store_instances(
 
             // 在 mmap 作用域内处理 multipart 字段
             let mut multipart = Multipart::with_reader(&mmap[..], boundary.as_str());
-            if let Err(err) =
-                process_multipart_fields(&mut multipart, &app_state, &study_instance_uid).await
+            if let Err(err) = process_multipart_fields(
+                &mut multipart,
+                &app_state,
+                &study_instance_uid,
+                &tenant_id,
+            )
+            .await
             {
                 // mmap 会在作用域结束时自动释放
                 if let Err(e) = std::fs::remove_file(&temp_file_path) {
@@ -324,7 +343,8 @@ async fn process_and_store_instances(
 
         let mut multipart = Multipart::with_reader(buffer.as_slice(), boundary.as_str());
         if let Err(err) =
-            process_multipart_fields(&mut multipart, &app_state, &study_instance_uid).await
+            process_multipart_fields(&mut multipart, &app_state, &study_instance_uid, &tenant_id)
+                .await
         {
             return Ok(err);
         }
@@ -357,13 +377,14 @@ async fn process_and_store_instances(
 }
 
 // 抽离处理 multipart 字段的逻辑
-// 抽离处理 multipart 字段的逻辑
 async fn process_multipart_fields(
     multipart: &mut Multipart<'_>,
     app_state: &web::Data<AppState>,
     study_instance_uid: &Option<String>,
+    tenant_id: &String,
 ) -> Result<(), HttpResponse> {
     let log = &app_state.log;
+    let dcmstoreage = &app_state.config.local_storage.dicm_store_path;
     loop {
         match multipart.next_field().await {
             Ok(Some(mut field)) => {
@@ -397,14 +418,6 @@ async fn process_multipart_fields(
                 loop {
                     match field.chunk().await {
                         Ok(Some(field_chunk)) => {
-                            // 保存 DICOM 文件
-                            let filename = uuid::Uuid::new_v4().to_string();
-                            let filepath = if let Some(uid) = study_instance_uid {
-                                format!("./{}_{}.dcm", uid, filename)
-                            } else {
-                                format!("./{}.dcm", filename)
-                            };
-
                             let end_position = field_chunk.len();
                             // 在主逻辑中使用
                             let start_position = match validate_and_find_start_position(
@@ -415,35 +428,63 @@ async fn process_multipart_fields(
                                 Ok(pos) => pos,
                                 Err(response) => return Err(response),
                             };
-
-                            match std::fs::File::create(&filepath) {
-                                Ok(mut file) => {
-                                    info!(
+                            field_bytes_len += field_chunk.len();
+                            // 使用 std::io::Cursor 包装字节流，使其实现 Read trait
+                            let cursor = Cursor::new(&field_chunk[start_position..end_position]);
+                            // 使用 DicomObject::read_from() 从实现了 Read trait 的源加载对象
+                            let loaded_object =
+                                match DefaultDicomObject::from_reader(cursor.into_inner()) {
+                                    Ok(obj) => Some(obj),
+                                    Err(_e) => None,
+                                };
+                            if loaded_object.is_none() {
+                                continue;
+                            }
+                            let loaded_object = loaded_object.unwrap();
+                            let tag_study_uid = loaded_object
+                                .get(tags::STUDY_INSTANCE_UID)
+                                .unwrap()
+                                .to_str()
+                                .unwrap();
+                            if let Some(expected_uid) = study_instance_uid {
+                                if expected_uid.as_str() != tag_study_uid {
+                                    warn!(
                                         log,
-                                        "Saving DICOM file to: {} , with length:{}",
-                                        filepath,
-                                        field_chunk.len()
+                                        "Study instance UID mismatch, excepted: {} and actual :{}",
+                                        expected_uid,
+                                        tag_study_uid
                                     );
-                                    if let Err(e) =
-                                        file.write_all(&field_chunk[start_position..end_position])
-                                    {
-                                        error!(
-                                            log,
-                                            "Failed to write DICOM file {}: {}", filepath, e
-                                        );
-                                        return Err(HttpResponse::InternalServerError()
-                                            .body("Failed to save DICOM file"));
-                                    }
-                                    info!(log, "Saved DICOM file to: {}", filepath);
-                                }
-                                Err(e) => {
-                                    error!(log, "Failed to create file {}: {}", filepath, e);
-                                    return Err(HttpResponse::InternalServerError()
-                                        .body("Failed to create storage file"));
                                 }
                             }
+                            let sop_inst_uid = loaded_object
+                                .get(tags::SOP_INSTANCE_UID)
+                                .unwrap()
+                                .to_str()
+                                .unwrap();
+                            let seris_instance_uid = loaded_object
+                                .get(tags::SERIES_INSTANCE_UID)
+                                .unwrap()
+                                .to_str()
+                                .unwrap();
 
-                            field_bytes_len += field_chunk.len();
+                            let dir_path = format!(
+                                "{}/{}/{}/{}",
+                                &dcmstoreage, &tenant_id, &tag_study_uid, &seris_instance_uid
+                            );
+                            if !std::path::Path::new(&dir_path).exists() {
+                                std::fs::create_dir_all(&dir_path).unwrap();
+                            }
+                            let filepath = format!("{}/{}.dcm", &dir_path, &sop_inst_uid);
+                            match loaded_object.write_to_file(&filepath) {
+                                Ok(_) => {
+                                    info!(log, "Saved DICOM file to {}", &filepath);
+                                }
+                                Err(e) => {
+                                    error!(log, "Failed to save DICOM file: {}", e);
+                                    // return Err(HttpResponse::InternalServerError()
+                                    //     .body("Failed to save DICOM file"));
+                                }
+                            }
                         }
                         Ok(None) => break, // 没有更多数据块了
                         Err(e) => {
