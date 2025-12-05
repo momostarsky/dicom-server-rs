@@ -6436,6 +6436,7 @@ dependencies = [
  "jsonpath_lib",
  "jsonwebtoken",
  "log",
+ "memchr",
  "mime",
  "multer",
  "openssl",

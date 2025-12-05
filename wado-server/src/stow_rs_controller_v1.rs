@@ -1,3 +1,4 @@
+use utoipa::Number;
 use actix_web::{HttpRequest, HttpResponse, Result, http::header, post, web};
 
 use futures_util::StreamExt as _;
@@ -40,6 +41,8 @@ fn parse_multipart_related_content_type(
     params(
         ("x-tenant" = String, Header, description = "Tenant ID from request header"),
         ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom  or application/json"),
+        ("Content-Type" =  String, Header, example="multipart/related; boundary=6c17d7b275f94d93f0b2a8c3d9xj; type=application/dicom+json", description = "Accept Content Type: application/dicom  or application/json"),
+        ("Content-Length" = Option<u32>, Header, example="5120000", description = "Content Length of the request body"),
         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
     responses(
@@ -71,6 +74,8 @@ async fn store_instances(
     params(
         ("study_instance_uid" = String, Path, description = "Study Instance UID"),
         ("x-tenant" = String, Header, description = "Tenant ID from request header"),
+        ("Content-Type" =  String, Header, example="multipart/related; boundary=6c17d7b275f94d93f0b2a8c3d9xj; type=application/dicom+json", description = "Accept Content Type: application/dicom  or application/json"),
+        ("Content-Length" = Option<u32>, Header, example="5120000", description = "Content Length of the request body"),
         ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom+json or application/json"),
         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
@@ -210,8 +215,8 @@ async fn process_and_store_instances(
                     field_content_type
                 );
 
-                if !(field_content_type == "application/json"
-                    || field_content_type == "application/dicom")
+                if !(  field_content_type == "application/json"
+                    || field_content_type == "application/dicom" )
                 {
                     error!(
                         log,
@@ -324,28 +329,43 @@ fn validate_and_find_start_position(
     field_chunk: &[u8],
     end_position: usize,
 ) -> Result<usize, HttpResponse> {
+    // 此为非必须得.用于兼容一些特殊格式 例如采用以下curl 请求会多余一个& 符号
+    /*
+    curl -X POST http://localhost:9000/stow-rs/v1/studies \
+         -H "Content-Type: multipart/related; boundary=DICOM_BOUNDARY; type=application/json" \
+         -H "Accept: application/json" \
+         --data-binary $'--DICOM_BOUNDARY\r\nContent-Type: application/json\r\n\r\n' \
+         --data-binary @metadata.json \
+         --data-binary $'\r\n--DICOM_BOUNDARY\r\nContent-Type: application/dicom\r\n\r\n' \
+         --data-binary @dcm1.dcm \
+         --data-binary $'\r\n--DICOM_BOUNDARY\r\nContent-Type: application/dicom\r\n\r\n' \
+         --data-binary @dcm2.dcm \
+         --data-binary $'\r\n--DICOM_BOUNDARY\r\nContent-Type: application/dicom\r\n\r\n' \
+         --data-binary @dcm3.dcm \
+         --data-binary $'\r\n--DICOM_BOUNDARY--\r\n'
+     */
+    let a = field_chunk[0] == b'&' && field_chunk[end_position - 1] == b'&';
+    let b = field_chunk[0] == b'$' && field_chunk[end_position - 2] == b'$';
+    let c = field_chunk[0] == b'!' && field_chunk[end_position - 2] == b'!';
+
     match field_content_type {
         "application/dicom" => {
             // 检查标准DICOM文件（DICM在128字节偏移处）
             if field_chunk.len() >= 132 && &field_chunk[128..132] == b"DICM" {
                 Ok(0)
-            } else if field_chunk.len() >= 133
-                && field_chunk[0] == b'&'
-                && field_chunk[end_position - 1] == b'&'
-                && &field_chunk[129..133] == b"DICM"
+            } else if field_chunk.len() >= 133 && (a || b || c) && &field_chunk[129..133] == b"DICM"
             {
                 Ok(1)
             } else {
                 Err(HttpResponse::BadRequest().body("Invalid DICOM data"))
             }
         }
-        "application/json" => { 
+        "application/json" => {
             // 验证JSON数据
             if serde_json::from_slice::<serde_json::Value>(&field_chunk).is_ok() {
                 Ok(0)
             } else if field_chunk.len() >= 2
-                && field_chunk[0] == b'&'
-                && field_chunk[end_position - 1] == b'&'
+                && (a || b || c)
                 && serde_json::from_slice::<serde_json::Value>(&field_chunk[1..end_position - 1])
                     .is_ok()
             {
