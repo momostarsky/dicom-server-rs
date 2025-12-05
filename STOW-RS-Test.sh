@@ -5,15 +5,7 @@ TEMP_FILE="multipart_request.tmp"
 
 # 1. 写入 JSON 数据的分隔符和头部
 printf -- "--%s\r\n" "$BOUNDARY" > "$TEMP_FILE"
-printf -- "Content-Type: application/json\r\n\r\n" >> "$TEMP_FILE"
-
-# 2. 附加 metadata.json 的内容
-cat metadata.json >> "$TEMP_FILE"
-
-# 3. 写入第一个 DICOM 文件的分隔符和头部
-printf -- "\r\n--%s\r\n" "$BOUNDARY" >> "$TEMP_FILE"
 printf -- "Content-Type: application/dicom\r\n\r\n" >> "$TEMP_FILE"
-
 # 4. 附加 dcm1.dcm 的内容
 cat dcm1.dcm >> "$TEMP_FILE"
 

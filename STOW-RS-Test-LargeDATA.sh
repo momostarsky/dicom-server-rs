@@ -27,22 +27,21 @@ fi
 
 echo "Found ${#DICOM_FILES[@]} DICOM files"
 
-# 1. 写入 JSON 数据的分隔符和头部
-printf -- "--%s\r\n" "$BOUNDARY" > "$TEMP_FILE"
-printf -- "Content-Type: application/json\r\n\r\n" >> "$TEMP_FILE"
+# 1. 初始化文件（不包含JSON部分）
+> "$TEMP_FILE"
 
-# 2. 创建基本的metadata.json内容（简化版）
-printf -- "{\n" >> "$TEMP_FILE"
-printf -- "  \"TransactionUID\": \"%s\",\n" "$(uuidgen)" >> "$TEMP_FILE"
-printf -- "  \"Description\": \"Batch upload of %d DICOM files\"\n" ${#DICOM_FILES[@]} >> "$TEMP_FILE"
-printf -- "}\n" >> "$TEMP_FILE"
-
-# 3. 循环处理所有DICOM文件
+# 2. 循环处理所有DICOM文件（第一个文件不需要前置分隔符）
 for i in "${!DICOM_FILES[@]}"; do
     dicom_file="${DICOM_FILES[$i]}"
 
-    # 写入当前 DICOM 文件的分隔符和头部
-    printf -- "\r\n--%s\r\n" "$BOUNDARY" >> "$TEMP_FILE"
+    # 除了第一个文件，其他文件都需要前置分隔符
+    if [ $i -gt 0 ]; then
+        printf -- "\r\n--%s\r\n" "$BOUNDARY" >> "$TEMP_FILE"
+    else
+        # 第一个文件需要起始分隔符
+        printf -- "--%s\r\n" "$BOUNDARY" >> "$TEMP_FILE"
+    fi
+
     printf -- "Content-Type: application/dicom\r\n\r\n" >> "$TEMP_FILE"
 
     # 附加 DICOM 文件的内容
@@ -51,22 +50,22 @@ for i in "${!DICOM_FILES[@]}"; do
     echo "Added file: $(basename "$dicom_file")"
 done
 
-# 4. 写入请求体的结束分隔符
+# 3. 写入请求体的结束分隔符
 printf -- "\r\n--%s--\r\n" "$BOUNDARY" >> "$TEMP_FILE"
 
-# 5. 计算文件大小
+# 4. 计算文件大小
 CONTENT_LENGTH=$(wc -c < "$TEMP_FILE" | tr -d ' ')
 
 echo "Total content length: $CONTENT_LENGTH bytes"
 
-# 6. 发送请求
+# 5. 发送请求
 curl -X POST http://localhost:9000/stow-rs/v1/studies \
-     -H "Content-Type: multipart/related; boundary=$BOUNDARY; type=application/dicom+json" \
+     -H "Content-Type: multipart/related; boundary=$BOUNDARY; type=application/dicom" \
      -H "Accept: application/json" \
      -H "Content-Length: $CONTENT_LENGTH" \
      --data-binary @"$TEMP_FILE"
 
-# 7. 清理临时文件
+# 6. 清理临时文件
 rm "$TEMP_FILE"
 
 echo "Upload completed"

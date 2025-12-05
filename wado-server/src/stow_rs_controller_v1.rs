@@ -39,8 +39,8 @@ fn parse_multipart_related_content_type(
     post,
     params(
         ("x-tenant" = String, Header, description = "Tenant ID from request header"),
-        ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom  or application/json"),
-        ("Content-Type" =  String, Header, example="multipart/related; boundary=6c17d7b275f94d93f0b2a8c3d9xj; type=application/dicom+json", description = "Accept Content Type: application/dicom  or application/json"),
+        ("Accept" =  String, Header, example="application/dicom", description = "Accept Content Type: application/dicom"),
+        ("Content-Type" =  String, Header, example="multipart/related; boundary=6c17d7b275f94d93f0b2a8c3d9xj; type=application/dicom", description = "Accept Content Type: application/dicom"),
         ("Content-Length" =  u32, Header, example="5120000", description = "Content Length of the request body"),
         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
@@ -70,9 +70,9 @@ async fn store_instances(
     params(
         ("study_instance_uid" = String, Path, description = "Study Instance UID"),
         ("x-tenant" = String, Header, description = "Tenant ID from request header"),
-        ("Content-Type" =  String, Header, example="multipart/related; boundary=6c17d7b275f94d93f0b2a8c3d9xj; type=application/dicom+json", description = "Accept Content Type: application/dicom  or application/json"),
+        ("Content-Type" =  String, Header, example="multipart/related; boundary=6c17d7b275f94d93f0b2a8c3d9xj; type=application/dicom", description = "Accept Content Type: application/dicom"),
         ("Content-Length" = u32, Header, example="5120000", description = "Content Length of the request body"),
-        ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom+json or application/json"),
+        ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom"),
         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
     responses(
@@ -153,10 +153,7 @@ async fn process_and_store_instances(
     let log = app_state.log.clone();
     // 使用 as_ref() 获取引用而不是消耗值
     if let Some(uid) = &study_instance_uid {
-        info!(
-            log,
-            "Received POST request on /studies/{}", uid
-        );
+        info!(log, "Received POST request on /studies/{}", uid);
     } else {
         // 处理并保存实例
         info!(log, "Received POST request on /studies");
@@ -327,7 +324,7 @@ async fn process_and_store_instances(
 
         let mut multipart = Multipart::with_reader(buffer.as_slice(), boundary.as_str());
         if let Err(err) =
-            process_multipart_fields(&mut multipart, &app_state, &study_instance_uid ).await
+            process_multipart_fields(&mut multipart, &app_state, &study_instance_uid).await
         {
             return Ok(err);
         }
@@ -337,7 +334,7 @@ async fn process_and_store_instances(
     let duration = start_time.elapsed();
 
     // 构造响应
-    if let Some(uid) = study_instance_uid  {
+    if let Some(uid) = study_instance_uid {
         info!(
             log,
             "STOW-RS request for study {} processed successfully (simplified)", uid;
@@ -386,12 +383,10 @@ async fn process_multipart_fields(
                     field_content_type
                 );
 
-                if !(field_content_type == "application/json"
-                    || field_content_type == "application/dicom")
-                {
+                if field_content_type != "application/dicom" {
                     error!(
                         log,
-                        "Unsupported field content type: {}, only application/json and application/dicom are supported",
+                        "Unsupported field content type: {}, only  application/dicom is supported",
                         field_content_type
                     );
                     return Err(HttpResponse::BadRequest()
@@ -404,20 +399,12 @@ async fn process_multipart_fields(
                         Ok(Some(field_chunk)) => {
                             // 保存 DICOM 文件
                             let filename = uuid::Uuid::new_v4().to_string();
-                            let filepath = if field_content_type == "application/dicom" {
-                                if let Some(uid) = study_instance_uid {
-                                    format!("./{}_{}.dcm", uid, filename)
-                                } else {
-                                    format!("./{}.dcm", filename)
-                                }
+                            let filepath = if let Some(uid) = study_instance_uid {
+                                format!("./{}_{}.dcm", uid, filename)
                             } else {
-                                // application/json 类型
-                                if let Some(uid) = study_instance_uid {
-                                    format!("./{}_{}.json", uid, filename)
-                                } else {
-                                    format!("./{}.json", filename)
-                                }
+                                format!("./{}.dcm", filename)
                             };
+
                             let end_position = field_chunk.len();
                             // 在主逻辑中使用
                             let start_position = match validate_and_find_start_position(
@@ -490,11 +477,9 @@ fn validate_and_find_start_position(
     // 此为非必须得.用于兼容一些特殊格式 例如采用以下curl 请求会多余一个& 符号
     /*
     curl -X POST http://localhost:9000/stow-rs/v1/studies \
-         -H "Content-Type: multipart/related; boundary=DICOM_BOUNDARY; type=application/json" \
+         -H "Content-Type: multipart/related; boundary=DICOM_BOUNDARY; type=application/dicom" \
          -H "Accept: application/json" \
-         --data-binary $'--DICOM_BOUNDARY\r\nContent-Type: application/json\r\n\r\n' \
-         --data-binary @metadata.json \
-         --data-binary $'\r\n--DICOM_BOUNDARY\r\nContent-Type: application/dicom\r\n\r\n' \
+         --data-binary $'--DICOM_BOUNDARY\r\nContent-Type: application/dicom\r\n\r\n' \
          --data-binary @dcm1.dcm \
          --data-binary $'\r\n--DICOM_BOUNDARY\r\nContent-Type: application/dicom\r\n\r\n' \
          --data-binary @dcm2.dcm \
@@ -518,20 +503,7 @@ fn validate_and_find_start_position(
                 Err(HttpResponse::BadRequest().body("Invalid DICOM data"))
             }
         }
-        "application/json" => {
-            // 验证JSON数据
-            if serde_json::from_slice::<serde_json::Value>(&field_chunk).is_ok() {
-                Ok(0)
-            } else if field_chunk.len() >= 2
-                && (a || b || c)
-                && serde_json::from_slice::<serde_json::Value>(&field_chunk[1..end_position - 1])
-                    .is_ok()
-            {
-                Ok(1)
-            } else {
-                Err(HttpResponse::BadRequest().body("Invalid JSON data"))
-            }
-        }
+
         _ => Ok(0),
     }
 }
