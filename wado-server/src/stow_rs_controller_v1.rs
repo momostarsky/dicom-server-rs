@@ -487,16 +487,20 @@ fn validate_and_find_start_position(
          --data-binary @dcm3.dcm \
          --data-binary $'\r\n--DICOM_BOUNDARY--\r\n'
      */
-    let a = field_chunk[0] == b'&' && field_chunk[end_position - 1] == b'&';
-    let b = field_chunk[0] == b'$' && field_chunk[end_position - 2] == b'$';
-    let c = field_chunk[0] == b'!' && field_chunk[end_position - 2] == b'!';
+    // 检查是否是特殊格式（首尾有相同特殊字符）
+    let has_special_wrapper = field_chunk.len() >= 2
+        && ((field_chunk[0] == b'&' && field_chunk[end_position - 1] == b'&')
+            || (field_chunk[0] == b'$' && field_chunk[end_position - 1] == b'$')
+            || (field_chunk[0] == b'!' && field_chunk[end_position - 1] == b'!'));
 
     match field_content_type {
         "application/dicom" => {
             // 检查标准DICOM文件（DICM在128字节偏移处）
             if field_chunk.len() >= 132 && &field_chunk[128..132] == b"DICM" {
                 Ok(0)
-            } else if field_chunk.len() >= 133 && (a || b || c) && &field_chunk[129..133] == b"DICM"
+            } else if field_chunk.len() >= 133
+                && has_special_wrapper
+                && &field_chunk[129..133] == b"DICM"
             {
                 Ok(1)
             } else {
