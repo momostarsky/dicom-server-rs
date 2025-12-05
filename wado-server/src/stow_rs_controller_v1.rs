@@ -150,12 +150,16 @@ async fn parse_boundary_info(
 
 /// 处理并存储 DICOM 实例的主逻辑
 /// 处理并存储 DICOM 实例的主逻辑
+ /// 处理并存储 DICOM 实例的主逻辑
 async fn process_and_store_instances(
     req: HttpRequest,
     mut payload: web::Payload,
     log: slog::Logger,
     study_instance_uid: Option<String>,
 ) -> Result<HttpResponse> {
+    // 记录开始时间
+    let start_time = std::time::Instant::now();
+
     // 解析 boundary 信息
     let boundary = match parse_boundary_info(&req, &log).await {
         Ok(boundary) => boundary,
@@ -323,19 +327,32 @@ async fn process_and_store_instances(
         }
     }
 
+    // 计算执行时间
+    let duration = start_time.elapsed();
+
     // 构造响应
     if let Some(uid) = study_instance_uid {
         info!(
             log,
-            "STOW-RS request for study {} processed successfully (simplified)", uid
+            "STOW-RS request for study {} processed successfully (simplified)", uid;
+            "execution_time_ms" => duration.as_millis(),
+            "content_length" => content_length,
+            "use_memory_mapping" => use_memory_mapping
         );
     } else {
-        info!(log, "STOW-RS request processed successfully (simplified)");
+        info!(
+            log,
+            "STOW-RS request processed successfully (simplified)";
+            "execution_time_ms" => duration.as_millis(),
+            "content_length" => content_length,
+            "use_memory_mapping" => use_memory_mapping
+        );
     }
 
     Ok(HttpResponse::Ok()
         .body("<NativeDicomModel><Message><Status>Success</Status></Message></NativeDicomModel>"))
 }
+
 
 
 
