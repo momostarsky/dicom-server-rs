@@ -10,6 +10,7 @@ use memchr::memmem;
 ///
 /// # 返回
 /// 一个 Vec<&[u8]>，包含分割后的所有数据块的切片。
+#[allow(dead_code)]
 fn split_multipart_data<'a>(data: &'a [u8], delimiter: &[u8]) -> Vec<&'a [u8]> {
     let mut result = Vec::new();
     let mut current_start = 0;

@@ -1,4 +1,3 @@
-use utoipa::Number;
 use actix_web::{HttpRequest, HttpResponse, Result, http::header, post, web};
 
 use futures_util::StreamExt as _;
@@ -42,7 +41,7 @@ fn parse_multipart_related_content_type(
         ("x-tenant" = String, Header, description = "Tenant ID from request header"),
         ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom  or application/json"),
         ("Content-Type" =  String, Header, example="multipart/related; boundary=6c17d7b275f94d93f0b2a8c3d9xj; type=application/dicom+json", description = "Accept Content Type: application/dicom  or application/json"),
-        ("Content-Length" = Option<u32>, Header, example="5120000", description = "Content Length of the request body"),
+        ("Content-Length" =  u32, Header, example="5120000", description = "Content Length of the request body"),
         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
     responses(
@@ -75,7 +74,7 @@ async fn store_instances(
         ("study_instance_uid" = String, Path, description = "Study Instance UID"),
         ("x-tenant" = String, Header, description = "Tenant ID from request header"),
         ("Content-Type" =  String, Header, example="multipart/related; boundary=6c17d7b275f94d93f0b2a8c3d9xj; type=application/dicom+json", description = "Accept Content Type: application/dicom  or application/json"),
-        ("Content-Length" = Option<u32>, Header, example="5120000", description = "Content Length of the request body"),
+        ("Content-Length" = u32, Header, example="5120000", description = "Content Length of the request body"),
         ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom+json or application/json"),
         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
@@ -150,6 +149,7 @@ async fn parse_boundary_info(
 }
 
 /// 处理并存储 DICOM 实例的主逻辑
+/// 处理并存储 DICOM 实例的主逻辑
 async fn process_and_store_instances(
     req: HttpRequest,
     mut payload: web::Payload,
@@ -162,40 +162,190 @@ async fn process_and_store_instances(
         Err(response) => return Ok(response),
     };
 
-    let content_length = req
-        .headers()
-        .get(header::CONTENT_LENGTH)
-        .and_then(|hv| hv.to_str().ok())
-        .and_then(|s| s.parse::<usize>().ok());
-
-    // 根据 Content-Length 动态设置容量
-    let initial_capacity = match content_length {
-        Some(len) if len > 0 && len < 50 * 1024 * 1024 => {
-            // 使用实际长度的 1.2 倍作为容量，但不超过 10MB
-            std::cmp::min((len as f64 * 1.2) as usize, 10 * 1024 * 1024)
+    // 修改为必须存在的 Content-Length
+    let content_length = match req.headers().get(header::CONTENT_LENGTH) {
+        Some(header_value) => match header_value.to_str() {
+            Ok(value_str) => match value_str.parse::<usize>() {
+                Ok(length) => length,
+                Err(_) => {
+                    error!(
+                        log,
+                        "Failed to parse Content-Length header value: {}", value_str
+                    );
+                    return Ok(
+                        HttpResponse::BadRequest().body("Invalid Content-Length header value")
+                    );
+                }
+            },
+            Err(_) => {
+                error!(log, "Failed to convert Content-Length header to string");
+                return Ok(HttpResponse::BadRequest().body("Malformed Content-Length header"));
+            }
+        },
+        None => {
+            error!(log, "Missing required Content-Length header");
+            return Ok(HttpResponse::BadRequest().body("Content-Length header is required"));
         }
-        _ => 512 * 1024, // 默认 512KB
     };
 
-    info!(log, "Initial capacity: {}", initial_capacity);
-    // 收集 multipart 数据到内存缓冲区
-    let mut buffer = Vec::with_capacity(initial_capacity); // 512KB
-    while let Some(chunk) = payload.next().await {
-        match chunk {
-            Ok(data) => {
-                buffer.extend_from_slice(&data);
-            }
+    // 根据 Content-Length 动态设置容量
+    let initial_capacity = if content_length > 0 && content_length < 50 * 1024 * 1024 {
+        // 使用实际长度的 1.2 倍作为容量，但不超过 10MB
+        std::cmp::min((content_length as f64 * 1.2) as usize, 10 * 1024 * 1024)
+    } else {
+        512 * 1024 // 默认 512KB
+    };
+
+    // 策略: 小于10MB使用内存缓冲区，大于等于10MB使用内存映射文件
+    const MEMORY_MAPPING_THRESHOLD: usize = 10 * 1024 * 1024; // 10MB阈值
+    let use_memory_mapping = content_length >= MEMORY_MAPPING_THRESHOLD;
+
+    info!(
+        log,
+        "Content-Length: {}, Initial capacity: {}, Using memory mapping: {}",
+        content_length,
+        initial_capacity,
+        use_memory_mapping
+    );
+
+    if use_memory_mapping {
+        // 处理大文件: 使用内存映射文件
+        let temp_file_path = format!("./temp_multipart_{}.dat", uuid::Uuid::new_v4());
+
+        let file = match std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&temp_file_path)
+        {
+            Ok(f) => f,
             Err(e) => {
-                error!(log, "Error reading payload chunk: {}", e);
-                return Ok(HttpResponse::InternalServerError().body("Error reading data"));
+                error!(
+                    log,
+                    "Failed to create temporary file for memory mapping: {}", e
+                );
+                return Ok(
+                    HttpResponse::InternalServerError().body("Failed to create temporary file")
+                );
             }
+        };
+
+        // 设置文件大小
+        if let Err(e) = file.set_len(content_length as u64) {
+            error!(log, "Failed to set temporary file size: {}", e);
+            let _ = std::fs::remove_file(&temp_file_path); // 尝试清理
+            return Ok(HttpResponse::InternalServerError().body("Failed to set file size"));
+        }
+
+        // 创建内存映射并在作用域内处理
+        {
+            let mmap = match unsafe { memmap2::MmapMut::map_mut(&file) } {
+                Ok(mut mmap) => {
+                    // 读取数据到内存映射区域
+                    let mut position = 0;
+                    while let Some(chunk) = payload.next().await {
+                        match chunk {
+                            Ok(data) => {
+                                if position + data.len() <= mmap.len() {
+                                    mmap[position..position + data.len()].copy_from_slice(&data);
+                                    position += data.len();
+                                } else {
+                                    error!(log, "Payload larger than Content-Length");
+                                    let _ = std::fs::remove_file(&temp_file_path);
+                                    return Ok(HttpResponse::BadRequest()
+                                        .body("Payload larger than Content-Length"));
+                                }
+                            }
+                            Err(e) => {
+                                error!(log, "Error reading payload chunk: {}", e);
+                                let _ = std::fs::remove_file(&temp_file_path);
+                                return Ok(
+                                    HttpResponse::InternalServerError().body("Error reading data")
+                                );
+                            }
+                        }
+                    }
+
+                    // 注意：这里不调用 flush()，因为我们只需要读取数据，不需要持久化到磁盘
+                    mmap.make_read_only()
+                        .unwrap_or_else(|_| unsafe { memmap2::Mmap::map(&file).unwrap() })
+                }
+                Err(e) => {
+                    error!(log, "Failed to create memory mapping: {}", e);
+                    let _ = std::fs::remove_file(&temp_file_path);
+                    return Ok(
+                        HttpResponse::InternalServerError().body("Failed to create memory mapping")
+                    );
+                }
+            };
+
+            // 在 mmap 作用域内处理 multipart 字段
+            let mut multipart = Multipart::with_reader(&mmap[..], boundary.as_str());
+            if let Err(err) = process_multipart_fields(&mut multipart, &log, &study_instance_uid).await {
+                // mmap 会在作用域结束时自动释放
+                if let Err(e) = std::fs::remove_file(&temp_file_path) {
+                    warn!(
+                        log,
+                        "Failed to remove temporary file {}: {}", temp_file_path, e
+                    );
+                }
+                return Ok(err);
+            }
+            // multipart 会在作用域结束时自动释放，然后 mmap 才会被释放
+        } // mmap 的作用域结束，确保在这里释放
+
+        // 处理完成后清理临时文件
+        if let Err(e) = std::fs::remove_file(&temp_file_path) {
+            warn!(
+                log,
+                "Failed to remove temporary file {}: {}", temp_file_path, e
+            );
+        }
+    } else {
+        // 处理小文件: 直接使用内存缓冲区
+        let mut buffer = Vec::with_capacity(initial_capacity);
+        while let Some(chunk) = payload.next().await {
+            match chunk {
+                Ok(data) => {
+                    buffer.extend_from_slice(&data);
+                }
+                Err(e) => {
+                    error!(log, "Error reading payload chunk: {}", e);
+                    return Ok(HttpResponse::InternalServerError().body("Error reading data"));
+                }
+            }
+        }
+
+        let mut multipart = Multipart::with_reader(buffer.as_slice(), boundary.as_str());
+        if let Err(err) = process_multipart_fields(&mut multipart, &log, &study_instance_uid).await {
+            return Ok(err);
         }
     }
 
-    // 使用 multer 处理流
-    let mut multipart = Multipart::with_reader(buffer.as_slice(), boundary.as_str());
+    // 构造响应
+    if let Some(uid) = study_instance_uid {
+        info!(
+            log,
+            "STOW-RS request for study {} processed successfully (simplified)", uid
+        );
+    } else {
+        info!(log, "STOW-RS request processed successfully (simplified)");
+    }
 
-    // 处理 multipart 字段
+    Ok(HttpResponse::Ok()
+        .body("<NativeDicomModel><Message><Status>Success</Status></Message></NativeDicomModel>"))
+}
+
+
+
+// 抽离处理 multipart 字段的逻辑
+// 抽离处理 multipart 字段的逻辑
+async fn process_multipart_fields(
+    multipart: &mut Multipart<'_>,
+    log: &slog::Logger,
+    study_instance_uid: &Option<String>,
+) -> Result<(), HttpResponse> {
     loop {
         match multipart.next_field().await {
             Ok(Some(mut field)) => {
@@ -215,15 +365,15 @@ async fn process_and_store_instances(
                     field_content_type
                 );
 
-                if !(  field_content_type == "application/json"
-                    || field_content_type == "application/dicom" )
+                if !(field_content_type == "application/json"
+                    || field_content_type == "application/dicom")
                 {
                     error!(
                         log,
                         "Unsupported field content type: {}, only application/json and application/dicom are supported",
                         field_content_type
                     );
-                    return Ok(HttpResponse::BadRequest()
+                    return Err(HttpResponse::BadRequest()
                         .body(format!("Unsupported content type: {}", field_content_type)));
                 }
 
@@ -234,14 +384,14 @@ async fn process_and_store_instances(
                             // 保存 DICOM 文件
                             let filename = uuid::Uuid::new_v4().to_string();
                             let filepath = if field_content_type == "application/dicom" {
-                                if let Some(ref uid) = study_instance_uid {
+                                if let Some(uid) = study_instance_uid {
                                     format!("./{}_{}.dcm", uid, filename)
                                 } else {
                                     format!("./{}.dcm", filename)
                                 }
                             } else {
                                 // application/json 类型
-                                if let Some(ref uid) = study_instance_uid {
+                                if let Some(uid) = study_instance_uid {
                                     format!("./{}_{}.json", uid, filename)
                                 } else {
                                     format!("./{}.json", filename)
@@ -255,7 +405,7 @@ async fn process_and_store_instances(
                                 end_position,
                             ) {
                                 Ok(pos) => pos,
-                                Err(response) => return Ok(response),
+                                Err(response) => return Err(response),
                             };
 
                             match std::fs::File::create(&filepath) {
@@ -266,22 +416,21 @@ async fn process_and_store_instances(
                                         filepath,
                                         field_chunk.len()
                                     );
-                                    if let Err(e) = file.write_all(
-                                        &field_chunk
-                                            [start_position..(end_position - start_position)],
-                                    ) {
+                                    if let Err(e) =
+                                        file.write_all(&field_chunk[start_position..end_position])
+                                    {
                                         error!(
                                             log,
                                             "Failed to write DICOM file {}: {}", filepath, e
                                         );
-                                        return Ok(HttpResponse::InternalServerError()
+                                        return Err(HttpResponse::InternalServerError()
                                             .body("Failed to save DICOM file"));
                                     }
                                     info!(log, "Saved DICOM file to: {}", filepath);
                                 }
                                 Err(e) => {
                                     error!(log, "Failed to create file {}: {}", filepath, e);
-                                    return Ok(HttpResponse::InternalServerError()
+                                    return Err(HttpResponse::InternalServerError()
                                         .body("Failed to create storage file"));
                                 }
                             }
@@ -291,7 +440,7 @@ async fn process_and_store_instances(
                         Ok(None) => break, // 没有更多数据块了
                         Err(e) => {
                             error!(log, "Error reading field chunk: {}", e);
-                            return Ok(HttpResponse::BadRequest()
+                            return Err(HttpResponse::BadRequest()
                                 .body(format!("Error reading field data: {}", e)));
                         }
                     }
@@ -302,25 +451,13 @@ async fn process_and_store_instances(
             Ok(None) => break, // 没有更多字段了
             Err(e) => {
                 error!(log, "Error parsing multipart field: {}", e);
-                return Ok(
+                return Err(
                     HttpResponse::BadRequest().body(format!("Error parsing multipart data: {}", e))
                 );
             }
         }
     }
-
-    // 构造响应
-    if let Some(uid) = study_instance_uid {
-        info!(
-            log,
-            "STOW-RS request for study {} processed successfully (simplified)", uid
-        );
-    } else {
-        info!(log, "STOW-RS request processed successfully (simplified)");
-    }
-
-    Ok(HttpResponse::Ok()
-        .body("<NativeDicomModel><Message><Status>Success</Status></Message></NativeDicomModel>"))
+    Ok(())
 }
 
 // 提取验证逻辑到独立函数

@@ -6,7 +6,6 @@ mod constants;
 mod stow_rs_controller_v1;
 mod wado_rs_controller_v1;
 mod wado_rs_models;
-mod payload_split;
 mod payload_helper;
 
 // use crate::wado_rs_controller_v1::{
