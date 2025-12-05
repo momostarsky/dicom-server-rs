@@ -179,7 +179,7 @@ async fn execute_background_json_generation(
                     app_state.log,
                     "Failed to set series metadata generate for study: {}, series: {}: {}",
                     study_uid,
-                    series_uid
+                    series_uid,
                     e
                 )
             }
