@@ -1,5 +1,5 @@
 use crate::dicom_dbprovider::{DbError, DbProvider};
-use crate::dicom_meta::{DicomJsonMeta, DicomStateMeta};
+use crate::dicom_meta::{DicomImageMeta, DicomJsonMeta, DicomStateMeta, DicomStoreMeta};
 use async_trait::async_trait;
 use tokio_postgres::{Client, NoTls};
 #[derive(Debug, Clone)]
@@ -30,11 +30,126 @@ impl PgDbProvider {
 
 #[async_trait]
 impl DbProvider for PgDbProvider {
+    async fn save_store_list(&self, store_meta_list: &[DicomStoreMeta]) -> Result<(), DbError> {
+        if store_meta_list.is_empty() {
+            return Ok(());
+        }
+
+        let mut client = self.make_client().await?;
+        let transaction = client.transaction().await.map_err(|e| {
+            println!("Failed to start transaction: {}", e);
+            DbError::DatabaseError(e.to_string())
+        })?;
+
+        println!(
+            "Starting transaction to save store meta list of length {}",
+            store_meta_list.len()
+        );
+
+        let statement = transaction
+            .prepare(
+                r#"
+            INSERT INTO dicom_object_meta (
+                trace_id,
+                worker_node_id,
+                tenant_id,
+                patient_id,
+                study_uid,
+                series_uid,
+                sop_uid,
+                file_size,
+                file_path,
+                transfer_syntax_uid,
+                number_of_frames,
+                series_uid_hash,
+                study_uid_hash,
+                accession_number,
+                target_ts,
+                study_date,
+                transfer_status,
+                source_ip,
+                source_ae,
+                created_time
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+            )
+            ON CONFLICT (trace_id)
+            DO UPDATE SET
+                worker_node_id = EXCLUDED.worker_node_id,
+                tenant_id = EXCLUDED.tenant_id,
+                patient_id = EXCLUDED.patient_id,
+                study_uid = EXCLUDED.study_uid,
+                series_uid = EXCLUDED.series_uid,
+                sop_uid = EXCLUDED.sop_uid,
+                file_size = EXCLUDED.file_size,
+                file_path = EXCLUDED.file_path,
+                transfer_syntax_uid = EXCLUDED.transfer_syntax_uid,
+                number_of_frames = EXCLUDED.number_of_frames,
+                series_uid_hash = EXCLUDED.series_uid_hash,
+                study_uid_hash = EXCLUDED.study_uid_hash,
+                accession_number = EXCLUDED.accession_number,
+                target_ts = EXCLUDED.target_ts,
+                study_date = EXCLUDED.study_date,
+                transfer_status = EXCLUDED.transfer_status,
+                source_ip = EXCLUDED.source_ip,
+                source_ae = EXCLUDED.source_ae,
+                created_time = EXCLUDED.created_time
+            "#,
+            )
+            .await
+            .map_err(|e| {
+                println!("Error preparing statement: {:?}", e);
+                DbError::DatabaseError(e.to_string())
+            })?;
+
+        for store_meta in store_meta_list {
+            transaction
+                .execute(
+                    &statement,
+                    &[
+                        &store_meta.trace_id,
+                        &store_meta.worker_node_id,
+                        &store_meta.tenant_id,
+                        &store_meta.patient_id,
+                        &store_meta.study_uid,
+                        &store_meta.series_uid,
+                        &store_meta.sop_uid,
+                        &store_meta.file_size,
+                        &store_meta.file_path,
+                        &store_meta.transfer_syntax_uid,
+                        &store_meta.number_of_frames,
+                        &store_meta.series_uid_hash,
+                        &store_meta.study_uid_hash,
+                        &store_meta.accession_number,
+                        &store_meta.target_ts,
+                        &store_meta.study_date,
+                        &store_meta.transfer_status.to_string(),
+                        &store_meta.source_ip,
+                        &store_meta.source_ae,
+                        &store_meta.created_time,
+                    ],
+                )
+                .await
+                .map_err(|e| {
+                    println!("Error executing statement: {:?}", e);
+                    DbError::DatabaseError(e.to_string())
+                })?;
+        }
+
+        transaction.commit().await.map_err(|e| {
+            println!("Error committing transaction: {:?}", e);
+            DbError::DatabaseError(e.to_string())
+        })?;
+
+        Ok(())
+    }
+
     async fn save_state_info(&self, state_meta: &DicomStateMeta) -> Result<(), DbError> {
         let client = self.make_client().await?;
         let statement = client
-                .prepare(
-                    "INSERT INTO dicom_state_meta (
+            .prepare(
+                "INSERT INTO dicom_state_meta (
                        tenant_id,
                        patient_id,
                        study_uid,
@@ -92,9 +207,9 @@ impl DbProvider for PgDbProvider {
                        protocol_name = EXCLUDED.protocol_name,
                        series_related_instances = EXCLUDED.series_related_instances,
                        updated_time = EXCLUDED.updated_time"
-                )
-                .await
-                .map_err(|e| DbError::DatabaseError(e.to_string()))?;
+            )
+            .await
+            .map_err(|e| DbError::DatabaseError(e.to_string()))?;
 
         client
             .execute(
@@ -150,8 +265,8 @@ impl DbProvider for PgDbProvider {
         );
 
         let statement = transaction
-        .prepare(
-            "INSERT INTO dicom_state_meta (
+            .prepare(
+                "INSERT INTO dicom_state_meta (
                 tenant_id,
                 patient_id,
                 study_uid,
@@ -209,12 +324,12 @@ impl DbProvider for PgDbProvider {
                 protocol_name = EXCLUDED.protocol_name,
                 series_related_instances = EXCLUDED.series_related_instances,
                 updated_time = EXCLUDED.updated_time"
-        )
-        .await
-        .map_err(|e| {
-            println!("Error transaction.prepare: {:?}", e);
-            DbError::DatabaseError(e.to_string())
-        })?;
+            )
+            .await
+            .map_err(|e| {
+                println!("Error transaction.prepare: {:?}", e);
+                DbError::DatabaseError(e.to_string())
+            })?;
 
         // 遍历所有 DicomStateMeta 对象并执行插入操作
         for state_meta in state_meta_list {
@@ -268,6 +383,167 @@ impl DbProvider for PgDbProvider {
 
         Ok(())
     }
+    // File: `database/src/dicom_pg.rs`
+    async fn save_image_list(&self, image_meta_list: &[DicomImageMeta]) -> Result<(), DbError> {
+        if image_meta_list.is_empty() {
+            return Ok(());
+        }
+
+        let mut client = self.make_client().await?;
+        let transaction = client.transaction().await.map_err(|e| {
+            println!("Failed to start transaction: {}", e);
+            DbError::DatabaseError(e.to_string())
+        })?;
+
+        println!(
+            "Starting transaction to save image meta list of length {}",
+            image_meta_list.len()
+        );
+
+        let sql_statement = r#"
+    INSERT INTO dicom_image_meta (
+        tenant_id,
+        patient_id,
+        study_uid,
+        series_uid,
+        sop_uid,
+        study_uid_hash,
+        series_uid_hash,
+        content_date,
+        content_time,
+        instance_number,
+        image_type,
+        image_orientation_patient,
+        image_position_patient,
+        slice_thickness,
+        spacing_between_slices,
+        slice_location,
+        samples_per_pixel,
+        photometric_interpretation,
+        width,
+        columns,
+        bits_allocated,
+        bits_stored,
+        high_bit,
+        pixel_representation,
+        rescale_intercept,
+        rescale_slope,
+        rescale_type,
+        window_center,
+        window_width,
+        transfer_syntax_uid,
+        pixel_data_location,
+        thumbnail_location,
+        sop_class_uid,
+        image_status,
+        space_size,
+        created_time,
+        updated_time
+    ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+        $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
+        $31, $32, $33, $34, $35, $36, $37
+    )
+    ON CONFLICT (tenant_id, study_uid, series_uid, sop_uid)
+    DO UPDATE SET
+        patient_id = EXCLUDED.patient_id,
+        study_uid_hash = EXCLUDED.study_uid_hash,
+        series_uid_hash = EXCLUDED.series_uid_hash,
+        content_date = EXCLUDED.content_date,
+        content_time = EXCLUDED.content_time,
+        instance_number = EXCLUDED.instance_number,
+        image_type = EXCLUDED.image_type,
+        image_orientation_patient = EXCLUDED.image_orientation_patient,
+        image_position_patient = EXCLUDED.image_position_patient,
+        slice_thickness = EXCLUDED.slice_thickness,
+        spacing_between_slices = EXCLUDED.spacing_between_slices,
+        slice_location = EXCLUDED.slice_location,
+        samples_per_pixel = EXCLUDED.samples_per_pixel,
+        photometric_interpretation = EXCLUDED.photometric_interpretation,
+        width = EXCLUDED.width,
+        columns = EXCLUDED.columns,
+        bits_allocated = EXCLUDED.bits_allocated,
+        bits_stored = EXCLUDED.bits_stored,
+        high_bit = EXCLUDED.high_bit,
+        pixel_representation = EXCLUDED.pixel_representation,
+        rescale_intercept = EXCLUDED.rescale_intercept,
+        rescale_slope = EXCLUDED.rescale_slope,
+        rescale_type = EXCLUDED.rescale_type,
+        window_center = EXCLUDED.window_center,
+        window_width = EXCLUDED.window_width,
+        transfer_syntax_uid = EXCLUDED.transfer_syntax_uid,
+        pixel_data_location = EXCLUDED.pixel_data_location,
+        thumbnail_location = EXCLUDED.thumbnail_location,
+        sop_class_uid = EXCLUDED.sop_class_uid,
+        image_status = EXCLUDED.image_status,
+        space_size = EXCLUDED.space_size,
+        updated_time = EXCLUDED.updated_time
+    "#;
+
+        let statement = transaction.prepare(sql_statement).await.map_err(|e| {
+            println!("Error preparing statement: {:?}", e);
+            DbError::DatabaseError(e.to_string())
+        })?;
+
+        for image_meta in image_meta_list {
+            transaction
+                .execute(
+                    &statement,
+                    &[
+                        &image_meta.tenant_id,
+                        &image_meta.patient_id,
+                        &image_meta.study_uid,
+                        &image_meta.series_uid,
+                        &image_meta.sop_uid,
+                        &image_meta.study_uid_hash,
+                        &image_meta.series_uid_hash,
+                        &image_meta.content_date,
+                        &image_meta.content_time,
+                        &image_meta.instance_number,
+                        &image_meta.image_type,
+                        &image_meta.image_orientation_patient,
+                        &image_meta.image_position_patient,
+                        &image_meta.slice_thickness,
+                        &image_meta.spacing_between_slices,
+                        &image_meta.slice_location,
+                        &image_meta.samples_per_pixel,
+                        &image_meta.photometric_interpretation,
+                        &image_meta.width,
+                        &image_meta.columns,
+                        &image_meta.bits_allocated,
+                        &image_meta.bits_stored,
+                        &image_meta.high_bit,
+                        &image_meta.pixel_representation,
+                        &image_meta.rescale_intercept,
+                        &image_meta.rescale_slope,
+                        &image_meta.rescale_type,
+                        &image_meta.window_center,
+                        &image_meta.window_width,
+                        &image_meta.transfer_syntax_uid,
+                        &image_meta.pixel_data_location,
+                        &image_meta.thumbnail_location,
+                        &image_meta.sop_class_uid,
+                        &image_meta.image_status,
+                        &image_meta.space_size,
+                        &image_meta.created_time,
+                        &image_meta.updated_time,
+                    ],
+                )
+                .await
+                .map_err(|e| {
+                    println!("Error executing statement: {:?}", e);
+                    DbError::DatabaseError(e.to_string())
+                })?;
+        }
+
+        transaction.commit().await.map_err(|e| {
+            println!("Error committing transaction: {:?}", e);
+            DbError::DatabaseError(e.to_string())
+        })?;
+
+        Ok(())
+    }
 
     async fn save_json_list(&self, json_meta_list: &[DicomJsonMeta]) -> Result<(), DbError> {
         if json_meta_list.is_empty() {
@@ -285,7 +561,8 @@ impl DbProvider for PgDbProvider {
             json_meta_list.len()
         );
 
-        let statement = transaction
+        // 第一个语句：插入或更新 dicom_json_meta
+        let insert_statement = transaction
             .prepare(
                 "INSERT INTO dicom_json_meta (
                 tenant_id,
@@ -295,9 +572,10 @@ impl DbProvider for PgDbProvider {
                 series_uid_hash,
                 study_date_origin,
                 flag_time,
-                created_time,json_status,retry_times
-
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7,$8,$9,$10)
+                created_time,
+                json_status,
+                retry_times
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             ON CONFLICT (tenant_id, study_uid, series_uid)
             DO UPDATE SET
                 study_uid_hash = EXCLUDED.study_uid_hash,
@@ -306,20 +584,42 @@ impl DbProvider for PgDbProvider {
                 flag_time = EXCLUDED.flag_time,
                 created_time = EXCLUDED.created_time,
                 json_status = EXCLUDED.json_status,
-                retry_times = EXCLUDED.retry_times
-                ",
+                retry_times = EXCLUDED.retry_times",
             )
             .await
             .map_err(|e| {
-                println!("Error transaction.prepare: {:?}", e);
+                println!("Error preparing insert statement: {:?}", e);
+                DbError::DatabaseError(e.to_string())
+            })?;
+
+        // 第二个语句：更新 dicom_state_meta 中的 series_related_instances
+        let update_statement = transaction
+            .prepare(
+                "WITH image_counts AS (
+                SELECT tenant_id, study_uid, series_uid, COUNT(*) AS count
+                FROM dicom_image_meta
+                WHERE tenant_id = $1 AND study_uid = $2 AND series_uid = $3
+                GROUP BY tenant_id, study_uid, series_uid
+            )
+            UPDATE dicom_state_meta dsm
+            SET series_related_instances = c.count
+            FROM image_counts c
+            WHERE dsm.tenant_id = c.tenant_id
+              AND dsm.study_uid = c.study_uid
+              AND dsm.series_uid = c.series_uid",
+            )
+            .await
+            .map_err(|e| {
+                println!("Error preparing update statement: {:?}", e);
                 DbError::DatabaseError(e.to_string())
             })?;
 
         // 遍历所有 DicomJsonMeta 对象并执行插入操作
         for json_meta in json_meta_list {
+            // 插入或更新 dicom_json_meta
             transaction
                 .execute(
-                    &statement,
+                    &insert_statement,
                     &[
                         &json_meta.tenant_id,
                         &json_meta.study_uid,
@@ -335,14 +635,30 @@ impl DbProvider for PgDbProvider {
                 )
                 .await
                 .map_err(|e| {
-                    println!("Error transaction.execute: {:?}", e);
+                    println!("Error inserting into dicom_json_meta: {:?}", e);
+                    DbError::DatabaseError(e.to_string())
+                })?;
+
+            // 更新 dicom_state_meta
+            transaction
+                .execute(
+                    &update_statement,
+                    &[
+                        &json_meta.tenant_id,
+                        &json_meta.study_uid,
+                        &json_meta.series_uid,
+                    ],
+                )
+                .await
+                .map_err(|e| {
+                    println!("Error updating dicom_state_meta: {:?}", e);
                     DbError::DatabaseError(e.to_string())
                 })?;
         }
 
         // 提交事务
         transaction.commit().await.map_err(|e| {
-            println!("Error transaction.commit: {:?}", e);
+            println!("Error committing transaction: {:?}", e);
             DbError::DatabaseError(e.to_string())
         })?;
 
@@ -601,6 +917,7 @@ mod tests {
     use super::*;
     use crate::dicom_dbprovider::current_time;
     use crate::dicom_dbtype::*;
+    use crate::dicom_meta::TransferStatus;
     use chrono::{NaiveDate, NaiveTime};
     use ctor::ctor;
     use dotenv::dotenv;
@@ -619,6 +936,7 @@ mod tests {
     #[cfg(test)]
     struct TestCleanup {
         tenant_ids: Vec<String>,
+        #[allow(dead_code)]
         db_provider: PgDbProvider,
     }
     #[cfg(test)]
@@ -642,27 +960,28 @@ mod tests {
             // 在实际实现中，这里应该执行数据库清理操作
             // 例如删除测试创建的记录
             // tokio::runtime::Runtime::new().unwrap().block_on(async {
-                for tenant_id in &self.tenant_ids {
-                    // 执行清理SQL
-                    println!(
-                        "exec sql: DELETE FROM dicom_state_meta WHERE tenant_id = {}",
-                        tenant_id
-                    );
-                }
+            for tenant_id in &self.tenant_ids {
+                // 执行清理SQL
+                println!(
+                    "exec sql: DELETE FROM dicom_state_meta WHERE tenant_id = {}",
+                    tenant_id
+                );
+            }
+
             // });
         }
     }
     #[tokio::test]
     async fn test_save_state_info() -> Result<(), Box<dyn std::error::Error>> {
-        let sql_cnn = env::var("DICOM_PgSQL");
+        let sql_cnn = env::var("DICOM_PGSQL");
         if sql_cnn.is_err() {
-            println!("DICOM_PgSQL environment variable not set");
+            println!("DICOM_PGSQL environment variable not set");
             println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
             return Ok(());
         }
 
         let t_id = "test_tenant_123";
-        let db_provider = PgDbProvider::new(sql_cnn.unwrap());
+        let db_provider = PgDbProvider::new(sql_cnn?);
         // 构造 TestCleanup 实例
         let mut cleanup = TestCleanup::new(db_provider.clone());
         // 注册需要清理的 tenant_id
@@ -672,11 +991,11 @@ mod tests {
         let patient_id = BoundedString::<64>::try_from("test_patient_456".to_string())?;
         let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9".to_string())?;
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1".to_string())?;
-        let study_uid_hash = BoundedString::<20>::from_str("1.2.3.4.5.6.7.8.9").unwrap();
-        let series_uid_hash = BoundedString::<20>::from_str("9.8.7.6.5.4.3.2.1").unwrap();
-        let study_date_origin = DicomDateString::from_db("20231201");
-        let accession_number = BoundedString::<16>::try_from("ACC123456".to_string())?;
-        let modality = Some(BoundedString::<16>::try_from("CT".to_string())?);
+        let study_uid_hash = BoundedString::<20>::make_str("1.2.3.4.5.6.7.8.9");
+        let series_uid_hash = BoundedString::<20>::make_str("9.8.7.6.5.4.3.2.1");
+        let study_date_origin = DicomDateString::from_str("20231201")?;
+        let accession_number = BoundedString::<16>::make_str("ACC123456");
+        let modality = Some(BoundedString::<16>::make_str("CT"));
         let series_number = Some(1);
         let series_date = Some(NaiveDate::from_ymd_opt(2023, 12, 1).unwrap());
         let series_time = Some(NaiveTime::parse_from_str("120000", "%H%M%S")?);
@@ -713,7 +1032,7 @@ mod tests {
             patient_weight: Some(70.2),
             study_date,
             study_time,
-            accession_number,
+            accession_number: Some(accession_number),
             study_id,
             study_description,
             modality,
@@ -743,14 +1062,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_state_metaes() -> Result<(), Box<dyn std::error::Error>> {
-        let sql_cnn = env::var("DICOM_PgSQL");
+        let sql_cnn = env::var("DICOM_PGSQL");
         if sql_cnn.is_err() {
-            println!("DICOM_PgSQL environment variable not set");
+            println!("DICOM_PGSQL environment variable not set");
             println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
             return Ok(());
         }
 
-        let db_provider = PgDbProvider::new(sql_cnn.unwrap());
+        let db_provider = PgDbProvider::new(sql_cnn?);
 
         let tenant_id = "1234567890";
         let study_uid = "1.2.156.112605.0.1685486876.2025061710152134339.2.1.1";
@@ -765,7 +1084,7 @@ mod tests {
             result.err()
         );
 
-        let state_meta_list = result.unwrap();
+        let state_meta_list = result?;
 
         // 验证返回结果不为空
         assert!(!state_meta_list.is_empty(), "Expected non-empty result");
@@ -782,14 +1101,14 @@ mod tests {
     }
     #[tokio::test]
     async fn test_get_json_metaes() -> Result<(), Box<dyn std::error::Error>> {
-        let sql_cnn = env::var("DICOM_PgSQL");
+        let sql_cnn = env::var("DICOM_PGSQL");
         if sql_cnn.is_err() {
-            println!("DICOM_PgSQL environment variable not set");
+            println!("DICOM_PGSQL environment variable not set");
             println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
             return Ok(());
         }
 
-        let db_provider = PgDbProvider::new(sql_cnn.unwrap());
+        let db_provider = PgDbProvider::new(sql_cnn?);
 
         let cd = current_time();
         let cd = cd.sub(chrono::Duration::minutes(3));
@@ -803,11 +1122,14 @@ mod tests {
             result.err()
         );
 
-        let state_meta_list = result.unwrap();
+        let state_meta_list = result?;
 
         // 验证返回结果不为空
         assert!(!state_meta_list.is_empty(), "Expected non-empty result");
 
+        if state_meta_list.is_empty() {
+            return Ok(());
+        }
         // 验证每条记录的 tenant_id 和 study_uid 是否正确
         for state_meta in state_meta_list {
             let json = serde_json::to_string_pretty(&state_meta)?;
@@ -818,14 +1140,14 @@ mod tests {
     }
     #[tokio::test]
     async fn test_save_state_list() -> Result<(), Box<dyn std::error::Error>> {
-        let sql_cnn = env::var("DICOM_PgSQL");
+        let sql_cnn = env::var("DICOM_PGSQL");
         if sql_cnn.is_err() {
-            println!("DICOM_PgSQL environment variable not set");
+            println!("DICOM_PGSQL environment variable not set");
             println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
             return Ok(());
         }
 
-        let db_provider = PgDbProvider::new(sql_cnn.unwrap());
+        let db_provider = PgDbProvider::new(sql_cnn?);
         // 创建测试数据列表
         let mut state_meta_list = Vec::new();
 
@@ -834,8 +1156,8 @@ mod tests {
         let patient_id = BoundedString::<64>::try_from("test_patient_list_456".to_string())?;
         let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9.list".to_string())?;
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.list".to_string())?;
-        let study_uid_hash = BoundedString::<20>::from_str("0AA07C2AA455BEB01D5A").unwrap();
-        let series_uid_hash = BoundedString::<20>::from_str("0AB07C2AA455BEB01D5A").unwrap();
+        let study_uid_hash = BoundedString::<20>::from_str("0AA07C2AA455BEB01D5A")?;
+        let series_uid_hash = BoundedString::<20>::from_str("0AB07C2AA455BEB01D5A")?;
         let study_date_origin = DicomDateString::from_db("20231202");
         let accession_number = BoundedString::<16>::try_from("ACC123457".to_string())?;
         let modality = Some(BoundedString::<16>::try_from("MRI".to_string())?);
@@ -878,7 +1200,7 @@ mod tests {
             patient_weight: Some(60.2),
             study_date,
             study_time,
-            accession_number,
+            accession_number: Some(accession_number),
             study_id,
             study_description,
             modality,
@@ -919,14 +1241,14 @@ mod tests {
     }
     #[tokio::test]
     async fn test_save_json_list() -> Result<(), Box<dyn std::error::Error>> {
-        let sql_cnn = env::var("DICOM_PgSQL");
+        let sql_cnn = env::var("DICOM_PGSQL");
         if sql_cnn.is_err() {
-            println!("DICOM_PgSQL environment variable not set");
+            println!("DICOM_PGSQL environment variable not set");
             println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
             return Ok(());
         }
 
-        let db_provider = PgDbProvider::new(sql_cnn.unwrap());
+        let db_provider = PgDbProvider::new(sql_cnn?);
 
         // 创建测试数据列表
         let mut json_meta_list = Vec::new();
@@ -935,8 +1257,8 @@ mod tests {
         let tenant_id = BoundedString::<64>::try_from("test_tenant_json_123".to_string())?;
         let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9.json".to_string())?;
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.json".to_string())?;
-        let study_uid_hash = BoundedString::<20>::from_str("0AC07C2AA455BEB01D5A").unwrap();
-        let series_uid_hash = BoundedString::<20>::from_str("0AD07C2AA455BEB01D5A").unwrap();
+        let study_uid_hash = BoundedString::<20>::from_str("0AC07C2AA455BEB01D5A")?;
+        let series_uid_hash = BoundedString::<20>::from_str("0AD07C2AA455BEB01D5A")?;
         let study_date_origin = DicomDateString::from_db("20231203");
         let flag_time = current_time();
         let created_time = current_time();
@@ -965,6 +1287,196 @@ mod tests {
         assert!(
             result.is_ok(),
             "Failed to save DicomJsonMeta list: {:?}",
+            result.err()
+        );
+
+        Ok(())
+    }
+    #[tokio::test]
+    async fn test_save_store_info() -> Result<(), Box<dyn std::error::Error>> {
+        let sql_cnn = env::var("DICOM_PGSQL");
+        if sql_cnn.is_err() {
+            println!("DICOM_PGSQL environment variable not set");
+            println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
+            return Ok(());
+        }
+
+        let db_provider = PgDbProvider::new(sql_cnn?);
+
+        // 创建测试数据
+        let trace_id = FixedLengthString::<36>::from_str("123e4567-e89b-12d3-a456-426614174000")?;
+        let worker_node_id = BoundedString::<64>::try_from("TEST_WORKER_NODE".to_string())?;
+        let tenant_id = BoundedString::<64>::try_from("test_tenant_store_123".to_string())?;
+        let patient_id = BoundedString::<64>::try_from("test_patient_store_456".to_string())?;
+        let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9.store".to_string())?;
+        let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.store".to_string())?;
+        let sop_uid =
+            BoundedString::<64>::try_from("1.3.6.1.4.1.5962.1.1.0.0.0.1234567891".to_string())?;
+        let file_size = 1024i64;
+        let file_path = BoundedString::<512>::try_from("/data/test/file.dcm".to_string())?;
+        let transfer_syntax_uid = BoundedString::<64>::try_from("1.2.840.10008.1.2.1".to_string())?;
+        let number_of_frames = 1;
+        let series_uid_hash = BoundedString::<20>::from_str("0BA07C2AA455BEB01D5A")?;
+        let study_uid_hash = BoundedString::<20>::from_str("0BB07C2AA455BEB01D5A")?;
+        let accession_number = BoundedString::<16>::try_from("ACC123458".to_string())?;
+        let target_ts = BoundedString::<64>::try_from("1.2.840.10008.1.2.1".to_string())?;
+        let study_date = NaiveDate::from_ymd_opt(2023, 12, 5).unwrap();
+        let transfer_status = TransferStatus::Success;
+        let source_ip = BoundedString::<24>::try_from("192.168.1.100".to_string())?;
+        let source_ae = BoundedString::<64>::try_from("TEST_AE".to_string())?;
+        let created_time = current_time();
+
+        let store_meta = DicomStoreMeta {
+            trace_id,
+            worker_node_id,
+            tenant_id,
+            patient_id,
+            study_uid,
+            series_uid,
+            sop_uid,
+            file_size,
+            file_path,
+            transfer_syntax_uid,
+            number_of_frames,
+            series_uid_hash,
+            study_uid_hash,
+            accession_number: Some(accession_number),
+            target_ts,
+            study_date,
+            transfer_status,
+            source_ip,
+            source_ae,
+            created_time,
+        };
+
+        // 创建存储元数据列表
+        let store_meta_list = vec![store_meta];
+
+        // 执行保存操作
+        let result = db_provider.save_store_list(&store_meta_list).await;
+
+        // 验证保存成功
+        assert!(
+            result.is_ok(),
+            "Failed to save DicomStoreMeta list: {:?}",
+            result.err()
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_save_image_list() -> Result<(), Box<dyn std::error::Error>> {
+        let sql_cnn = env::var("DICOM_PGSQL");
+        if sql_cnn.is_err() {
+            println!("DICOM_PGSQL environment variable not set");
+            println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
+            return Ok(());
+        }
+
+        let db_provider = PgDbProvider::new(sql_cnn?);
+
+        // 创建测试数据列表
+        let mut image_meta_list = Vec::new();
+
+        // 创建测试数据
+        let tenant_id = BoundedString::<64>::try_from("test_tenant_image_123".to_string())?;
+        let patient_id = BoundedString::<64>::try_from("test_patient_image_456".to_string())?;
+        let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9.image".to_string())?;
+        let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.image".to_string())?;
+        let sop_uid =
+            BoundedString::<64>::try_from("1.3.6.1.4.1.5962.1.1.0.0.0.1234567890".to_string())?;
+        let study_uid_hash = BoundedString::<20>::from_str("0AE07C2AA455BEB01D5A")?;
+        let series_uid_hash = BoundedString::<20>::from_str("0AF07C2AA455BEB01D5A")?;
+
+        let content_date = Some(NaiveDate::parse_from_str("20231204", "%Y%m%d")?);
+        let content_time = Some(NaiveTime::parse_from_str("120000", "%H%M%S")?);
+        let instance_number = Some(1);
+        let image_type = Some(BoundedString::<128>::try_from(
+            "ORIGINAL\\PRIMARY\\AXIAL".to_string(),
+        )?);
+        let image_orientation_patient = Some(BoundedString::<128>::try_from(
+            "1.0\\0.0\\0.0\\0.0\\1.0\\0.0".to_string(),
+        )?);
+        let image_position_patient = Some(BoundedString::<64>::try_from(
+            "-125.0\\-125.0\\0.0".to_string(),
+        )?);
+        let slice_thickness = Some(5.0);
+        let spacing_between_slices = Some(5.0);
+        let slice_location = Some(0.0);
+        let samples_per_pixel = Some(1);
+        let photometric_interpretation =
+            Some(BoundedString::<32>::try_from("MONOCHROME2".to_string())?);
+        let width = Some(512);
+        let columns = Some(512);
+        let bits_allocated = Some(16);
+        let bits_stored = Some(12);
+        let high_bit = Some(11);
+        let pixel_representation = Some(0);
+        let rescale_intercept = Some(0.0);
+        let rescale_slope = Some(1.0);
+        let rescale_type = Some(BoundedString::<64>::make_str("US"));
+        let window_center = Some(BoundedString::<64>::make_str("50"));
+        let window_width = Some(BoundedString::<64>::make_str("400"));
+        let transfer_syntax_uid = BoundedString::<64>::make_str("1.2.840.10008.1.2.1");
+        let pixel_data_location = Some(BoundedString::<512>::make_str("/data/pixel/1234567890"));
+        let thumbnail_location = Some(BoundedString::<512>::make_str("/data/thumb/1234567890"));
+        let sop_class_uid = BoundedString::<64>::make_str("1.2.840.10008.5.1.4.1.1.2");
+        let image_status = Some(BoundedString::<32>::make_str("AVAILABLE"));
+        let space_size = Some(2049i64);
+        let created_time = current_time();
+        let updated_time = current_time();
+
+        let image_meta = DicomImageMeta {
+            tenant_id,
+            patient_id,
+            study_uid,
+            series_uid,
+            sop_uid,
+            study_uid_hash,
+            series_uid_hash,
+            content_date,
+            content_time,
+            instance_number,
+            image_type,
+            image_orientation_patient,
+            image_position_patient,
+            slice_thickness,
+            spacing_between_slices,
+            slice_location,
+            samples_per_pixel,
+            photometric_interpretation,
+            width,
+            columns,
+            bits_allocated,
+            bits_stored,
+            high_bit,
+            pixel_representation,
+            rescale_intercept,
+            rescale_slope,
+            rescale_type,
+            window_center,
+            window_width,
+            transfer_syntax_uid,
+            pixel_data_location,
+            thumbnail_location,
+            sop_class_uid,
+            image_status,
+            space_size,
+
+            created_time,
+            updated_time,
+        };
+
+        image_meta_list.push(image_meta);
+
+        // 执行批量保存操作
+        let result = db_provider.save_image_list(&image_meta_list).await;
+
+        // 验证保存成功
+        assert!(
+            result.is_ok(),
+            "Failed to save DicomImageMeta list: {:?}",
             result.err()
         );
 

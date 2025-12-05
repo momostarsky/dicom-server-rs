@@ -15,10 +15,10 @@ use std::rc::Rc;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct Claims {
-    iss: String,            //签发方（issuer），明确这个 JWT 是哪个认证系统生成的	必须（标准）
-    sub: Option<String>,    //主题（subject），指用户唯一标识（通常为用户 ID）	必须（标准）
-    aud: serde_json::Value, //受众（audience），JWT 颁发给哪个客户端/应用	必须（强烈建议)
-    exp: usize,             //过期时间（expiration），用于 token 有效期控制	必须（强烈建议）
+    iss: String,         //签发方（issuer），明确这个 JWT 是哪个认证系统生成的	必须（标准）
+    sub: Option<String>, //主题（subject），指用户唯一标识（通常为用户 ID）	必须（标准）
+    aud: Value,          //受众（audience），JWT 颁发给哪个客户端/应用	必须（强烈建议)
+    exp: usize,          //过期时间（expiration），用于 token 有效期控制	必须（强烈建议）
     email: Option<String>,
     name: Option<String>,
     username: Option<String>,
@@ -107,7 +107,7 @@ where
         ready(Ok(AuthMiddlewareService {
             service: Rc::new(service),
             redis_helper: self.redis.clone(),
-            gconfig: self.config.clone(),
+            config: self.config.clone(),
             log: self.logger.clone(),
         }))
     }
@@ -116,7 +116,7 @@ where
 pub struct AuthMiddlewareService<S> {
     service: Rc<S>,
     redis_helper: RedisHelper, // 添加这一行
-    gconfig: AppConfig,
+    config: AppConfig,
     log: Logger,
 }
 
@@ -135,7 +135,7 @@ where
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let service = self.service.clone();
         let log = self.log.clone();
-        let gconfig = self.gconfig.clone();
+        let gconfig = self.config.clone();
 
         // 如果没有配置 OAuth2，则直接跳过认证
         if gconfig.wado_oauth2.is_none() {
@@ -146,32 +146,43 @@ where
             });
         }
         let redis_helper = self.redis_helper.clone();
-        let cfg = gconfig.wado_oauth2.unwrap().clone();
-        let issuer_url = cfg.issuer_url;
-        let audience = cfg.audience;
+        let oauth2_cfg = gconfig.wado_oauth2.unwrap().clone();
+        let issuer_url = oauth2_cfg.issuer_url;
+        let audience = oauth2_cfg.audience;
 
-        let role_mapping = cfg.roles.clone();
-        let permission_mapping = cfg.permissions.clone();
+        let role_mapping = oauth2_cfg.roles.clone();
+        let permission_mapping = oauth2_cfg.permissions.clone();
 
-        // 修改为模式匹配方式：
-        let jwks_uri_content = match redis_helper.get_jwks_url_content() {
-            Ok(content) => {
-                info!(log, "get_jwks_url_content success");
-                info!(log, "Received jwk_urs_content: {}", content);
-                content
-            }
-            Err(e) => {
-                error!(log, "Failed to get JWKS content from Redis: {:?}", e);
-                // 返回认证不通过的响应
-
-                let response =
-                    HttpResponse::Unauthorized().body("Authentication failed: JWKS not available");
-                let res = req.into_response(response.map_into_boxed_body().map_into_right_body());
-                return Box::pin(async move { Ok(res) });
-            }
-        };
+        if role_mapping.is_none() && permission_mapping.is_none() {
+            error!(
+                log,
+                "role_mapping and permission_mapping are not configured, skip authentication"
+            );
+            return Box::pin(async move {
+                let res = service.call(req).await.map_err(actix_web::Error::from)?;
+                Ok(res.map_into_left_body())
+            });
+        }
 
         Box::pin(async move {
+            // 修改为模式匹配方式：
+            let jwks_uri_content = match redis_helper.get_jwks_url_content().await {
+                Ok(content) => {
+                    info!(log, "get_jwks_url_content success");
+                    info!(log, "Received jwk_urs_content: {}", content);
+                    content
+                }
+                Err(e) => {
+                    error!(log, "Failed to get JWKS content from Redis: {:?}", e);
+                    // 返回认证不通过的响应
+
+                    let response = HttpResponse::Unauthorized()
+                        .body("Authentication failed: JWKS not available");
+                    let res =
+                        req.into_response(response.map_into_boxed_body().map_into_right_body());
+                    return Ok(res);
+                }
+            };
             // 在 async 块内部处理所有可能的错误
             let auth_header = req.headers().get("Authorization");
             if auth_header.is_none() {
@@ -209,7 +220,7 @@ where
             let token = &auth_str[7..];
             info!(log, "Received AccessToken:{}", token);
 
-            let jwks: serde_json::Value = match serde_json::from_str(&jwks_uri_content) {
+            let jwks: Value = match serde_json::from_str(&jwks_uri_content) {
                 Ok(jwks) => jwks,
                 Err(_) => {
                     info!(log, "Invalid JWKS format");
@@ -293,23 +304,12 @@ where
                     info!(log, "Claims given_name:{:?}", claims.given_name);
                     info!(log, "Claims family_name:{:?}", claims.family_name);
 
-                    if role_mapping.is_some() || permission_mapping.is_some() {
-                        // 在调用 validate_user_permissions 时使用转换后的变量
-                        if !validate_user_permissions(
-                            &req,
-                            &role_mapping,
-                            &permission_mapping,
-                            &log,
-                        ) {
-                            let response =
-                                HttpResponse::Forbidden().body("Insufficient permissions");
-                            let res = req.into_response(
-                                response.map_into_boxed_body().map_into_right_body(),
-                            );
-                            return Ok(res);
-                        }
-                    } else {
-                        info!(log, "No role mapping or permission mapping found.");
+                    // 在调用 validate_user_permissions 时使用转换后的变量
+                    if !validate_user_permissions(&req, &role_mapping, &permission_mapping, &log) {
+                        let response = HttpResponse::Forbidden().body("Insufficient permissions");
+                        let res =
+                            req.into_response(response.map_into_boxed_body().map_into_right_body());
+                        return Ok(res);
                     }
 
                     let res = service.call(req).await.map_err(actix_web::Error::from)?;
@@ -376,8 +376,7 @@ async fn fetch_and_store_jwks(
     let txt = response.text().await?;
 
     // 验证JSON格式
-    let jwks: serde_json::Value =
-        serde_json::from_str(&txt).map_err(|e| format!("JSON格式无效: {}", e))?;
+    let jwks: Value = serde_json::from_str(&txt).map_err(|e| format!("JSON格式无效: {}", e))?;
 
     // 验证JWKS结构
     if !jwks.is_object() || !jwks["keys"].is_array() {

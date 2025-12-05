@@ -3,7 +3,8 @@ use dicom_encoding::TransferSyntaxIndex;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dotenv::dotenv;
 use serde::Deserialize;
-use std::env;
+use std::{env, fs};
+use std::path::PathBuf;
 use std::sync::Once;
 
 #[derive(Debug, Deserialize, Clone)]
@@ -100,9 +101,9 @@ pub struct OAuth2Config {
 pub struct WebWorkerConfig {
     ///series_lastUpdateTime + X 分钟内没有更新
     pub interval_minute: u16,
-    /// cpu 使用率
+    /// 最大cpu 使用率
     pub cpu_usage: u16,
-    /// 内存使用率
+    /// 最大内存使用率
     pub memory_usage: u16,
 }
 
@@ -133,343 +134,159 @@ static APP_PREFIX: &str = "DICOM";
 // 全局配置实例和初始化状态
 static INIT: Once = Once::new();
 static mut CONFIG: Option<AppConfig> = None;
+ fn validate_and_create_path(path: &str, path_name: &str) -> Result<(), ConfigError> {
+    if path.len() > 64 {
+        return Err(ConfigError::Message(format!(
+            "{} length must be less than 64 characters", path_name
+        )));
+    }
 
-pub fn load_config() -> Result<AppConfig, ConfigError> {
-    // 使用 Once 确保只初始化一次
+    match fs::exists(path) {
+        Ok(exists) => {
+            if !exists {
+                fs::create_dir_all(path)
+                    .map_err(|e| ConfigError::Message(format!(
+                        "Could not create {} directory: {}", path_name, e
+                    )))?;
+            }
+        }
+        Err(e) => {
+            return Err(ConfigError::Message(format!(
+                "Could not check if {} directory exists: {}", path_name, e
+            )));
+        }
+    }
+
+    // 测试写入权限
+    let test_dir = format!("{}/{}/{}/{}", path, "test", "sub", "dir");
+    fs::create_dir_all(&test_dir)
+        .map_err(|e| ConfigError::Message(format!(
+            "Could not create test directory in {}: {}", path_name, e
+        )))?;
+
+    let test_file = format!("{}/test.tmp", test_dir);
+    fs::write(&test_file, b"test")
+        .map_err(|e| ConfigError::Message(format!(
+            "Could not write test file in {}: {}", path_name, e
+        )))?;
+
+    fs::remove_file(&test_file).ok();
+    fs::remove_dir_all(&test_dir).ok();
+
+    Ok(())
+}
+
+
+
+ pub fn load_config() -> Result<AppConfig, ConfigError> {
     unsafe {
         INIT.call_once(|| {
-            // 1. 加载 .env 文件
-            dotenv().ok();
-            // 打印当前工作目录
-            let cdir = match env::current_dir() {
-                Ok(path) => {
-                    println!("Current working directory: {:?}", path);
-                    path
+            match load_config_internal() {
+                Ok(app_config) => {
+                    CONFIG = Some(app_config);
                 }
                 Err(e) => {
-                    println!("Failed to get current directory: {}", e);
-                    std::path::PathBuf::from("./")
-                }
-            };
-            // 2. 从 .env 获取当前环境 (默认 dev)
-            let env = env::var(APP_ENV).unwrap_or_else(|_| "dev".into());
-
-            // ISSUER_URL=https://keycloak.medical.org:8443/realms/dicom-org-cn
-            //     AUDIENCE=wado-rs-api
-            // SERVER_PORT=8080
-            // JWKS_URL: "https://keycloak.medical.org:8443/realms/dicom-org-cn/protocol/openid-connect/certs",
-
-            // 3. 动态加载配置文件 (如 application.dev.json)
-            let config_path = format!("{}/application.{}.json", cdir.display(), env);
-
-            // 4. 使用 config 库加载配置
-            let settings = Config::builder()
-                // 加载 JSON 配置文件 (如 application.dev.json)
-                .add_source(File::with_name(&config_path).required(true))
-                // 可选：允许环境变量覆盖配置 (如 DATABASE_URL=...)
-                .add_source(Environment::with_prefix(APP_PREFIX).prefix_separator("_"))
-                .build();
-            let settings = match settings {
-                Ok(settings) => settings,
-                Err(err) => panic!("Error loading config: {}", err),
-            };
-
-            // 5. 解析配置到结构体
-            let mut app_config: AppConfig = match settings.try_deserialize() {
-                Ok(app_config) => app_config,
-                Err(err) => panic!("Error parsing config: {}", err),
-            };
-
-            // 打印配置信息（只在首次加载时打印）
-            println!("redis:url {:?}", app_config.redis.url);
-            println!("main_database:dbtype {:?}", app_config.main_database.dbtype);
-            println!("main_database:host {:?}", app_config.main_database.host);
-            println!("main_database:port {:?}", app_config.main_database.port);
-            println!(
-                "main_database:username {:?}",
-                app_config.main_database.username
-            );
-            println!(
-                "main_database:password {:?}",
-                app_config.main_database.password
-            );
-            println!(
-                "main_database:database {:?}",
-                app_config.main_database.database
-            );
-
-            println!(
-                "secondary_database:dbtype {:?}",
-                app_config.secondary_database.dbtype
-            );
-            println!(
-                "secondary_database:host {:?}",
-                app_config.secondary_database.host
-            );
-            println!(
-                "secondary_database:port {:?}",
-                app_config.secondary_database.port
-            );
-            println!(
-                "secondary_database:username {:?}",
-                app_config.secondary_database.username
-            );
-            println!(
-                "secondary_database:password {:?}",
-                app_config.secondary_database.password
-            );
-            println!(
-                "secondary_database:database {:?}",
-                app_config.secondary_database.database
-            );
-
-            println!("server:port {:?}", app_config.server.port);
-            println!("server:host {:?}", app_config.server.host);
-            println!("server:log_level {:?}", app_config.server.allow_origin);
-            println!(
-                "local_storage:dicm_store_path {:?}",
-                app_config.local_storage.dicm_store_path
-            );
-            if app_config.local_storage.dicm_store_path.ends_with("/") {
-                app_config.local_storage.dicm_store_path.pop();
-            }
-
-            if app_config.local_storage.dicm_store_path.len() > 64 {
-                panic!("dicm_store_path length must be less than 64 characters");
-            }
-
-            match std::fs::exists(&app_config.local_storage.dicm_store_path) {
-                Ok(exists) => {
-                    if !exists {
-                        std::fs::create_dir_all(&app_config.local_storage.dicm_store_path)
-                            .unwrap_or_else(|e| {
-                                panic!("Could not create dicm_store_path directory: {}", e);
-                            });
-                    }
-                }
-                Err(e) => {
-                    panic!("Could not check if dicm_store_path directory exists: {}", e);
+                    eprintln!("Failed to load configuration: {}", e);
+                    CONFIG = None;
                 }
             }
-            // TODO :验证能否在dicom_storage_path 下面创建目录及写入文件
-            let test_dir = format!(
-                "{}/{}/{}/{}",
-                app_config.local_storage.dicm_store_path, "1.222", "1.444", "3.5555"
-            );
-            std::fs::create_dir_all(&test_dir).unwrap_or_else(|e| {
-                panic!("Could not create test_dir directory: {}", e);
-            });
-            let test_file = format!("{}/test.dcm", test_dir);
-            std::fs::write(
-                &test_file,
-                b"903290903234092409383404903409289899889jkkallklkj",
-            )
-            .unwrap_or_else(|e| {
-                panic!("Could not write test_file file: {}", e);
-            });
-            std::fs::remove_file(&test_file).unwrap_or_else(|e| {
-                panic!("Could not remove test_file file: {}", e);
-            });
-            std::fs::remove_dir_all(&test_dir).unwrap_or_else(|e| {
-                panic!("Could not remove test_dir directory: {}", e);
-            });
-
-            println!(
-                "local_storage:json_store_path {:?}",
-                app_config.local_storage.json_store_path
-            );
-            if app_config.local_storage.json_store_path.ends_with("/") {
-                app_config.local_storage.json_store_path.pop();
-            }
-            if app_config.local_storage.json_store_path.len() > 64 {
-                panic!("json_store_path length must be less than 64 characters");
-            }
-
-            match std::fs::exists(&app_config.local_storage.json_store_path) {
-                Ok(exists) => {
-                    if !exists {
-                        std::fs::create_dir_all(&app_config.local_storage.json_store_path)
-                            .unwrap_or_else(|e| {
-                                panic!("Could not create json_store_path directory: {}", e);
-                            });
-                    }
-                }
-                Err(e) => {
-                    panic!("Could not check if json_store_path directory exists: {}", e);
-                }
-            }
-            // TODO :验证能否在json_store_path 下面创建目录及写入文件
-            let json_test_dir = format!(
-                "{}/{}/{}/{}",
-                app_config.local_storage.json_store_path, "1.222", "2.444", "3.555"
-            );
-            std::fs::create_dir_all(&json_test_dir).unwrap_or_else(|e| {
-                panic!("Could not create json_test_dir directory: {}", e);
-            });
-            let json_test_file = format!("{}/test.json", json_test_dir);
-            std::fs::write(
-                &json_test_file,
-                b"903290903234092409383404903409289899889jkkallklkj",
-            )
-            .unwrap_or_else(|e| {
-                panic!("Could not write json_test_file file: {}", e);
-            });
-            std::fs::remove_file(&json_test_file).unwrap_or_else(|e| {
-                panic!("Could not remove json_test_file file: {}", e);
-            });
-            std::fs::remove_dir_all(&json_test_dir).unwrap_or_else(|e| {
-                panic!("Could not remove json_test_dir directory: {}", e);
-            });
-
-            println!("dicom_store_scp:port {:?}", app_config.dicom_store_scp.port);
-            println!(
-                "dicom_store_scp:ae_title {:?}",
-                app_config.dicom_store_scp.ae_title
-            );
-            println!(
-                "dicom_store_scp:tenant_group {:?}",
-                app_config.dicom_store_scp.tenant_group
-            );
-            println!(
-                "dicom_store_scp:tenant_element {:?}",
-                app_config.dicom_store_scp.tenant_element
-            );
-            println!(
-                "dicom_store_scp:tenant_default {}",
-                "1234567890"
-            );
-
-            if app_config.dicom_store_scp.tenant_group !="0x1211"
-                || app_config.dicom_store_scp.tenant_element !="0x1217"
-            {
-                println!(" (tenant_group ,tenant_element )  must be set as ( 0x1211,0x1217) 否则收图时会出现未知错误.");
-                println!(" (tenant_group ,tenant_element )  可以通过CStoreRequest 传递.");
-                println!(" 系统默认 tenant 取值为 1234567890");
-            }
-            println!(
-                "dicom_store_scp:cornerstonejs_supported_transfer_syntax {:?}",
-                app_config
-                    .dicom_store_scp
-                    .cornerstonejs_supported_transfer_syntax
-            );
-            println!(
-                "dicom_store_scp:unsupported_ts_change_to {:?}",
-                app_config.dicom_store_scp.unsupported_ts_change_to
-            );
-            if !TransferSyntaxRegistry
-                .get(&app_config.dicom_store_scp.unsupported_ts_change_to)
-                .is_some()
-            {
-                panic!(
-                    "Invalid unsupported_ts_change_to transfer syntax UID: {}",
-                    app_config.dicom_store_scp.unsupported_ts_change_to
-                );
-            }
-
-            //TODO: 验证 scp_config.cornerstonejs_supported_transfer_syntax 是否为空
-            if app_config
-                .dicom_store_scp
-                .cornerstonejs_supported_transfer_syntax
-                .is_empty()
-            {
-                // 不要在这里直接返回，而是设置错误状态
-                // 使用 panic! 而不是 return，因为 call_once 闭包返回 ()
-                panic!("scp_config.cornerstonejs_supported_transfer_syntax is empty");
-            } else {
-                //TODO: 验证 scp_config.cornerstonejs_supported_transfer_syntax 中的每个元素是否为有效的传输语法UID
-                for transfer_syntax in &app_config
-                    .dicom_store_scp
-                    .cornerstonejs_supported_transfer_syntax
-                {
-                    if !TransferSyntaxRegistry.get(transfer_syntax).is_some() {
-                        panic!("Invalid transfer syntax UID: {}", transfer_syntax);
-                    }
-                }
-            }
-
-            println!("kafka:brokers {:?}", app_config.kafka.brokers);
-
-            println!(
-                "kafka:queue_buffering_max_messages {:?}",
-                app_config.kafka.queue_buffering_max_messages
-            );
-            println!(
-                "kafka:queue_buffering_max_kbytes {:?}",
-                app_config.kafka.queue_buffering_max_kbytes
-            );
-            println!(
-                "kafka:batch_num_messages {:?}",
-                app_config.kafka.batch_num_messages
-            );
-            println!(
-                "kafka:queue_buffering_max_ms {:?}",
-                app_config.kafka.queue_buffering_max_ms
-            );
-            println!("kafka:linger_ms {:?}", app_config.kafka.linger_ms);
-            println!(
-                "kafka:compression_codec {:?}",
-                app_config.kafka.compression_codec
-            );
-            println!(
-                "kafka:consumer_group_id {:?}",
-                app_config.message_queue.consumer_group_id
-            );
-            println!(
-                "message_queue:topic_main {:?}",
-                app_config.message_queue.topic_main
-            );
-            println!(
-                "message_queue:topic_log {:?}",
-                app_config.message_queue.topic_log
-            );
-
-            if let Some(license_server) = app_config.dicom_license_server.as_ref() {
-                println!("dicom_license_server:  证书");
-                println!("\t\t 可以到 https://dicom.org.cn:8443/create  注册");
-                println!(
-                    "dicom_license_server:client_id {:?}",
-                    license_server.client_id
-                );
-                println!(
-                    "dicom_license_server:license_key {:?}",
-                    license_server.license_key
-                );
-            }
-            if let Some(oa2) = app_config.wado_oauth2.as_ref() {
-                println!("wado_oauth2:  OAuth2 / OpenID 认证配置");
-                println!("wado_oauth2:issuer_url {:?}", oa2.issuer_url);
-                println!("wado_oauth2:audience {:?}", oa2.audience);
-                println!("wado_oauth2:jwks_url {:?}", oa2.jwks_url);
-                println!("wado_oauth2:roles {:?}", oa2.roles);
-                println!("wado_oauth2:permissions {:?}", oa2.permissions);
-            }
-
-
-            if let Some(ww) = app_config.webworker.as_ref() {
-                println!("webworker:interval_minute {:?}   DicomStateMeta.updated_time X", ww.interval_minute);
-                println!("webworker:cpu_usage {:?} ", ww.cpu_usage);
-                println!("webworker:memory_usage {:?} ", ww.memory_usage);
-                println!("说明:");
-                println!("\t 1. interval_minute 表示序列的 DicomStateMeta.updated_time 超过, interval_minute= 3 表示 DicomStateMeta.updated_time+3 分钟小于当前时间  ");
-                println!("\t 2. cpu_usage 表示任务执行时候的CPU利用率低于 阈值 , cpu_usage= 40 表示CPU利用率低于 40%");
-                println!("\t 3. memory_usage 表示任务执行时候的内存利用率低于 阈值 , memory_usage = 50 表示内存使用率低于50% ");
-
-            }
-
-            CONFIG = Some(app_config);
         });
 
-        // 返回克隆的配置实例
         if let Some(ref config) = CONFIG {
             Ok(config.clone())
         } else {
-            // 这种情况理论上不应该发生
             Err(ConfigError::Message(
                 "Failed to load configuration".to_string(),
             ))
         }
     }
 }
+
+fn load_config_internal() -> Result<AppConfig, ConfigError> {
+    // 1. 加载 .env 文件
+    dotenv().ok();
+    // 打印当前工作目录
+    let cdir = {
+        // try current_dir, then CARGO_MANIFEST_DIR, then fallback to "."
+        let candidate = env::current_dir()
+            .or_else(|_| env::var("CARGO_MANIFEST_DIR").map(PathBuf::from))
+            .map_err(|e| ConfigError::Message(format!(
+                "Failed to determine current dir: {}", e
+            )))?;
+        // try to canonicalize (make absolute / normalize). If canonicalize fails, keep candidate.
+        fs::canonicalize(&candidate).unwrap_or(candidate)
+    };
+    // 2. 从 .env 获取当前环境 (默认 dev)
+    let env = env::var(APP_ENV).unwrap_or_else(|_| "dev".into());
+    // 3. 动态加载配置文件 (如 application.dev.json)
+    let config_path = format!("{}/application.{}.json", cdir.display(), env);
+    println!("application configuration file path :{}", config_path);
+    // 4. 使用 config 库加载配置
+    let settings = Config::builder()
+        // 加载 JSON 配置文件 (如 application.dev.json)
+        .add_source(File::with_name(&config_path).required(true))
+        // 可选：允许环境变量覆盖配置 (如 DATABASE_URL=...)
+        .add_source(Environment::with_prefix(APP_PREFIX).prefix_separator("_"))
+        .build()
+        .map_err(|err| ConfigError::Message(format!("Error loading config: {}", err)))?;
+
+    // 5. 解析配置到结构体
+    let mut app_config: AppConfig = settings
+        .try_deserialize()
+        .map_err(|err| ConfigError::Message(format!("Error parsing config: {}", err)))?;
+
+    // 验证本地存储路径
+    validate_and_create_path(&app_config.local_storage.dicm_store_path, "dicm_store_path")?;
+
+    if app_config.local_storage.dicm_store_path.ends_with('/') {
+        app_config.local_storage.dicm_store_path.pop();
+    }
+
+    validate_and_create_path(&app_config.local_storage.json_store_path, "json_store_path")?;
+
+    if app_config.local_storage.json_store_path.ends_with('/') {
+        app_config.local_storage.json_store_path.pop();
+    }
+
+    // 验证传输语法
+    if !TransferSyntaxRegistry
+        .get(&app_config.dicom_store_scp.unsupported_ts_change_to)
+        .is_some()
+    {
+        return Err(ConfigError::Message(format!(
+            "Invalid unsupported_ts_change_to transfer syntax UID: {}",
+            app_config.dicom_store_scp.unsupported_ts_change_to
+        )));
+    }
+
+    if app_config
+        .dicom_store_scp
+        .cornerstonejs_supported_transfer_syntax
+        .is_empty()
+    {
+        return Err(ConfigError::Message(
+            "scp_config.cornerstonejs_supported_transfer_syntax is empty".to_string(),
+        ));
+    } else {
+        for transfer_syntax in &app_config
+            .dicom_store_scp
+            .cornerstonejs_supported_transfer_syntax
+        {
+            if !TransferSyntaxRegistry.get(transfer_syntax).is_some() {
+                return Err(ConfigError::Message(format!(
+                    "Invalid transfer syntax UID: {}",
+                    transfer_syntax
+                )));
+            }
+        }
+    }
+
+    // TODO: 输出配置信息，注意不要打印敏感信息
+    println!("Configuration loaded successfully: {:?}", app_config);
+
+    Ok(app_config)
+}
+
 pub fn generate_database_connection(dbconfig: &DatabaseConfig) -> Result<String, String> {
     let password = dbconfig
         .password

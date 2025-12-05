@@ -21,12 +21,6 @@ pub struct BoundedString<const N: usize> {
     value: String,
 }
 
-impl<const N: usize> fmt::Display for BoundedString<N> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.value)
-    }
-}
-
 impl<const N: usize> BoundedString<N> {
     pub fn new(s: String) -> BoundedResult<BoundedString<N>> {
         if s.len() > N {
@@ -36,6 +30,50 @@ impl<const N: usize> BoundedString<N> {
             })
         } else {
             Ok(Self { value: s })
+        }
+    }
+    /// 创建一个新的 `BoundedString`
+    ///
+    /// 如果输入字符串长度超过指定长度 N，会截断多余的字符
+    ///
+    /// # 参数
+    /// * `s` - 输入的字符串
+    ///
+    /// # 返回值
+    /// 返回一个长度为 N 的 `BoundedString`
+    ///
+    /// # 注意
+    /// 此方法会截断超出指定长度的字符，可能导致数据丢失，请谨慎使用
+    pub fn make(s: String) -> BoundedString<N> {
+        if s.len() > N {
+            Self {
+                value: s[..N].to_string(),
+            }
+        } else {
+            Self { value: s }
+        }
+    }
+    /// 创建一个新的 `BoundedString`
+    ///
+    /// 如果输入字符串长度超过指定长度 N，会截断多余的字符
+    ///
+    /// # 参数
+    /// * `s` - 输入的字符串
+    ///
+    /// # 返回值
+    /// 返回一个长度为 N 的 `BoundedString`
+    ///
+    /// # 注意
+    /// 此方法会截断超出指定长度的字符，可能导致数据丢失，请谨慎使用
+    pub fn make_str(s: &str) -> BoundedString<N> {
+        if s.len() > N {
+            Self {
+                value: s[..N].to_string(),
+            }
+        } else {
+            Self {
+                value: String::from(s),
+            }
         }
     }
     pub fn from_str(s: &str) -> BoundedResult<BoundedString<N>> {
@@ -69,6 +107,12 @@ impl<const N: usize> BoundedString<N> {
         &self.value
     }
 }
+impl<const N: usize> fmt::Display for BoundedString<N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
 impl<const N: usize> Hash for BoundedString<N> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.value.hash(state);
@@ -87,6 +131,19 @@ impl<const N: usize> TryFrom<&str> for BoundedString<N> {
     type Error = BoundedStringError;
     fn try_from(s: &str) -> BoundedResult<Self> {
         BoundedString::from_str(s)
+    }
+}
+impl<const N: usize> TryFrom<String> for BoundedString<N> {
+    type Error = BoundedStringError;
+
+    fn try_from(value: String) -> BoundedResult<Self> {
+        BoundedString::new(value)
+    }
+}
+impl<const N: usize> TryFrom<&String> for BoundedString<N> {
+    type Error = BoundedStringError;
+    fn try_from(value: &String) -> BoundedResult<Self> {
+        BoundedString::from_str(value)
     }
 }
 
@@ -115,6 +172,31 @@ impl<const N: usize> Eq for FixedLengthString<N> {}
 #[serde(transparent)]
 pub struct DicomDateString {
     pub(crate) value: String,
+}
+
+impl DicomDateString {
+    pub fn new(s: String) -> BoundedResult<DicomDateString> {
+        // 使用 NaiveDate 验证日期格式和有效性
+        chrono::NaiveDate::parse_from_str(&s, "%Y%m%d").map_err(|_| {
+            BoundedStringError::LengthError {
+                fixlen: 8,
+                len: s.len(),
+            }
+        })?;
+        Ok(Self { value: s })
+    }
+    pub fn from_str(s: &str) -> BoundedResult<DicomDateString> {
+        // 使用 NaiveDate 验证日期格式和有效性
+        chrono::NaiveDate::parse_from_str(&s, "%Y%m%d").map_err(|_| {
+            BoundedStringError::LengthError {
+                fixlen: 8,
+                len: s.len(),
+            }
+        })?;
+        Ok(Self {
+            value: s.to_string(),
+        })
+    }
 }
 
 // 为 DicomDateString 实现 Display trait
@@ -154,6 +236,34 @@ impl TryFrom<&String> for DicomDateString {
     }
 }
 
+impl TryFrom<String> for DicomDateString {
+    type Error = BoundedStringError;
+
+    /// 尝试从字符串值转换为当前类型的安全转换函数
+    ///
+    /// # 参数
+    /// * `value` - 需要转换的字符串值
+    ///
+    /// # 返回值
+    /// * `BoundedResult<Self>` - 转换结果，成功时返回封装后的当前类型实例，失败时返回相应的错误信息
+    ///
+    /// # 说明
+    /// 该函数实现了TryFrom trait，提供了一种安全的字符串到目标类型的转换机制，
+    /// 通过返回BoundedResult类型来处理转换过程中可能出现的边界检查和验证错误。
+    fn try_from(value: String) -> BoundedResult<Self> {
+        // 使用 NaiveDate 验证日期格式和有效性
+        chrono::NaiveDate::parse_from_str(value.as_str(), "%Y%m%d").map_err(|_| {
+            BoundedStringError::LengthError {
+                fixlen: 8,
+                len: value.len(),
+            }
+        })?;
+        Ok(Self {
+            value: value.clone(),
+        })
+    }
+}
+
 impl<const N: usize> FixedLengthString<N> {
     pub fn new(s: String) -> BoundedResult<FixedLengthString<N>> {
         if s.len() != N {
@@ -190,6 +300,51 @@ impl<const N: usize> FixedLengthString<N> {
         }
     }
 
+    /// 创建一个新的 `FixedLengthString`
+    ///
+    /// 如果输入字符串长度超过指定长度 N，会截断多余的字符
+    ///
+    /// # 参数
+    /// * `s` - 输入的字符串
+    ///
+    /// # 返回值
+    /// 返回一个长度为 N 的 `FixedLengthString`
+    ///
+    /// # 注意
+    /// 此方法会截断超出指定长度的字符，可能导致数据丢失，请谨慎使用
+    pub fn make(s: String) -> FixedLengthString<N> {
+        if s.len() > N {
+            Self {
+                value: s[..N].to_string(),
+            }
+        } else {
+            Self { value: s }
+        }
+    }
+    /// 创建一个新的 `FixedLengthString`
+    ///
+    /// 如果输入字符串长度超过指定长度 N，会截断多余的字符
+    ///
+    /// # 参数
+    /// * `s` - 输入的字符串
+    ///
+    /// # 返回值
+    /// 返回一个长度为 N 的 `FixedLengthString`
+    ///
+    /// # 注意
+    /// 此方法会截断超出指定长度的字符，可能导致数据丢失，请谨慎使用
+    pub fn make_str(s: &str) -> FixedLengthString<N> {
+        if s.len() > N {
+            Self {
+                value: s[..N].to_string(),
+            }
+        } else {
+            Self {
+                value: String::from(s),
+            }
+        }
+    }
+
     pub fn as_str(&self) -> &str {
         &self.value
     }
@@ -200,6 +355,7 @@ impl DicomDateString {
         self.value.as_str()
     }
 
+    #[allow(dead_code)]
     pub(crate) fn from_db(s: &str) -> Self {
         // 使用 NaiveDate 验证日期格式和有效性
         chrono::NaiveDate::parse_from_str(&s, "%Y%m%d")

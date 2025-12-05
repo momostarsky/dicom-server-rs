@@ -164,7 +164,6 @@ pub async fn group_dicom_state(
     let mut image_entities: Vec<DicomImageMeta> = Vec::new();
 
     for message in messages {
-        let study_uid = Option::from(message.study_uid.as_str());
         let space_size = Option::from(message.file_size);
         match dicom_object::OpenFileOptions::new()
             .charset_override(CharacterSetOverride::AnyVr)
@@ -173,7 +172,7 @@ pub async fn group_dicom_state(
         {
             Ok(dicom_obj) => {
                 let state_meta =
-                    match make_state_info(message.tenant_id.as_str(), &dicom_obj, study_uid) {
+                    match make_state_info(message.tenant_id.as_str(), &dicom_obj ) {
                         Ok(state_meta) => state_meta,
                         Err(err) => {
                             error!(

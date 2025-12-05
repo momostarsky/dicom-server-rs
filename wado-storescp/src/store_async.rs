@@ -17,6 +17,7 @@ use slog::o;
 use crate::dicom_file_handler::classify_and_publish_dicom_messages;
 use database::dicom_meta::DicomStoreMeta;
 use slog::{debug, info, warn};
+use common::storage_config::StorageConfig;
 
 pub async fn run_store_async(
     scu_stream: tokio::net::TcpStream,
@@ -46,11 +47,23 @@ pub async fn run_store_async(
         peer.port()
     );
 
+    let app_config = server_config::load_config().whatever_context("failed to load config")?;
+
+    let queue_config = &app_config.message_queue;
+
+    let queue_topic_main = &queue_config.topic_main.as_str();
+    let queue_topic_log = &queue_config.topic_log.as_str();
+
+    let storage_producer = KafkaMessagePublisher::new(queue_topic_main.parse().unwrap());
+    let log_producer = KafkaMessagePublisher::new(queue_topic_log.parse().unwrap());
+    let ip_address = peer.ip().to_string();
+
+
     let mut instance_buffer: Vec<u8> = Vec::with_capacity(1024 * 1024);
     let mut message_id = 1;
     let mut sop_class_uid = "".to_string();
     let mut sop_instance_uid = "".to_string();
-    let mut issue_patient_id = "".to_string();
+    let mut tenant_id = "1234567890".to_string();
     let mut options = dicom_ul::association::ServerAssociationOptions::new()
         .accept_any()
         .ae_title(calling_ae_title)
@@ -91,18 +104,10 @@ pub async fn run_store_async(
         association.presentation_contexts()
     );
 
-    let app_config = server_config::load_config().whatever_context("failed to load config")?;
-
-    let queue_config = app_config.message_queue;
-
-    let queue_topic_main = &queue_config.topic_main.as_str();
-    let queue_topic_log = &queue_config.topic_log.as_str();
-
-    let storage_producer = KafkaMessagePublisher::new(queue_topic_main.parse().unwrap());
-    let log_producer = KafkaMessagePublisher::new(queue_topic_log.parse().unwrap());
+    let storage_config = StorageConfig::new(app_config.clone());
 
     let mut dicom_message_lists: Vec<DicomStoreMeta> = vec![];
-    let ip_address = peer.ip().to_string();
+
     let client_ae_title = association.client_ae_title().to_string();
     loop {
         match association.receive().await {
@@ -175,7 +180,6 @@ pub async fn run_store_async(
                                         .whatever_context(
                                             "could not retrieve Affected SOP Class UID",
                                         )?
-                                        .trim_end_matches("\0")
                                         .to_string();
                                     sop_instance_uid = obj
                                         .element(tags::AFFECTED_SOP_INSTANCE_UID)
@@ -184,18 +188,16 @@ pub async fn run_store_async(
                                         .whatever_context(
                                             "could not retrieve Affected SOP Instance UID",
                                         )?
-                                        .trim_end_matches("\0")
                                         .to_string();
 
                                     let tenant = obj.element_opt(Tag::from((0x1211, 0x1217)));
                                     if let Ok(Some(tenant)) = tenant {
-                                        issue_patient_id = tenant
+                                        tenant_id = tenant
                                             .to_str()
                                             .unwrap()
-                                            .trim_end_matches("\0")
                                             .to_string();
                                     } else {
-                                        issue_patient_id = "1234567890".to_string();
+                                        tenant_id = "1234567890".to_string();
                                     }
                                 }
                                 instance_buffer.clear();
@@ -219,11 +221,13 @@ pub async fn run_store_async(
 
                                 match dicom_file_handler::process_dicom_file(
                                     &instance_buffer,
-                                    &issue_patient_id,
+                                    &tenant_id,
                                     ts,
                                     &sop_instance_uid,
+                                    &sop_class_uid,
                                     ip_address.clone(),
                                     client_ae_title.clone(),
+                                    &storage_config
                                 )
                                 .await
                                 {

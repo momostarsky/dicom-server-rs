@@ -204,22 +204,39 @@ async fn main() {
     info!(log, "License Server Validation Success");
 
 
+    // if app.non_blocking {
+    //     tokio::runtime::Builder::new_multi_thread()
+    //         .enable_all()
+    //         .build()
+    //         .unwrap()
+    //         .block_on(async move {
+    //             run_async(app).await.unwrap_or_else(|e| {
+    //                 error!("{:?}", e);
+    //                 std::process::exit(-2);
+    //             });
+    //         });
+    // } else {
+    //     run_sync(app).unwrap_or_else(|e| {
+    //         error!("{:?}", e);
+    //         std::process::exit(-2);
+    //     });
+    // }
 
     match app.non_blocking {
-        true => {
-            info!(log, "工作在非阻塞模式");
+        false => {
+            info!(log, "工作在同步模式");
             // 使用已有的tokio运行时
             //可以设置最大并发连接数等参数
-            run_async(app).await.unwrap_or_else(|e| {
+            run_sync(app).await.unwrap_or_else(|e| {
                 error!(log, "{:?}", e);
                 std::process::exit(-2);
             });
         }
-        false => {
-            info!(log, "工作在同步模式");
+        true => {
+            info!(log, "工作在非阻塞模式");
             // 为同步模式创建专用的运行时
             // 同步模式适用于简单部署或调试场景
-            let rt = tokio::runtime::Builder::new_current_thread()
+            let rt = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()
                 .unwrap_or_else(|e| {
@@ -229,7 +246,7 @@ async fn main() {
 
             std::thread::spawn(move || {
                 rt.block_on(async {
-                    run_sync(app).await.unwrap_or_else(|e| {
+                    run_async(app).await.unwrap_or_else(|e| {
                         error!(log, "{:?}", e);
                         std::process::exit(-2);
                     });
@@ -239,50 +256,6 @@ async fn main() {
             .unwrap();
         }
     }
-
-    // if app.non_blocking {
-    //     tokio::runtime::Builder::new_multi_thread()
-    //         .enable_all()
-    //         .build()
-    //         .unwrap()
-    //         .block_on(async move {
-    //             run_async(app,log.clone()).await.unwrap_or_else(|e| {
-    //                 error!(log, "{:?}", e);
-    //                 std::process::exit(-2);
-    //             });
-    //         });
-    // } else {
-    //     run_sync(app,log.clone()).await.unwrap_or_else(|e| {
-    //         error!(log, "{:?}", e);
-    //         std::process::exit(-2);
-    //     });
-    // }
-    // match app.non_blocking {
-    //     true => {
-    //         info!(log, "Non Blocking Mode");
-    //         run_sync(app, log.clone()).await.unwrap_or_else(|e| {
-    //             error!(log, "{:?}", e);
-    //             std::process::exit(-2);
-    //         })
-    //     }
-    //     false => {
-    //         match tokio::runtime::Builder::new_multi_thread()
-    //             .enable_all()
-    //             .build()
-    //         {
-    //             Ok(rt) => rt.block_on(async move {
-    //                 run_async(app, log.clone()).await.unwrap_or_else(|e| {
-    //                     error!(log, "{:?}", e);
-    //                     std::process::exit(-2);
-    //                 })
-    //             }),
-    //             Err(_) => {
-    //                 error!(log, "Could not create tokio runtime");
-    //                 std::process::exit(-2);
-    //             }
-    //         }
-    //     }
-    // }
 }
 
 async fn run_async(args: App) -> Result<(), Box<dyn std::error::Error>> {

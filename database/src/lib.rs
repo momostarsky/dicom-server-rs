@@ -1,8 +1,6 @@
 pub mod dicom_dbprovider;
 pub mod dicom_dbtype;
 pub mod dicom_meta;
-pub mod dicom_mysql;
-pub mod dicom_mysql_types;
 pub mod dicom_pg;
 pub mod dicom_pg_types;
 

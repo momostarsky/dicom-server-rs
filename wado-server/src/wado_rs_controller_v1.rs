@@ -8,16 +8,13 @@ use actix_web::http::header::ACCEPT;
 use actix_web::{HttpMessage, HttpRequest, HttpResponse, Responder, get, web, web::Path};
 use common::dicom_json_helper;
 use common::redis_key::RedisHelper;
-use common::storage_config::{
-    dicom_file_path, dicom_series_dir, dicom_study_dir, json_metadata_path_for_series,
-    json_metadata_path_for_study,
-};
+use common::storage_config::{StorageConfig, dicom_file_path};
 use database::dicom_meta::{DicomJsonMeta, DicomStateMeta};
 use dicom_dictionary_std::tags;
 use dicom_object::OpenFileOptions;
 // use permission_macros::permission_required;
 use common::dicom_json_helper::generate_series_json;
-use slog::info;
+use slog::{error, info};
 use std::path::PathBuf;
 
 static ACCEPT_DICOM_JSON_TYPE: &str = "application/dicom+json";
@@ -41,33 +38,52 @@ async fn get_study_info_with_cache(
     tenant_id: &str,
     study_uid: &str,
     app_state: &web::Data<AppState>,
-    from_cache: bool,
 ) -> Result<Vec<DicomStateMeta>, HttpResponse> {
     let log = app_state.log.clone();
     // 首先尝试从 Redis 缓存中获取数据
     let rh = &app_state.redis_helper;
 
-    if from_cache {
-        match rh.get_study_metadata(tenant_id, study_uid) {
-            Ok(metas) => {
-                info!(log, "Retrieved study_info from Redis cache");
+    match rh.get_study_metadata(tenant_id, study_uid).await {
+        Ok(metas) => {
+            info!(log, "Retrieved study_info from Redis cache");
+            if !metas.is_empty() {
                 return Ok(metas);
             }
-            Err(_) => {}
         }
+        Err(_) => {}
     }
 
     match app_state.db.get_state_metaes(tenant_id, study_uid).await {
         Ok(metas) => {
             info!(log, "Retrieved study_info from database");
-            rh.del_study_entity_not_exists(tenant_id, study_uid);
+            rh.del_study_entity_not_exists(tenant_id, study_uid).await;
             // 将查询结果序列化并写入 Redis 缓存，过期时间设置为2小时
-            rh.set_study_metadata(tenant_id, study_uid, &metas, 2 * RedisHelper::ONE_HOUR);
+            match rh
+                .set_study_metadata(tenant_id, study_uid, &metas, 2 * RedisHelper::ONE_HOUR)
+                .await
+            {
+                Ok(_) => {
+                    info!(log, "Stored study_info into Redis cache");
+                }
+                Err(e) => {
+                    error!(log, "Failed to store study_info into Redis cache: {}", e);
+                }
+            }
             Ok(metas)
         }
         Err(e) => {
             let error_msg = format!("Failed to retrieve study info: {}", e);
-            rh.set_study_entity_not_exists(tenant_id, study_uid, 5 * RedisHelper::ONE_MINULE);
+            match rh
+                .set_study_entity_not_exists(tenant_id, study_uid, 5 * RedisHelper::ONE_MINULE)
+                .await
+            {
+                Ok(_) => {
+                    info!(log, "set_study_entity_not_exists {}", study_uid);
+                }
+                Err(e) => {
+                    error!(log, "Failed to store study_info into Redis cache: {}", e);
+                }
+            }
             Err(HttpResponse::InternalServerError().body(error_msg))
         }
     }
@@ -101,6 +117,8 @@ async fn get_series_json_meta(
         }
     }
 }
+
+/// 获取指定检查的元数据,是当前所有DICOM文件的原始数据. 不建议调用此接口. 速度太慢.
 #[utoipa::path(
 
     get,
@@ -158,7 +176,7 @@ async fn retrieve_study_metadata(
     // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
     let is_not_found = rh.get_study_entity_not_exists(tenant_id.as_str(), study_uid.as_str());
 
-    if is_not_found.is_ok() {
+    if is_not_found.await.unwrap() == true {
         return HttpResponse::NotFound().body(format!(
             "retrieve_study_metadata Study not found in database retry after 30 seconds: {},{}",
             tenant_id, study_uid
@@ -166,7 +184,7 @@ async fn retrieve_study_metadata(
     }
 
     //  从缓存中加载study_info
-    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state, true).await
+    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state ).await
     {
         Ok(info) => info,
         Err(response) => return response,
@@ -179,8 +197,19 @@ async fn retrieve_study_metadata(
     }
 
     info!(log, "Study Info: {:?}", study_info.first());
-    let study_info = study_info.first().unwrap();
-    let json_path = match json_metadata_path_for_study(&study_info, false) {
+    let study_info = match study_info.first() {
+        Some(v) => v,
+        None => {
+            return HttpResponse::NotFound().body(format!(
+                "retrieve_study_metadata Study not found in database retry after 30 seconds: {},{}",
+                tenant_id, study_uid
+            ));
+        }
+    };
+
+    let storage_config = StorageConfig::new(app_state.config.clone());
+
+    let json_path = match storage_config.json_metadata_path_for_study(study_info, false) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -188,7 +217,7 @@ async fn retrieve_study_metadata(
         }
     };
 
-    let dicom_dir = match dicom_study_dir(&study_info, false) {
+    let dicom_dir = match storage_config.dicom_study_dir(study_info, false) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -229,6 +258,7 @@ async fn retrieve_study_metadata(
         )),
     }
 }
+/// 获取指定检查下面有多少个序列. 并以JSON格式返回.
 #[utoipa::path(
     get,
     params(
@@ -282,7 +312,7 @@ async fn retrieve_study_subseries(
     // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
     let is_not_found = rh.get_study_entity_not_exists(tenant_id.as_str(), study_uid.as_str());
 
-    if is_not_found.is_ok() {
+    if is_not_found.await.unwrap() == true {
         return HttpResponse::NotFound().body(format!(
             "retrieve_study_metadata Study not found in database retry after 30 seconds: {},{}",
             tenant_id, study_uid
@@ -290,7 +320,7 @@ async fn retrieve_study_subseries(
     }
     //  从缓存中加载study_info
     let study_info =
-        match get_study_info_with_cache(&tenant_id, &study_uid, &app_state, false).await {
+        match get_study_info_with_cache(&tenant_id, &study_uid, &app_state).await {
             Ok(info) => info,
             Err(response) => return response,
         };
@@ -315,7 +345,7 @@ async fn retrieve_study_subseries(
         )),
     }
 }
-
+/// 获取指定序列下的所有DICOM文件除开PIXEL_DATA的元素.并以JSON数组格式返回
 #[utoipa::path(
     get,
 
@@ -375,14 +405,14 @@ async fn retrieve_series_metadata(
     // 防止短期内多次访问导致数据库压力过大, 使用Redis缓存判断数据库中存在对应的实体类.
     let is_not_found = rh.get_study_entity_not_exists(tenant_id.as_str(), study_uid.as_str());
 
-    if is_not_found.is_ok() {
+    if is_not_found.await.unwrap() == true {
         return HttpResponse::NotFound().body(format!(
             "retrieve_series_metadata Study not found in database retry after 30 seconds: {},{}",
             tenant_id, study_uid
         ));
     }
     // ... existing code ...
-    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state, true).await
+    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state ).await
     {
         Ok(info) => info,
         Err(response) => return response,
@@ -399,14 +429,33 @@ async fn retrieve_series_metadata(
         .find(|info| info.series_uid.as_str() == series_uid)
         .cloned();
 
-    if series_info.is_none() {
-        return HttpResponse::NotFound()
-            .body(format!("Series not found in study info: {}", series_uid));
-    }
+    let series_info = match series_info {
+        Some(v) => v,
+        None => {
+            return HttpResponse::NotFound().body(format!(
+                "retrieve_series_metadata seies not found in database retry after 30 seconds: {},{}",
+                tenant_id, series_uid
+            ));
+        }
+    };
+
     info!(log, "Series Info: {:?}", series_info);
 
-    let series_info = series_info.unwrap();
-    let json_file_path = match json_metadata_path_for_series(&series_info, true) {
+    while rh
+        .get_series_metadata_gererate(tenant_id.as_str(), series_uid.as_str())
+        .await
+        .is_ok()
+    {
+        info!(
+            log,
+            "get_series_metadata_gererate is Ok , sleep 100 ms to wait generating json stopped"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+
+    let storage_config = StorageConfig::new(app_state.config.clone());
+
+    let json_file_path = match storage_config.json_metadata_path_for_series(&series_info, true) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -438,6 +487,7 @@ async fn retrieve_series_metadata(
         )),
     }
 }
+/// 获取指定的DICOM文件的PIXEL_DATA
 #[utoipa::path(
     get,
 
@@ -469,6 +519,7 @@ async fn retrieve_instance(
     retrieve_instance_impl(study_uid, series_uid, sop_uid, 1, req, app_state).await
 }
 
+/// 获取指定DICOM文件的指定帧的PIXEL_DATA,默认为第1帧 ,当前不支持多帧.
 #[utoipa::path(
     get,
 
@@ -548,7 +599,7 @@ async fn retrieve_instance_impl(
         ));
     }
     // 获取series_info (使用提取的函数)
-    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state, true).await
+    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state ).await
     {
         Ok(info) => info,
         Err(response) => return response,
@@ -564,15 +615,21 @@ async fn retrieve_instance_impl(
         .find(|info| info.series_uid.as_str() == series_uid)
         .cloned();
 
-    if series_info.is_none() {
-        return HttpResponse::NotFound()
-            .body(format!("Series not found in study info: {}", series_uid));
-    }
+    let series_info = match series_info {
+        Some(v) => v,
+        None => {
+            return HttpResponse::NotFound().body(format!(
+                "retrieve_instance_impl seies not found in database retry after 30 seconds: {},{}",
+                tenant_id, series_uid
+            ));
+        }
+    };
+
     info!(log, "Series Info: {:?}", series_info);
 
-    let series_info = series_info.unwrap();
+    let storage_config = StorageConfig::new(app_state.config.clone());
 
-    let dicom_dir = match dicom_series_dir(&series_info, false) {
+    let dicom_dir = match storage_config.dicom_series_dir(&series_info, false) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -600,19 +657,7 @@ async fn retrieve_instance_impl(
         Err(_) => HttpResponse::NotFound().body(format!("DICOM file not found: {}", &dicom_file)),
     }
 }
-// Echo endpoint - 如果你也想让它出现在API文档里:
-#[utoipa::path(
-    get,
-    responses(
-        (status = 200, description = "Echo Success"),
-    ),
-    tag = WADO_RS_TAG,
-    description = "Echo endpoint"
-)]
-#[get("/echo")]
-async fn echo_v1() -> impl Responder {
-    HttpResponse::Ok().body("Success")
-}
+
 
 use crate::auth_middleware_kc::Claims; // 确保能访问Claims结构
 

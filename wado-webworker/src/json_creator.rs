@@ -2,6 +2,7 @@ use crate::AppState;
 use common::dicom_json_helper::generate_series_json;
 use common::server_config::WebWorkerConfig;
 use database::dicom_dbprovider::current_time;
+use database::dicom_dbtype::BoundedString;
 use database::dicom_meta::DicomJsonMeta;
 use slog::{error, info};
 use std::ops::Sub;
@@ -100,26 +101,42 @@ async fn execute_background_json_generation(
     let mut json_mets = vec![];
     // 逐个处理记录
     for record in pending_records {
+        let tenant_id = record.tenant_id.as_str();
+        let study_uid = record.study_uid.as_str();
+        let series_uid = record.series_uid.as_str();
+
+        match app_state
+            .redis_helper
+            .set_series_metadata_gererate(&tenant_id, &series_uid)
+            .await
+        {
+            Ok(_) => {
+                info!(
+                    app_state.log,
+                    "Set series metadata generate for study: {}, series: {}",
+                    record.study_uid,
+                    record.series_uid
+                );
+            }
+            Err(e) => {
+                error!(
+                    app_state.log,
+                    "Failed to set series metadata generate for study: {}, series: {}: {}",
+                    record.study_uid,
+                    record.series_uid,
+                    e
+                )
+            }
+        };
         // 这里应该调用实际的JSON生成逻辑
         // 可以参考wado_rs_controller.rs中的实现
-        match generate_series_json(&record).await {
+        let result_status = match generate_series_json(&record).await {
             Ok(_) => {
                 info!(
                     app_state.log,
                     "Generated JSON for study: {}, series: {}", record.study_uid, record.series_uid
                 );
-                json_mets.push(DicomJsonMeta {
-                    tenant_id: record.tenant_id,
-                    study_uid: record.study_uid.clone(),
-                    series_uid: record.series_uid.clone(),
-                    study_uid_hash: record.study_uid_hash,
-                    series_uid_hash: record.series_uid_hash,
-                    study_date_origin: record.study_date_origin,
-                    flag_time: record.updated_time,
-                    created_time: current_time(),
-                    json_status: 1,
-                    retry_times: 1,
-                });
+                1
             }
             Err(e) => {
                 error!(
@@ -129,33 +146,56 @@ async fn execute_background_json_generation(
                     record.series_uid,
                     e
                 );
-                json_mets.push(DicomJsonMeta {
-                    tenant_id: record.tenant_id,
-                    study_uid: record.study_uid.clone(),
-                    series_uid: record.series_uid.clone(),
-                    study_uid_hash: record.study_uid_hash,
-                    series_uid_hash: record.series_uid_hash,
-                    study_date_origin: record.study_date_origin,
-                    flag_time: record.updated_time,
-                    created_time: current_time(),
-                    json_status: 2,
-                    retry_times: 1,
-                });
+                2
             }
-        }
-    }
-    if !json_mets.is_empty() {
-        match app_state.db.save_json_list(&json_mets).await {
+        };
+        json_mets.push(DicomJsonMeta {
+            tenant_id: BoundedString::<64>::make_str(tenant_id),
+            study_uid: BoundedString::<64>::make_str(study_uid),
+            series_uid: BoundedString::<64>::make_str(series_uid),
+            study_uid_hash: record.study_uid_hash,
+            series_uid_hash: record.series_uid_hash,
+            study_date_origin: record.study_date_origin,
+            flag_time: record.updated_time,
+            created_time: current_time(),
+            json_status: result_status,
+            retry_times: 1,
+        });
+
+        // 删除redis中的记录,无论生成成功与否
+        match app_state
+            .redis_helper
+            .del_series_metadata_gererate(&tenant_id, &series_uid)
+            .await
+        {
             Ok(_) => {
                 info!(
                     app_state.log,
-                    "Saved {} JSON metadata records",
-                    json_mets.len()
+                    "Set series metadata generate for study: {}, series: {}", study_uid, series_uid
                 );
             }
-            Err(_) => {
-                error!(app_state.log, "Failed to save JSON metadata records");
+            Err(e) => {
+                error!(
+                    app_state.log,
+                    "Failed to set series metadata generate for study: {}, series: {}: {}",
+                    study_uid,
+                    series_uid,
+                    e
+                )
             }
+        }
+    }
+
+    match app_state.db.save_json_list(&json_mets).await {
+        Ok(_) => {
+            info!(
+                app_state.log,
+                "Saved {} JSON metadata records",
+                json_mets.len()
+            );
+        }
+        Err(_) => {
+            error!(app_state.log, "Failed to save JSON metadata records");
         }
     }
 

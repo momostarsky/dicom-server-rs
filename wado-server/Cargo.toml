@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-
+permission-macros = { path = "../permission-macros" }
 dicom-core = { workspace = true }
 dicom-ul = { workspace = true }
 dicom-object = { workspace = true }
@@ -17,7 +17,7 @@ actix-cors = { workspace = true }
 slog = { workspace = true }
 slog-term = { workspace = true }
 slog-async = { workspace = true }
-serde = { workspace = true  ,features = ["derive"]}
+serde = { workspace = true, features = ["derive"] }
 serde_qs = { workspace = true }
 serde_json = { workspace = true }
 urlencoding = { workspace = true }
@@ -33,17 +33,26 @@ chrono = { workspace = true }
 redis = { workspace = true }
 url = { workspace = true }
 gdcm_conv = { workspace = true }
-reqwest = { workspace = true,  features = ["native-tls"] }
+reqwest = { workspace = true, features = ["native-tls"] }
 openssl = { workspace = true }
 sysinfo = "0.29"
 database = { path = "../database" }
 common = { path = "../common" }
-utoipa = { version = "5.4.0", features = ["actix_extras", "non_strict_integers","chrono","time","openapi_extensions","rc_schema","config"] }
+utoipa = { version = "5.4.0", features = ["actix_extras", "non_strict_integers", "chrono", "time", "openapi_extensions", "rc_schema", "config"] }
 utoipa-swagger-ui = { version = "9", features = ["actix-web"] }
-utoipa-actix-web =  { version = "0.1.2"  }
-jsonwebtoken = {  version =  "10.1.0", features = ["rust_crypto" ] }
-thiserror = "1.0.69"
-permission-macros = { path = "../permission-macros" }
-jsonpath-rust = "1.0.4"
-jsonpath_lib = "0.3.0"
-log = "0.4.28"
+utoipa-actix-web = { version = "0.1.2" }
+jsonwebtoken = { version = "10.1.0", features = ["rust_crypto"] }
+
+multer = { version = "3.1.0", features = ["tokio-io"] }
+tempfile = { workspace = true }
+tempdir = { workspace = true }
+memmap2 = { workspace = true }
+
+bytes = { workspace = true }
+thiserror = { workspace = true }
+
+jsonpath-rust = { workspace = true }
+jsonpath_lib = { workspace = true }
+log = { workspace = true }
+actix-multipart = { workspace = true }
+memchr = { workspace = true }
