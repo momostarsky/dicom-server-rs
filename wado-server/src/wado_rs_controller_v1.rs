@@ -207,7 +207,7 @@ async fn retrieve_study_metadata(
         }
     };
 
-    let storage_config = StorageConfig::new(app_state.config.clone());
+    let storage_config = StorageConfig::make_storage_config(&app_state.config);
 
     let json_path = match storage_config.json_metadata_path_for_study(study_info, false) {
         Ok(v) => v,
@@ -453,7 +453,7 @@ async fn retrieve_series_metadata(
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
-    let storage_config = StorageConfig::new(app_state.config.clone());
+    let storage_config = StorageConfig::make_storage_config(&app_state.config );
 
     let json_file_path = match storage_config.json_metadata_path_for_series(&series_info, true) {
         Ok(v) => v,
@@ -627,7 +627,7 @@ async fn retrieve_instance_impl(
 
     info!(log, "Series Info: {:?}", series_info);
 
-    let storage_config = StorageConfig::new(app_state.config.clone());
+    let storage_config = StorageConfig::make_storage_config(&app_state.config );
 
     let dicom_dir = match storage_config.dicom_series_dir(&series_info, false) {
         Ok(v) => v,

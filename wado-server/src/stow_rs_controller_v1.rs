@@ -1,9 +1,12 @@
 use actix_web::{HttpRequest, HttpResponse, Result, http::header, post, web};
+use chrono::Datelike;
 
 use futures_util::StreamExt as _;
 // use dicom_object::open_file; // 如果需要解析 DICOM，取消注释
 use crate::AppState;
 use crate::constants::STOW_RS_TAG;
+use common::dicom_utils::{get_date_value_dicom, get_text_value};
+use common::storage_config::{StorageConfig, dicom_file_path};
 use dicom_dictionary_std::tags;
 use dicom_object::DefaultDicomObject;
 use futures_util::io::Cursor;
@@ -385,7 +388,7 @@ async fn process_multipart_fields(
     tenant_id: &String,
 ) -> Result<(), HttpResponse> {
     let log = &app_state.log;
-    let dcmstoreage = &app_state.config.local_storage.dicm_store_path;
+    let storage_confg = StorageConfig::make_storage_config(&app_state.config);
     loop {
         match multipart.next_field().await {
             Ok(Some(mut field)) => {
@@ -442,40 +445,70 @@ async fn process_multipart_fields(
                                 continue;
                             }
                             let loaded_object = loaded_object.unwrap();
-                            let tag_study_uid = loaded_object
-                                .get(tags::STUDY_INSTANCE_UID)
-                                .unwrap()
-                                .to_str()
-                                .unwrap();
+                            let tag_study_uid =
+                                get_text_value(&loaded_object, tags::STUDY_INSTANCE_UID)
+                                    .map(|v| v.to_string());
                             if let Some(expected_uid) = study_instance_uid {
-                                if expected_uid.as_str() != tag_study_uid {
+                                if expected_uid != tag_study_uid.as_ref().unwrap() {
                                     warn!(
                                         log,
-                                        "Study instance UID mismatch, excepted: {} and actual :{}",
+                                        "Study instance UID mismatch, excepted: {} and actual :{:?}",
                                         expected_uid,
                                         tag_study_uid
                                     );
                                 }
                             }
-                            let sop_inst_uid = loaded_object
-                                .get(tags::SOP_INSTANCE_UID)
-                                .unwrap()
-                                .to_str()
-                                .unwrap();
-                            let seris_instance_uid = loaded_object
-                                .get(tags::SERIES_INSTANCE_UID)
-                                .unwrap()
-                                .to_str()
-                                .unwrap();
-
-                            let dir_path = format!(
-                                "{}/{}/{}/{}",
-                                &dcmstoreage, &tenant_id, &tag_study_uid, &seris_instance_uid
-                            );
-                            if !std::path::Path::new(&dir_path).exists() {
-                                std::fs::create_dir_all(&dir_path).unwrap();
+                            let sop_inst_uid =
+                                get_text_value(&loaded_object, tags::SOP_INSTANCE_UID);
+                            let seris_instance_uid =
+                                get_text_value(&loaded_object, tags::SERIES_INSTANCE_UID);
+                            let study_date =
+                                match get_date_value_dicom(&loaded_object, tags::STUDY_DATE) {
+                                    Some(date) => {
+                                        // 将日期格式化为 YYYYMMDD 形式
+                                        Some(format!(
+                                            "{:04}{:02}{:02}",
+                                            date.year(),
+                                            date.month(),
+                                            date.day()
+                                        ))
+                                    }
+                                    None => {
+                                        warn!(log, "Failed to get study date");
+                                        None
+                                    }
+                                };
+                            if sop_inst_uid.is_none()
+                                || seris_instance_uid.is_none()
+                                || study_date.is_none()
+                                || tag_study_uid.is_none()
+                            {
+                                warn!(
+                                    log,
+                                    "Some required tags are missing, sop_inst_uid: {:?}, seris_instance_uid: {:?}, study_date: {:?}, tag_study_uid: {:?}",
+                                    sop_inst_uid,
+                                    seris_instance_uid,
+                                    study_date,
+                                    &tag_study_uid
+                                );
                             }
-                            let filepath = format!("{}/{}.dcm", &dir_path, &sop_inst_uid);
+
+                            let dir_path = match storage_confg.make_series_dicom_dir(
+                                tenant_id,
+                                &study_date.unwrap().to_string(),
+                                tag_study_uid.unwrap().as_str(),
+                                seris_instance_uid.unwrap().as_str(),
+                                true,
+                            ) {
+                                Ok(path) => path,
+                                Err(_e) => {
+                                    return Err(HttpResponse::InternalServerError()
+                                        .body("Failed to create series directory"));
+                                }
+                            };
+
+                            let filepath =
+                                dicom_file_path(&dir_path, sop_inst_uid.unwrap().as_str());
                             match loaded_object.write_to_file(&filepath) {
                                 Ok(_) => {
                                     info!(log, "Saved DICOM file to {}", &filepath);
@@ -530,26 +563,27 @@ fn validate_and_find_start_position(
          --data-binary $'\r\n--DICOM_BOUNDARY--\r\n'
      */
     // 检查是否是特殊格式（首尾有相同特殊字符）
-    let has_special_wrapper = field_chunk.len() >= 2
-        && ((field_chunk[0] == b'&' && field_chunk[end_position - 1] == b'&')
-            || (field_chunk[0] == b'$' && field_chunk[end_position - 1] == b'$')
-            || (field_chunk[0] == b'!' && field_chunk[end_position - 1] == b'!'));
-
     match field_content_type {
         "application/dicom" => {
-            // 检查标准DICOM文件（DICM在128字节偏移处）
-            if field_chunk.len() >= 132 && &field_chunk[128..132] == b"DICM" {
-                Ok(0)
-            } else if field_chunk.len() >= 133
-                && has_special_wrapper
-                && &field_chunk[129..133] == b"DICM"
+            // 检查是否有特殊包装符
+            let has_special_wrapper = field_chunk.len() >= 2
+                && matches!(
+                    (field_chunk[0], field_chunk[end_position - 1]),
+                    (b'&', b'&') | (b'$', b'$') | (b'~', b'~') | (b'!', b'!')
+                );
+
+            // 计算 DICM 偏移位置
+            let offset = if has_special_wrapper { 1 } else { 0 };
+
+            // 验证 DICM 标志是否存在
+            if field_chunk.len() >= (132 + offset)
+                && &field_chunk[128 + offset..132 + offset] == b"DICM"
             {
-                Ok(1)
+                Ok(offset)
             } else {
                 Err(HttpResponse::BadRequest().body("Invalid DICOM data"))
             }
         }
-
         _ => Ok(0),
     }
 }

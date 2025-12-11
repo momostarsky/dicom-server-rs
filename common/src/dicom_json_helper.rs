@@ -275,7 +275,7 @@ pub async fn generate_series_json(series_info: &DicomStateMeta) -> Result<String
             ));
         }
     };
-    let storage_config = StorageConfig::new( app_config);
+    let storage_config = StorageConfig::make_storage_config( &app_config);
 
     let json_file_path = match storage_config.json_metadata_path_for_series(series_info,true) {
         Ok(v) => v,

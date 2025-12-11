@@ -1,12 +1,12 @@
 use crate::server_config::AppConfig;
 use database::dicom_meta::DicomStateMeta;
 
-pub struct StorageConfig {
-    app_config: AppConfig,
+pub struct StorageConfig<'a> {
+    app_config: &'a AppConfig,
 }
 
-impl StorageConfig {
-    pub fn new(app_config: AppConfig) -> Self {
+impl<'a> StorageConfig<'a> {
+    pub fn make_storage_config(app_config: &'a AppConfig) -> Self {
         StorageConfig { app_config }
     }
     pub fn dicom_study_dir(

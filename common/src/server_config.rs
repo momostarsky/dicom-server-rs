@@ -4,6 +4,7 @@ use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dotenv::dotenv;
 use serde::Deserialize;
 use std::{env, fs};
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Once;
 
@@ -128,6 +129,7 @@ pub struct AppConfig {
     pub webworker: Option<WebWorkerConfig>,
 }
 
+ 
 static APP_ENV: &str = "APP_ENV";
 static APP_PREFIX: &str = "DICOM";
 

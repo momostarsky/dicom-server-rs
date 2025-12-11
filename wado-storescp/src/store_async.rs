@@ -103,7 +103,7 @@ pub async fn run_store_async(
         association.presentation_contexts()
     );
 
-    let storage_config = StorageConfig::new(app_config.clone());
+    let storage_config = StorageConfig::make_storage_config(&app_config );
 
     let mut dicom_message_lists: Vec<DicomStoreMeta> = vec![];
 

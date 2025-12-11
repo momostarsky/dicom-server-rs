@@ -84,7 +84,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         association.presentation_contexts()
     );
 
-    let storage_config = StorageConfig::new(app_config.clone());
+    let storage_config = StorageConfig::make_storage_config(&app_config );
     let client_ae_title = association.client_ae_title().to_string();
     let mut dicom_message_lists = vec![];
     loop {

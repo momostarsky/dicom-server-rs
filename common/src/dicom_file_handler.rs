@@ -46,7 +46,7 @@ pub async fn process_dicom_file(
     sop_class_uid: &String,    //当前文件的SOP实例ID
     ip: String,
     client_ae: String,
-    storage_config: &StorageConfig,
+    storage_config: &StorageConfig<'_>,
 ) -> Result<DicomStoreMeta, Whatever> {
     let root_logger = get_logger();
     let logger = root_logger.new(o!("wado-storescp"=>"process_dicom_file"));
