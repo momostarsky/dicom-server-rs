@@ -389,6 +389,7 @@ async fn process_multipart_fields(
 ) -> Result<(), HttpResponse> {
     let log = &app_state.log;
     let storage_confg = StorageConfig::make_storage_config(&app_state.config);
+    let mut files: Vec<String> = vec![];
     loop {
         match multipart.next_field().await {
             Ok(Some(mut field)) => {
@@ -512,6 +513,7 @@ async fn process_multipart_fields(
                             match loaded_object.write_to_file(&filepath) {
                                 Ok(_) => {
                                     info!(log, "Saved DICOM file to {}", &filepath);
+                                    files.push(filepath);
                                 }
                                 Err(e) => {
                                     error!(log, "Failed to save DICOM file: {}", e);
@@ -539,6 +541,10 @@ async fn process_multipart_fields(
                 );
             }
         }
+    }
+    // 遍历所有已经处理的文件
+    for filepath in files {
+        println!("File: {}", filepath);
     }
     Ok(())
 }

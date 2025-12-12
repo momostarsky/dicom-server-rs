@@ -15,7 +15,7 @@ use dicom_ul::{pdu::PDataValueType, Pdu};
 use slog::o;
 use database::dicom_meta::DicomStoreMeta;
 use slog::{debug, info, warn};
-use common::dicom_file_handler::classify_and_publish_dicom_messages;
+use common::dicom_file_handler::{classify_and_publish_dicom_messages, process_dicom_file};
 use common::storage_config::StorageConfig;
 
 pub async fn run_store_async(
@@ -218,7 +218,7 @@ pub async fn run_store_async(
                                 // )
                                 // .whatever_context("failed to read DICOM data object")?;
 
-                                match dicom_file_handler::process_dicom_file(
+                                match process_dicom_file(
                                     &instance_buffer,
                                     &tenant_id,
                                     ts,
@@ -251,7 +251,7 @@ pub async fn run_store_async(
                                     }
                                 }
                                 if dicom_message_lists.len() >= 10 {
-                                    match dicom_file_handler::classify_and_publish_dicom_messages(
+                                    match classify_and_publish_dicom_messages(
                                         &dicom_message_lists,
                                         &storage_producer,
                                         &log_producer,

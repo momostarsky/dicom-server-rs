@@ -1,6 +1,7 @@
 use crate::server_config::AppConfig;
 use database::dicom_meta::DicomStateMeta;
-
+use seahash::SeaHasher;
+use std::hash::Hasher;
 pub struct StorageConfig<'a> {
     app_config: &'a AppConfig,
 }
@@ -137,13 +138,9 @@ impl<'a> StorageConfig<'a> {
 
 /// 生成 UID 的哈希值, 对于不足20位时，定长设为20位,前置补0
 pub fn hash_uid(uid: &str) -> String {
-    use seahash::SeaHasher;
-    use std::hash::Hasher;
-
     let mut hasher = SeaHasher::new();
     hasher.write(uid.as_bytes());
     let hash_value = hasher.finish();
-
     // 将 u64 转换为字符串，并用前导零填充到 20 位
     format!("{:020}", hash_value)
 }

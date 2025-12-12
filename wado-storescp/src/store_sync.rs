@@ -15,6 +15,7 @@ use dicom_ul::{pdu::PDataValueType, Pdu};
 use std::net::TcpStream;
 use common::storage_config::StorageConfig;
 use slog::{debug, info, o, warn};
+use common::dicom_file_handler::{classify_and_publish_dicom_messages, process_dicom_file};
 
 pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Whatever> {
     let App {
@@ -193,7 +194,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                 // )
                                 // .whatever_context("failed to read DICOM data object")?;
 
-                                match dicom_file_handler::process_dicom_file(
+                                match process_dicom_file(
                                     &instance_buffer,
                                     &tenant_id,
                                     ts,
@@ -231,7 +232,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                     // 通过 storage_producer 进行消息分发:publish_messages ,
                                     // 不属于的通过 change_producer 进行分发.
 
-                                    match dicom_file_handler::classify_and_publish_dicom_messages(
+                                    match classify_and_publish_dicom_messages(
                                         &dicom_message_lists,
                                         &storage_producer,
                                         &log_producer,
