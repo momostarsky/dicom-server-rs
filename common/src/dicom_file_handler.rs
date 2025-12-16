@@ -15,7 +15,6 @@ use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use slog::o;
 use slog::{error, info};
 use std::collections::HashSet;
-use std::path::PathBuf;
 use std::sync::LazyLock;
 use uuid::Uuid;
 
