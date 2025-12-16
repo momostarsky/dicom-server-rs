@@ -12,7 +12,6 @@ pub mod extraction_error;
 pub mod dicom_json_helper;
 pub mod dicom_object_meta;
 pub mod dicom_utils;
-pub mod license_manager;
 pub mod message_sender;
 pub mod message_sender_kafka;
 
