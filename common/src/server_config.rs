@@ -4,7 +4,6 @@ use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dotenv::dotenv;
 use serde::Deserialize;
 use std::{env, fs};
-use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Once;
 

@@ -5,7 +5,7 @@ use crate::{
 use dicom_core::Tag;
 
 use common::message_sender_kafka::KafkaMessagePublisher;
-use common::{dicom_file_handler, server_config};
+use common::server_config;
 use common::utils::get_logger;
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu::{OptionExt, Report, ResultExt, Whatever};
