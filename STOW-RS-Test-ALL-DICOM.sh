@@ -28,7 +28,8 @@ printf -- "\r\n--%s--\r\n" "$BOUNDARY" >> "$TEMP_FILE"
 
 # 8. 使用单个 --data-binary 发送合并后的临时文件
 curl -X POST http://localhost:9000/stow-rs/v1/studies \
-     -H "Content-Type: multipart/related; boundary=$BOUNDARY; type=application/json" \
+     -H "Content-Type: multipart/related; boundary=$BOUNDARY; type=application/dicom" \
+     -H "x-tenant: 1234567890" \
      -H "Accept: application/json" \
      --data-binary @"$TEMP_FILE"
 

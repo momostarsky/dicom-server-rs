@@ -1,12 +1,17 @@
 use actix_web::{HttpRequest, HttpResponse, Result, http::header, post, web};
+use chrono::Datelike;
 
 use futures_util::StreamExt as _;
 // use dicom_object::open_file; // 如果需要解析 DICOM，取消注释
 use crate::AppState;
 use crate::constants::STOW_RS_TAG;
+use common::dicom_utils::{get_date_value_dicom, get_text_value};
+use common::storage_config::{StorageConfig, dicom_file_path};
+use dicom_dictionary_std::tags;
+use dicom_object::DefaultDicomObject;
+use futures_util::io::Cursor;
 use multer::Multipart;
 use slog::{error, info, warn};
-use std::io::Write;
 
 fn parse_multipart_related_content_type(
     content_type: &str,
@@ -39,8 +44,8 @@ fn parse_multipart_related_content_type(
     post,
     params(
         ("x-tenant" = String, Header, description = "Tenant ID from request header"),
-        ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom  or application/json"),
-        ("Content-Type" =  String, Header, example="multipart/related; boundary=6c17d7b275f94d93f0b2a8c3d9xj; type=application/dicom+json", description = "Accept Content Type: application/dicom  or application/json"),
+        ("Accept" =  String, Header, example="application/dicom", description = "Accept Content Type: application/dicom"),
+        ("Content-Type" =  String, Header, example="multipart/related; boundary=6c17d7b275f94d93f0b2a8c3d9xj; type=application/dicom", description = "Accept Content Type: application/dicom"),
         ("Content-Length" =  u32, Header, example="5120000", description = "Content Length of the request body"),
         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
@@ -59,6 +64,7 @@ async fn store_instances(
     app_state: web::Data<AppState>,
     payload: web::Payload,
 ) -> Result<HttpResponse> {
+    // TODO: 获取请求头的Content-Length 和 x-tenant 没有这两个参数则返回HTTP 请求格式不对的错误
     // 处理请求并保存实例
     process_and_store_instances(req, payload, app_state, None).await
 }
@@ -70,9 +76,9 @@ async fn store_instances(
     params(
         ("study_instance_uid" = String, Path, description = "Study Instance UID"),
         ("x-tenant" = String, Header, description = "Tenant ID from request header"),
-        ("Content-Type" =  String, Header, example="multipart/related; boundary=6c17d7b275f94d93f0b2a8c3d9xj; type=application/dicom+json", description = "Accept Content Type: application/dicom  or application/json"),
+        ("Content-Type" =  String, Header, example="multipart/related; boundary=6c17d7b275f94d93f0b2a8c3d9xj; type=application/dicom", description = "Accept Content Type: application/dicom"),
         ("Content-Length" = u32, Header, example="5120000", description = "Content Length of the request body"),
-        ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom+json or application/json"),
+        ("Accept" =  String, Header, example="application/json", description = "Accept Content Type: application/dicom"),
         ("Authorization" = Option<String>, Header,   description = "Optional JWT Access Token in Bearer format")
     ),
     responses(
@@ -140,8 +146,6 @@ async fn parse_boundary_info(
 }
 
 /// 处理并存储 DICOM 实例的主逻辑
-/// 处理并存储 DICOM 实例的主逻辑
-/// 处理并存储 DICOM 实例的主逻辑
 async fn process_and_store_instances(
     req: HttpRequest,
     mut payload: web::Payload,
@@ -153,26 +157,32 @@ async fn process_and_store_instances(
     let log = app_state.log.clone();
     // 使用 as_ref() 获取引用而不是消耗值
     if let Some(uid) = &study_instance_uid {
-        info!(
-            log,
-            "Received POST request on /studies/{}", uid
-        );
+        info!(log, "Received POST request on /studies/{}", uid);
     } else {
         // 处理并保存实例
         info!(log, "Received POST request on /studies");
     }
 
-    // 解析 boundary 信息
-    let boundary = match parse_boundary_info(&req, &log).await {
-        Ok(boundary) => boundary,
-        Err(response) => return Ok(response),
+    // 获取并验证 x-tenant 头
+    let tenant_id = match req.headers().get("x-tenant") {
+        Some(header_value) => match header_value.to_str() {
+            Ok(value) => value.to_string(),
+            Err(_) => {
+                error!(log, "Failed to convert x-tenant header to string");
+                return Ok(HttpResponse::BadRequest().body("Malformed x-tenant header"));
+            }
+        },
+        None => {
+            error!(log, "Missing x-tenant header");
+            return Ok(HttpResponse::BadRequest().body("x-tenant header is required"));
+        }
     };
 
     // 修改为必须存在的 Content-Length
     let content_length = match req.headers().get(header::CONTENT_LENGTH) {
         Some(header_value) => match header_value.to_str() {
             Ok(value_str) => match value_str.parse::<usize>() {
-                Ok(length) => length,
+                Ok(length) => length + 4096, // 添加 4096 字节,以防止边界情况
                 Err(_) => {
                     error!(
                         log,
@@ -193,7 +203,11 @@ async fn process_and_store_instances(
             return Ok(HttpResponse::BadRequest().body("Content-Length header is required"));
         }
     };
-
+    // 解析 boundary 信息
+    let boundary = match parse_boundary_info(&req, &log).await {
+        Ok(boundary) => boundary,
+        Err(response) => return Ok(response),
+    };
     // 根据 Content-Length 动态设置容量
     let initial_capacity = if content_length > 0 && content_length < 50 * 1024 * 1024 {
         // 使用实际长度的 1.2 倍作为容量，但不超过 10MB
@@ -215,17 +229,9 @@ async fn process_and_store_instances(
     );
 
     if use_memory_mapping {
-        // 处理大文件: 使用内存映射文件
-        let temp_file_path = format!("./temp_multipart_{}.dat", uuid::Uuid::new_v4());
-
-        let file = match std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&temp_file_path)
-        {
-            Ok(f) => f,
+        // 处理大文件: 使用临时文件和内存映射
+        let temp_file = match tempfile::NamedTempFile::new() {
+            Ok(file) => file,
             Err(e) => {
                 error!(
                     log,
@@ -237,16 +243,24 @@ async fn process_and_store_instances(
             }
         };
 
+        let file = match temp_file.reopen() {
+            Ok(f) => f,
+            Err(e) => {
+                error!(log, "Failed to reopen temporary file: {}", e);
+                return Ok(HttpResponse::InternalServerError().body("Failed to reopen file"));
+            }
+        };
+
         // 设置文件大小
         if let Err(e) = file.set_len(content_length as u64) {
             error!(log, "Failed to set temporary file size: {}", e);
-            let _ = std::fs::remove_file(&temp_file_path); // 尝试清理
             return Ok(HttpResponse::InternalServerError().body("Failed to set file size"));
         }
 
         // 创建内存映射并在作用域内处理
-        {
-            let mmap = match unsafe { memmap2::MmapMut::map_mut(&file) } {
+        let result = {
+            let mmap_result = unsafe { memmap2::MmapMut::map_mut(&file) };
+            match mmap_result {
                 Ok(mut mmap) => {
                     // 读取数据到内存映射区域
                     let mut position = 0;
@@ -258,14 +272,12 @@ async fn process_and_store_instances(
                                     position += data.len();
                                 } else {
                                     error!(log, "Payload larger than Content-Length");
-                                    let _ = std::fs::remove_file(&temp_file_path);
                                     return Ok(HttpResponse::BadRequest()
                                         .body("Payload larger than Content-Length"));
                                 }
                             }
                             Err(e) => {
                                 error!(log, "Error reading payload chunk: {}", e);
-                                let _ = std::fs::remove_file(&temp_file_path);
                                 return Ok(
                                     HttpResponse::InternalServerError().body("Error reading data")
                                 );
@@ -274,42 +286,50 @@ async fn process_and_store_instances(
                     }
 
                     // 注意：这里不调用 flush()，因为我们只需要读取数据，不需要持久化到磁盘
-                    mmap.make_read_only()
-                        .unwrap_or_else(|_| unsafe { memmap2::Mmap::map(&file).unwrap() })
+                    let readonly_mmap = match mmap.make_read_only() {
+                        Ok(mmap) => mmap,
+                        Err(_) => unsafe {
+                            match memmap2::Mmap::map(&file) {
+                                Ok(mmap) => mmap,
+                                Err(e) => {
+                                    error!(log, "Failed to create readonly memory mapping: {}", e);
+                                    return Ok(HttpResponse::InternalServerError()
+                                        .body("Failed to create memory mapping"));
+                                }
+                            }
+                        },
+                    };
+
+                    // 在 mmap 作用域内处理 multipart 字段
+                    let mut multipart =
+                        Multipart::with_reader(&readonly_mmap[..], boundary.as_str());
+                    let process_result = process_multipart_fields(
+                        &mut multipart,
+                        &app_state,
+                        &study_instance_uid,
+                        &tenant_id,
+                    )
+                    .await;
+
+                    // 显式释放资源
+                    drop(multipart);
+                    drop(readonly_mmap);
+
+                    process_result
                 }
                 Err(e) => {
                     error!(log, "Failed to create memory mapping: {}", e);
-                    let _ = std::fs::remove_file(&temp_file_path);
-                    return Ok(
-                        HttpResponse::InternalServerError().body("Failed to create memory mapping")
-                    );
+                    Err(HttpResponse::InternalServerError().body("Failed to create memory mapping"))
                 }
-            };
-
-            // 在 mmap 作用域内处理 multipart 字段
-            let mut multipart = Multipart::with_reader(&mmap[..], boundary.as_str());
-            if let Err(err) =
-                process_multipart_fields(&mut multipart, &app_state, &study_instance_uid).await
-            {
-                // mmap 会在作用域结束时自动释放
-                if let Err(e) = std::fs::remove_file(&temp_file_path) {
-                    warn!(
-                        log,
-                        "Failed to remove temporary file {}: {}", temp_file_path, e
-                    );
-                }
-                return Ok(err);
             }
-            // multipart 会在作用域结束时自动释放，然后 mmap 才会被释放
-        } // mmap 的作用域结束，确保在这里释放
+        }; // mmap 的作用域结束，确保在这里释放
 
-        // 处理完成后清理临时文件
-        if let Err(e) = std::fs::remove_file(&temp_file_path) {
-            warn!(
-                log,
-                "Failed to remove temporary file {}: {}", temp_file_path, e
-            );
+        // 处理结果
+        if let Err(err) = result {
+            return Ok(err);
         }
+
+        // temp_file 会在离开作用域时自动清理
     } else {
         // 处理小文件: 直接使用内存缓冲区
         let mut buffer = Vec::with_capacity(initial_capacity);
@@ -327,7 +347,8 @@ async fn process_and_store_instances(
 
         let mut multipart = Multipart::with_reader(buffer.as_slice(), boundary.as_str());
         if let Err(err) =
-            process_multipart_fields(&mut multipart, &app_state, &study_instance_uid ).await
+            process_multipart_fields(&mut multipart, &app_state, &study_instance_uid, &tenant_id)
+                .await
         {
             return Ok(err);
         }
@@ -337,7 +358,7 @@ async fn process_and_store_instances(
     let duration = start_time.elapsed();
 
     // 构造响应
-    if let Some(uid) = study_instance_uid  {
+    if let Some(uid) = study_instance_uid {
         info!(
             log,
             "STOW-RS request for study {} processed successfully (simplified)", uid;
@@ -360,13 +381,15 @@ async fn process_and_store_instances(
 }
 
 // 抽离处理 multipart 字段的逻辑
-// 抽离处理 multipart 字段的逻辑
 async fn process_multipart_fields(
     multipart: &mut Multipart<'_>,
     app_state: &web::Data<AppState>,
     study_instance_uid: &Option<String>,
+    tenant_id: &String,
 ) -> Result<(), HttpResponse> {
     let log = &app_state.log;
+    let storage_confg = StorageConfig::make_storage_config(&app_state.config);
+    let mut files: Vec<String> = vec![];
     loop {
         match multipart.next_field().await {
             Ok(Some(mut field)) => {
@@ -386,12 +409,10 @@ async fn process_multipart_fields(
                     field_content_type
                 );
 
-                if !(field_content_type == "application/json"
-                    || field_content_type == "application/dicom")
-                {
+                if field_content_type != "application/dicom" {
                     error!(
                         log,
-                        "Unsupported field content type: {}, only application/json and application/dicom are supported",
+                        "Unsupported field content type: {}, only  application/dicom is supported",
                         field_content_type
                     );
                     return Err(HttpResponse::BadRequest()
@@ -402,22 +423,6 @@ async fn process_multipart_fields(
                 loop {
                     match field.chunk().await {
                         Ok(Some(field_chunk)) => {
-                            // 保存 DICOM 文件
-                            let filename = uuid::Uuid::new_v4().to_string();
-                            let filepath = if field_content_type == "application/dicom" {
-                                if let Some(uid) = study_instance_uid {
-                                    format!("./{}_{}.dcm", uid, filename)
-                                } else {
-                                    format!("./{}.dcm", filename)
-                                }
-                            } else {
-                                // application/json 类型
-                                if let Some(uid) = study_instance_uid {
-                                    format!("./{}_{}.json", uid, filename)
-                                } else {
-                                    format!("./{}.json", filename)
-                                }
-                            };
                             let end_position = field_chunk.len();
                             // 在主逻辑中使用
                             let start_position = match validate_and_find_start_position(
@@ -428,35 +433,94 @@ async fn process_multipart_fields(
                                 Ok(pos) => pos,
                                 Err(response) => return Err(response),
                             };
-
-                            match std::fs::File::create(&filepath) {
-                                Ok(mut file) => {
-                                    info!(
+                            field_bytes_len += field_chunk.len();
+                            // 使用 std::io::Cursor 包装字节流，使其实现 Read trait
+                            let cursor = Cursor::new(&field_chunk[start_position..end_position]);
+                            // 使用 DicomObject::read_from() 从实现了 Read trait 的源加载对象
+                            let loaded_object =
+                                match DefaultDicomObject::from_reader(cursor.into_inner()) {
+                                    Ok(obj) => Some(obj),
+                                    Err(_e) => None,
+                                };
+                            if loaded_object.is_none() {
+                                continue;
+                            }
+                            let loaded_object = loaded_object.unwrap();
+                            let tag_study_uid =
+                                get_text_value(&loaded_object, tags::STUDY_INSTANCE_UID)
+                                    .map(|v| v.to_string());
+                            if let Some(expected_uid) = study_instance_uid {
+                                if expected_uid != tag_study_uid.as_ref().unwrap() {
+                                    warn!(
                                         log,
-                                        "Saving DICOM file to: {} , with length:{}",
-                                        filepath,
-                                        field_chunk.len()
+                                        "Study instance UID mismatch, excepted: {} and actual :{:?}",
+                                        expected_uid,
+                                        tag_study_uid
                                     );
-                                    if let Err(e) =
-                                        file.write_all(&field_chunk[start_position..end_position])
-                                    {
-                                        error!(
-                                            log,
-                                            "Failed to write DICOM file {}: {}", filepath, e
-                                        );
-                                        return Err(HttpResponse::InternalServerError()
-                                            .body("Failed to save DICOM file"));
-                                    }
-                                    info!(log, "Saved DICOM file to: {}", filepath);
-                                }
-                                Err(e) => {
-                                    error!(log, "Failed to create file {}: {}", filepath, e);
-                                    return Err(HttpResponse::InternalServerError()
-                                        .body("Failed to create storage file"));
                                 }
                             }
+                            let sop_inst_uid =
+                                get_text_value(&loaded_object, tags::SOP_INSTANCE_UID);
+                            let seris_instance_uid =
+                                get_text_value(&loaded_object, tags::SERIES_INSTANCE_UID);
+                            let study_date =
+                                match get_date_value_dicom(&loaded_object, tags::STUDY_DATE) {
+                                    Some(date) => {
+                                        // 将日期格式化为 YYYYMMDD 形式
+                                        Some(format!(
+                                            "{:04}{:02}{:02}",
+                                            date.year(),
+                                            date.month(),
+                                            date.day()
+                                        ))
+                                    }
+                                    None => {
+                                        warn!(log, "Failed to get study date");
+                                        None
+                                    }
+                                };
+                            if sop_inst_uid.is_none()
+                                || seris_instance_uid.is_none()
+                                || study_date.is_none()
+                                || tag_study_uid.is_none()
+                            {
+                                warn!(
+                                    log,
+                                    "Some required tags are missing, sop_inst_uid: {:?}, seris_instance_uid: {:?}, study_date: {:?}, tag_study_uid: {:?}",
+                                    sop_inst_uid,
+                                    seris_instance_uid,
+                                    study_date,
+                                    &tag_study_uid
+                                );
+                            }
 
-                            field_bytes_len += field_chunk.len();
+                            let dir_path = match storage_confg.make_series_dicom_dir(
+                                tenant_id,
+                                &study_date.unwrap().to_string(),
+                                tag_study_uid.unwrap().as_str(),
+                                seris_instance_uid.unwrap().as_str(),
+                                true,
+                            ) {
+                                Ok(path) => path,
+                                Err(_e) => {
+                                    return Err(HttpResponse::InternalServerError()
+                                        .body("Failed to create series directory"));
+                                }
+                            };
+
+                            let filepath =
+                                dicom_file_path(&dir_path, sop_inst_uid.unwrap().as_str());
+                            match loaded_object.write_to_file(&filepath) {
+                                Ok(_) => {
+                                    info!(log, "Saved DICOM file to {}", &filepath);
+                                    files.push(filepath);
+                                }
+                                Err(e) => {
+                                    error!(log, "Failed to save DICOM file: {}", e);
+                                    // return Err(HttpResponse::InternalServerError()
+                                    //     .body("Failed to save DICOM file"));
+                                }
+                            }
                         }
                         Ok(None) => break, // 没有更多数据块了
                         Err(e) => {
@@ -478,6 +542,10 @@ async fn process_multipart_fields(
             }
         }
     }
+    // 遍历所有已经处理的文件
+    for filepath in files {
+        println!("File: {}", filepath);
+    }
     Ok(())
 }
 
@@ -490,11 +558,9 @@ fn validate_and_find_start_position(
     // 此为非必须得.用于兼容一些特殊格式 例如采用以下curl 请求会多余一个& 符号
     /*
     curl -X POST http://localhost:9000/stow-rs/v1/studies \
-         -H "Content-Type: multipart/related; boundary=DICOM_BOUNDARY; type=application/json" \
+         -H "Content-Type: multipart/related; boundary=DICOM_BOUNDARY; type=application/dicom" \
          -H "Accept: application/json" \
-         --data-binary $'--DICOM_BOUNDARY\r\nContent-Type: application/json\r\n\r\n' \
-         --data-binary @metadata.json \
-         --data-binary $'\r\n--DICOM_BOUNDARY\r\nContent-Type: application/dicom\r\n\r\n' \
+         --data-binary $'--DICOM_BOUNDARY\r\nContent-Type: application/dicom\r\n\r\n' \
          --data-binary @dcm1.dcm \
          --data-binary $'\r\n--DICOM_BOUNDARY\r\nContent-Type: application/dicom\r\n\r\n' \
          --data-binary @dcm2.dcm \
@@ -502,34 +568,26 @@ fn validate_and_find_start_position(
          --data-binary @dcm3.dcm \
          --data-binary $'\r\n--DICOM_BOUNDARY--\r\n'
      */
-    let a = field_chunk[0] == b'&' && field_chunk[end_position - 1] == b'&';
-    let b = field_chunk[0] == b'$' && field_chunk[end_position - 2] == b'$';
-    let c = field_chunk[0] == b'!' && field_chunk[end_position - 2] == b'!';
-
+    // 检查是否是特殊格式（首尾有相同特殊字符）
     match field_content_type {
         "application/dicom" => {
-            // 检查标准DICOM文件（DICM在128字节偏移处）
-            if field_chunk.len() >= 132 && &field_chunk[128..132] == b"DICM" {
-                Ok(0)
-            } else if field_chunk.len() >= 133 && (a || b || c) && &field_chunk[129..133] == b"DICM"
+            // 检查是否有特殊包装符
+            let has_special_wrapper = field_chunk.len() >= 2
+                && matches!(
+                    (field_chunk[0], field_chunk[end_position - 1]),
+                    (b'&', b'&') | (b'$', b'$') | (b'~', b'~') | (b'!', b'!')
+                );
+
+            // 计算 DICM 偏移位置
+            let offset = if has_special_wrapper { 1 } else { 0 };
+
+            // 验证 DICM 标志是否存在
+            if field_chunk.len() >= (132 + offset)
+                && &field_chunk[128 + offset..132 + offset] == b"DICM"
             {
-                Ok(1)
+                Ok(offset)
             } else {
                 Err(HttpResponse::BadRequest().body("Invalid DICOM data"))
-            }
-        }
-        "application/json" => {
-            // 验证JSON数据
-            if serde_json::from_slice::<serde_json::Value>(&field_chunk).is_ok() {
-                Ok(0)
-            } else if field_chunk.len() >= 2
-                && (a || b || c)
-                && serde_json::from_slice::<serde_json::Value>(&field_chunk[1..end_position - 1])
-                    .is_ok()
-            {
-                Ok(1)
-            } else {
-                Err(HttpResponse::BadRequest().body("Invalid JSON data"))
             }
         }
         _ => Ok(0),

@@ -1,11 +1,11 @@
 use crate::{
-    create_cecho_response, create_cstore_response, dicom_file_handler, transfer::ABSTRACT_SYNTAXES,
+    create_cecho_response, create_cstore_response, transfer::ABSTRACT_SYNTAXES,
     App,
 };
 
 use common::message_sender_kafka::KafkaMessagePublisher;
-use common::server_config;
 use common::utils::get_logger;
+use common::{dicom_file_handler, server_config};
 use dicom_core::Tag;
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu::{OptionExt, Report, ResultExt, Whatever};
@@ -13,10 +13,9 @@ use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dicom_ul::{pdu::PDataValueType, Pdu};
 use std::net::TcpStream;
-
-use crate::dicom_file_handler::classify_and_publish_dicom_messages;
 use common::storage_config::StorageConfig;
 use slog::{debug, info, o, warn};
+use common::dicom_file_handler::{classify_and_publish_dicom_messages, process_dicom_file};
 
 pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Whatever> {
     let App {
@@ -86,7 +85,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         association.presentation_contexts()
     );
 
-    let storage_config = StorageConfig::new(app_config.clone());
+    let storage_config = StorageConfig::make_storage_config(&app_config );
     let client_ae_title = association.client_ae_title().to_string();
     let mut dicom_message_lists = vec![];
     loop {
@@ -195,7 +194,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                 // )
                                 // .whatever_context("failed to read DICOM data object")?;
 
-                                match dicom_file_handler::process_dicom_file(
+                                match process_dicom_file(
                                     &instance_buffer,
                                     &tenant_id,
                                     ts,
@@ -203,7 +202,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                     &sop_class_uid,
                                     ip_address.clone(),
                                     client_ae_title.clone(),
-                                    &storage_config
+                                    &storage_config,
                                 )
                                 .await
                                 {
@@ -349,7 +348,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
             association.client_ae_title()
         );
 
-        match classify_and_publish_dicom_messages(
+        match dicom_file_handler::classify_and_publish_dicom_messages(
             &dicom_message_lists,
             &storage_producer,
             &log_producer,

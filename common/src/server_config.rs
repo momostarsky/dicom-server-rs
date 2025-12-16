@@ -128,6 +128,7 @@ pub struct AppConfig {
     pub webworker: Option<WebWorkerConfig>,
 }
 
+ 
 static APP_ENV: &str = "APP_ENV";
 static APP_PREFIX: &str = "DICOM";
 

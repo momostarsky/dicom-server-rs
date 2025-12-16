@@ -1,5 +1,5 @@
 use crate::{
-    create_cecho_response, create_cstore_response, dicom_file_handler, transfer::ABSTRACT_SYNTAXES,
+    create_cecho_response, create_cstore_response,   transfer::ABSTRACT_SYNTAXES,
     App,
 };
 use dicom_core::Tag;
@@ -13,10 +13,9 @@ use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dicom_ul::{pdu::PDataValueType, Pdu};
 use slog::o;
-
-use crate::dicom_file_handler::classify_and_publish_dicom_messages;
 use database::dicom_meta::DicomStoreMeta;
 use slog::{debug, info, warn};
+use common::dicom_file_handler::{classify_and_publish_dicom_messages, process_dicom_file};
 use common::storage_config::StorageConfig;
 
 pub async fn run_store_async(
@@ -104,7 +103,7 @@ pub async fn run_store_async(
         association.presentation_contexts()
     );
 
-    let storage_config = StorageConfig::new(app_config.clone());
+    let storage_config = StorageConfig::make_storage_config(&app_config );
 
     let mut dicom_message_lists: Vec<DicomStoreMeta> = vec![];
 
@@ -219,7 +218,7 @@ pub async fn run_store_async(
                                 // )
                                 // .whatever_context("failed to read DICOM data object")?;
 
-                                match dicom_file_handler::process_dicom_file(
+                                match process_dicom_file(
                                     &instance_buffer,
                                     &tenant_id,
                                     ts,
