@@ -1,9 +1,14 @@
+use crate::dicom_utils::{get_bounder_string, get_date_value_dicom, get_tag_value};
+use crate::message_sender_kafka::KafkaMessagePublisher;
+use crate::storage_config::{StorageConfig, hash_uid};
 use crate::utils;
+use crate::utils::get_logger;
+use crate::{server_config, storage_config};
 use database::dicom_dbtype::{BoundedString, FixedLengthString};
 use database::dicom_meta::{DicomStoreMeta, TransferStatus};
 use dicom_dictionary_std::tags;
-use dicom_encoding::snafu::{whatever, ResultExt, Whatever};
 use dicom_encoding::TransferSyntaxIndex;
+use dicom_encoding::snafu::{ResultExt, Whatever, whatever};
 use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
 use dicom_pixeldata::Transcode;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
@@ -13,11 +18,6 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use uuid::Uuid;
-use crate::dicom_utils::{get_bounder_string, get_date_value_dicom, get_tag_value};
-use crate::{server_config, storage_config};
-use crate::message_sender_kafka::KafkaMessagePublisher;
-use crate::storage_config::{hash_uid, StorageConfig};
-use crate::utils::get_logger;
 
 static JS_SUPPORTED_TS: LazyLock<HashSet<String>> = LazyLock::new(|| {
     // 在这里初始化，可以从配置文件读取
@@ -77,7 +77,7 @@ pub async fn process_dicom_file(
         }
     };
 
-    let accession_number =   get_bounder_string::<16>(&obj, tags::ACCESSION_NUMBER) ;
+    let accession_number = get_bounder_string::<16>(&obj, tags::ACCESSION_NUMBER);
 
     let study_date = match get_date_value_dicom(&obj, tags::STUDY_DATE) {
         Some(v) => v,
@@ -85,8 +85,6 @@ pub async fn process_dicom_file(
             whatever!("Missing STUDY_DATE or STUDY_DATE value is not invalid format YYYYMMDD")
         }
     };
-
- 
 
     let frames = get_tag_value(tags::NUMBER_OF_FRAMES, &obj, 1);
     info!(
@@ -96,7 +94,6 @@ pub async fn process_dicom_file(
         pat_id,
         study_uid,
         study_date,
-
         frames
     );
 
@@ -158,12 +155,15 @@ pub async fn process_dicom_file(
             "not need transcode, save file to disk failed: {:?}",
             file_path
         ))?;
-    let fsize = std::fs::metadata(&file_path).unwrap().len();
+    let fsize = match std::fs::metadata(&file_path) {
+        Ok(metadata) => metadata.len(),
+        Err(_) => 0u64,
+    };
     // 修复后：
-    let saved_path = PathBuf::from(file_path); // 此时可以安全转移所有权
+    // let saved_path = PathBuf::from(file_path); // 此时可以安全转移所有权
     let uuid_v7 = Uuid::now_v7();
     let trace_uid = uuid_v7.to_string(); // 或直接用 format!("{}", uuid_v7)
-                                         // 修改为
+    // 修改为
     let cdate = chrono::Local::now().naive_local();
 
     Ok(DicomStoreMeta {
@@ -174,7 +174,7 @@ pub async fn process_dicom_file(
         study_uid,
         series_uid,
         sop_uid: BoundedString::<64>::make_str(&sop_instance_uid),
-        file_path: BoundedString::<512>::make_str(saved_path.to_str().unwrap()),
+        file_path: BoundedString::<512>::make_str(&file_path),
         file_size: fsize as i64,
         transfer_syntax_uid: BoundedString::<64>::make_str(ts),
         target_ts: BoundedString::<64>::make_str(&final_ts),
@@ -214,7 +214,7 @@ pub async fn classify_and_publish_dicom_messages(
 
     let topic_name = storage_producer.topic();
 
-    match  utils::publish_messages(storage_producer, &dicom_message_lists).await {
+    match utils::publish_messages(storage_producer, &dicom_message_lists).await {
         Ok(_) => {
             info!(
                 logger,
