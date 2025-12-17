@@ -92,10 +92,13 @@ services:
       - CLICKHOUSE_DB=default
     volumes:
       - clickhouse_data:/var/lib/clickhouse
+      - ./init-ck:/docker-entrypoint-initdb.d  # 添加初始化脚本目录
     
     networks:
       - xdicom_network
     restart: always
+    depends_on:
+      - redpanda  # 添加对 redpanda 服务的依赖
 
 networks:
   xdicom_network:
