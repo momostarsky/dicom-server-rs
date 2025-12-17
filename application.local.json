@@ -1,0 +1,74 @@
+{
+  "redis": {
+    "url": "redis://127.0.0.1:6379/"
+  },
+  "main_database": {
+    "dbtype": "postgresql",
+    "host": "127.0.0.1",
+    "port": 5432,
+    "username": "xdcm_admin",
+    "password": "xdicom3ks",
+    "database": "postgres"
+  },
+  "secondary_database": {
+    "dbtype": "DORIS",
+    "host": "127.0.0.1",
+    "port": 9030,
+    "username": "dicomstore",
+    "password": "hzjp#123",
+    "database": "dicomdb"
+  },
+  "server": {
+    "port": 9000,
+    "host": "0.0.0.0",
+    "allow_origin": [
+      "*"
+    ]
+  },
+  "local_storage": {
+    "type": "DISK",
+    "dicm_store_path": "/media/dhz/DCP/xdcm",
+    "json_store_path": "/media/dhz/DCP/json"
+  },
+  "dicom_store_scp": {
+    "port": 11111,
+    "ae_title": "STORE-SCP",
+    "tenant_group": "0x1211",
+    "tenant_element": "0x1217",
+    "unsupported_ts_change_to": "1.2.840.10008.1.2.1",
+    "cornerstonejs_supported_transfer_syntax": [
+      "1.2.840.10008.1.2",
+      "1.2.840.10008.1.2.1",
+      "1.2.840.10008.1.2.2",
+      "1.2.840.10008.1.2.1.99",
+      "1.2.840.10008.1.2.5",
+      "1.2.840.10008.1.2.4.50",
+      "1.2.840.10008.1.2.4.51",
+      "1.2.840.10008.1.2.4.57",
+      "1.2.840.10008.1.2.4.70",
+      "1.2.840.10008.1.2.4.80",
+      "1.2.840.10008.1.2.4.81"
+    ]
+  },
+  "message_queue": {
+    "consumer_group_id": "dicom-consumer-group",
+    "topic_main": "storage_queue",
+    "topic_log": "log_queue",
+    "topic_dicom_state": "dicom_state_queue",
+    "topic_dicom_image": "dicom_image_queue"
+  },
+  "kafka": {
+    "brokers": "127.0.0.1:19092",
+    "queue_buffering_max_messages": 1000,
+    "queue_buffering_max_kbytes": 102400,
+    "batch_num_messages": 100,
+    "queue_buffering_max_ms": 100,
+    "linger_ms": 100,
+    "compression_codec": "snappy"
+  },
+  "webworker": {
+    "interval_minute": 5,
+    "cpu_usage": 40,
+    "memory_usage": 70
+  }
+}

@@ -191,13 +191,23 @@ pub async fn run_store_async(
 
                                     let tenant = obj.element_opt(Tag::from((0x1211, 0x1217)));
                                     if let Ok(Some(tenant)) = tenant {
-                                        tenant_id = tenant
-                                            .to_str()
-                                            .unwrap()
-                                            .to_string();
+                                        let raw_tenant_id = tenant.to_str().unwrap();
+                                        let decoded_tenant_id = if raw_tenant_id.contains('\\') {
+                                            // 处理 ASCII 编码的情况
+                                            raw_tenant_id
+                                                .split('\\')
+                                                .filter_map(|s| s.parse::<u8>().ok())
+                                                .map(|b| b as char)
+                                                .collect::<String>()
+                                        } else {
+                                            raw_tenant_id.to_string()
+                                        };
+                                        tenant_id = decoded_tenant_id;
+                                        warn!(logger, "Tenant ID: {}", tenant_id);
                                     } else {
                                         tenant_id = "1234567890".to_string();
                                     }
+
                                 }
                                 instance_buffer.clear();
                             } else if data_value.value_type == PDataValueType::Data
