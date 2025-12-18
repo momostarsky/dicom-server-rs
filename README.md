@@ -1,53 +1,40 @@
 ### 总体架构
 
-1. Apache-kafka 作为消息队列.开发阶段可用RedPanda 替代.
-2. Apache-Doris 作为数据仓库.提供DicomStateMeta,DicomImageMeta 及WadoAccessLog 存储,为后续的查询及统计分析.
-3. PostgreSQL  作为数据库.提供数据存储功能.及检查索引功能.只存储PatientInformation,StudyInformation,SeriesInformation 这一级别的元数据.充分利用关系数据库的ACID特性.后续可用Citus进行扩容.
-4. Redis 作为缓存.提供数据缓存功能.
-5. Nginx 作为反向代理服务器.提供负载均衡,静态文件,TLS透传等
-
-收图文件服务接收的文件,先存储到本地,再通过 kafka 发送到消息队列.
-
-MessageBody = {
-    TransferSynatx, SopInstancheUID, StudyInstanceUID,SeriesInstanceUID, PatientID, FileName, FileSize, FilePath
-}
-
-消息分发到多个队列:
-1. 存储队列: 存储文件信息,文件存储路径,文件大小.
-2. 索引队列: 提取文件TAG信息, 包括PatientInfomation, StudyInformation, SeriesInformation, ImageInformation.并写入Doris库
-3. 转换队列: 对于部分传输语法,因为Cornerstone3D无法解析,需要转换成CornerstoneJS能够解析的格式.转换失败的写入Doris转换记录表.
-### 需要安装 dicom-org-cn.pem 文件到证书目录.
-```bash
-curl https://dicom.org.cn:8443/ca  >>  ~/dicom-org-cn.crt
-sudo cp ~/dicom-org-cn.crt  /usr/local/share/ca-certificates/dicom-org-cn.crt  
-sudo update-ca-certificates
-```
-
-### 服务用途及说明
-| service        | usage                                                                                                | 
-|----------------|------------------------------------------------------------------------------------------------------|
-| wado-server    | DICOMWEB  WADO-RS RESTFul API ,support oauth2.                                                       | 
-| wado-storescp  | CStoreSCP Provider,write dicom file to disk. and publish message to kafka:storage_queue,log_queue    |
-| wado-consumer  | consumer storage-queue,publish messages to kafka:dicom_state_queue,dicom_image_queue, write to doris |
-| wado-webworker | generate metadata for wado-server and update related instances for series and study.                 |
+1. RedPanda: As a message queue,replace Apache Kafka. For production environments, it is recommended to use RedPanda Enterprise Edition or Apache Kafka.
+2. Apache Doris, ClickHouse: As data warehouses. Provide storage for DicomStateMeta, DicomImageMeta, and WadoAccessLog, enabling subsequent querying and statistical analysis.
+3. PostgreSQL: As a database. Provides data storage functionality and examination indexing features. Only stores metadata at the PatientInformation, StudyInformation, SeriesInformation levels. Fully utilizes the ACID characteristics of relational databases. For production environments, Citus is recommended.
+4. Redis: As a cache. Provides data caching functionality.
+5. Nginx: As a reverse proxy server. Provides load balancing, static files, TLS passthrough, etc. For production environments, Nginx Plus or LVS+DR mode is recommended to improve performance.
 
 
-###  wado-server
+#### Data Flow
 
-    DICOM Web WADO-RS API 接口实现 ,根据配置选项决定是否开启 OAuth2 认证.
+### PACS or Machine
 
-### wado-storescp
+1. Client  CStoreSCU or STOW-RS Send Dicom File To   wado-storescp or WADO-Server Server。
 
-    DICOM CStoreSCP 服务,接收DICOM文件并写入磁盘,同是分发消息到Kafka:  storage_queue,log_queue      
-    - 1.存储文件路径: ${ROOT}/<TenantID>/<StudyInstanceUID>/<SeriesInstanceUID>/<SopInstanceUID>.dcm
-    - 2.往消息队列: storage_queue ,log_queue 发送消息
+### Server
 
-### wado-consumer
+1. Write Dicom File To Disk -->  PublishMessage To Topic :{ log_quene,storage_queue }
+    - ClickHouse or Doris --> Consume Topices: { log_quene } --> Persistent { DicomObjectMeta } To Database
 
-    消费Kafka消息队列storage_queue ,提取DicomStateMeta 到主数据库,并通过消息队列:dicom_state_queue,dicom_image_queue发布DicomStateMeta,DicomImageMeta 到Doris数据库
-    - 1.从storage-queue读,往dicom_state_queue,dicom_image_queue写
-    - 2.提取DicomStateMeta 到主数据库,
-    - 3.通过消息队列:dicom_state_queue,dicom_image_queue发布DicomStateMeta,DicomImageMeta 到Doris数据库 Stream_Load 模式
-### wado-webworker
+2. Consumer {storage_queue } --> Persistent { DicomStateMeta,DicomImageMeta} To MainDatabase
+    - Consumer {dicom_state_queue,dicom_image_queue }
+    - --> PublishMessag To Topic :{ dicom_state_queue,dicom_image_queue }
 
-    定期扫描数据库,根据最后更新时间生成JSON格式的metadata用于加速WADO-Server的访问
+3. ClickHouse or Doris --> Consume Topices: { dicom_state_queue,dicom_image_queue }
+    - --> Persistent {DicomStateMeta,DicomImageMeta} To Database
+
+### Mobile or Web
+
+1. WADO-RS or QIDO-RS query study information .
+2. Use Cornerstone3D to render image in HTML5 Applications.
+
+### Services Usage and Introduce
+
+| service        | usage                                                                                             | 
+|----------------|---------------------------------------------------------------------------------------------------|
+| wado-server    | DICOMWEB  WADO-RS RESTFul API ,support oauth2.                                                    | 
+| wado-storescp  | CStoreSCP Provider,write dicom file to disk. and publish message to kafka:storage_queue,log_queue |
+| wado-consumer  | consumer storage-queue,publish messages to kafka:dicom_state_queue,dicom_image_queue              |
+| wado-webworker | generate metadata for wado-server and update related instances for series and study.              |
