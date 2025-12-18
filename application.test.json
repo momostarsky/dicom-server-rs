@@ -11,7 +11,7 @@
     "database": "dicomdb"
   },
   "server": {
-    "port": 9000,
+    "port": 9999,
     "host": "0.0.0.0",
     "allow_origin": [
       "*"
