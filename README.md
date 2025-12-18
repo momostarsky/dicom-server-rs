@@ -38,3 +38,7 @@
 | wado-storescp  | CStoreSCP Provider,write dicom file to disk. and publish message to kafka:storage_queue,log_queue |
 | wado-consumer  | consumer storage-queue,publish messages to kafka:dicom_state_queue,dicom_image_queue              |
 | wado-webworker | generate metadata for wado-server and update related instances for series and study.              |
+
+### how to deploy to test
+
+[Docs/Install](./Docs/Readme.md) 
