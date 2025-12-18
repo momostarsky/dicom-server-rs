@@ -1,6 +1,6 @@
 use crate::{create_cecho_response, create_cstore_response, transfer::ABSTRACT_SYNTAXES, App};
 
-use common::dicom_file_handler::{classify_and_publish_dicom_messages, process_dicom_file};
+use common::dicom_file_handler::{classify_and_publish_dicom_messages, process_dicom_buffer};
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::storage_config::StorageConfig;
 use common::utils::get_logger;
@@ -205,7 +205,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                 // )
                                 // .whatever_context("failed to read DICOM data object")?;
 
-                                match process_dicom_file(
+                                match process_dicom_buffer(
                                     &instance_buffer,
                                     &tenant_id,
                                     ts,
