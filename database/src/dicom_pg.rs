@@ -1158,7 +1158,7 @@ mod tests {
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.list".to_string())?;
         let study_uid_hash = BoundedString::<20>::from_str("0AA07C2AA455BEB01D5A")?;
         let series_uid_hash = BoundedString::<20>::from_str("0AB07C2AA455BEB01D5A")?;
-        let study_date_origin = DicomDateString::from_db("20231202");
+        let study_date_origin = DicomDateString::make("20231202");
         let accession_number = BoundedString::<16>::try_from("ACC123457".to_string())?;
         let modality = Some(BoundedString::<16>::try_from("MRI".to_string())?);
         let series_number = Some(2);
@@ -1259,7 +1259,7 @@ mod tests {
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.json".to_string())?;
         let study_uid_hash = BoundedString::<20>::from_str("0AC07C2AA455BEB01D5A")?;
         let series_uid_hash = BoundedString::<20>::from_str("0AD07C2AA455BEB01D5A")?;
-        let study_date_origin = DicomDateString::from_db("20231203");
+        let study_date_origin = DicomDateString::make("20231203");
         let flag_time = current_time();
         let created_time = current_time();
         let json_status = 0;
