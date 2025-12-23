@@ -31,7 +31,7 @@ impl std::error::Error for ChangeStatus {}
 // 建议:采用FO_DICOM库提供的转换接口方式, 可以通过gRPC模式调用
 pub async fn convert_ts_with_gdcm_conv(
     src_file: &str,
-    file_size: usize,
+    file_size:  u64,
     output_path: &str,
     overwrite: bool,
 ) -> Result<(), ChangeStatus> {
@@ -45,12 +45,15 @@ pub async fn convert_ts_with_gdcm_conv(
             )));
         }
     };
+    if obj.get(tags::PIXEL_DATA).is_none(){
+        return Ok(());
+    }
     //-------------创建一个空的向量，用于存储文件内容--长度为文件大小
     let mut allocated_size = file_size;
     if file_size == 0 {
         allocated_size = 512 * 512;
     }
-    let mut input_buffer = Vec::with_capacity(allocated_size);
+    let mut input_buffer = Vec::with_capacity(allocated_size as usize);
     // 将 DICOM 对象写入缓冲区,如果出错,则内存分配失败,直接退出
     match obj.write_all(&mut input_buffer) {
         Ok(_) => {}
@@ -132,6 +135,9 @@ pub async fn convert_ts_with_transcode(
             )));
         }
     };
+    if obj.get(tags::PIXEL_DATA).is_none(){
+        return Ok(());
+    }
 
     // transcode to explicit VR little endian
     obj.transcode(&DEFLATED_EXPLICIT_VR_LITTLE_ENDIAN.erased())
@@ -217,7 +223,7 @@ mod tests {
         // 获取文件大小
         let metadata = fs::metadata(input).unwrap();
         let file_size = metadata.len() as usize;
-        let result = convert_ts_with_gdcm_conv(input, file_size, output, false).await;
+        let result = convert_ts_with_gdcm_conv(input, file_size as u64, output, false).await;
         assert!(result.is_ok());
 
     }

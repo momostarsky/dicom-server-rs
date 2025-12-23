@@ -4,12 +4,13 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize,PartialEq)]
 #[non_exhaustive]
 pub enum TransferStatus {
     NoNeedTransfer,
     Success,
     Failed,
+    NeedTransfer,
 }
 
 impl Display for TransferStatus {
@@ -18,6 +19,7 @@ impl Display for TransferStatus {
             TransferStatus::NoNeedTransfer => write!(f, "NoNeedTransfer"),
             TransferStatus::Success => write!(f, "Success"),
             TransferStatus::Failed => write!(f, "Failed"),
+            TransferStatus::NeedTransfer => write!(f, "NeedTransfer"),
         }
     }
 }

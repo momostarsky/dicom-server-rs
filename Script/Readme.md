@@ -1,20 +1,21 @@
-### 单机版本部署说明.
+# Standalone Deployment Instructions
 
-整体系统可以运行在单机环境.***也可以部署在多台机器上***.
-wado-storescp,wado-consumer, wado-server 三个服务均可以通过NGINX做TCP代理或是LVS_DR做负载均衡.
-****  集群部署的时候建议采用NAS作为共享文件存储 ****
-**** 后续为增加 wado-archive 服务,用于归档存储DICOM文件, 支持:阿里云OSS, 华为云OBS, 天翼云SW3 协议 ****
+The entire system can run in a standalone environment. ***It can also be deployed across multiple machines***.
+The three services `wado-storescp` and `wado-server` can all use NGINX for TCP proxy or LVS_DR for load balancing.
+**** When deploying in a cluster, it is recommended to use NAS as shared file storage ****
+**** A `wado-archive` service will be added later for archiving DICOM files, supporting: Alibaba Cloud OSS, Huawei Cloud OBS, Tianyi Cloud SW3 protocol ****
 
-#### 集群或是单机部署时候的替代软件
-- MySQL  OceanBase 社区版本或是企业版本
-- PgSQL  openGauss LTS 版本
-- Doris  无需替代
-- RedPanda Kafka集群或是 RedPanda企业版
-- Redis  腾讯Tendis中间件
+#### Alternative Software for Cluster or Standalone Deployment
+- **MySQL**: OceanBase Community Edition or Enterprise Edition, Unsupported Now
+- PgSQL: openGauss LTS Version
+- ClickHouse: No alternative needed
+- RedPanda: Kafka cluster or RedPanda Enterprise Edition
+- Redis: Tencent Tendis Middleware
 
-####  支持的操作系统
-- Ubuntu 22.04.5  LTS
-####  Redis
+#### Supported Operating Systems
+- Ubuntu 22.04.5 LTS
+
+#### Redis
 ```docker-compose.yml
 redis:
     image: redis
@@ -24,14 +25,17 @@ redis:
     ports:
       - "6379:6379" 
 ```
-####  Apache Doris  版本
-- Doris 单机启动命令, 建议使用最新版本.
+
+
+#### Apache Doris Version
+- Doris standalone startup commands, recommended to use the latest version.
 ```bash
 ./Doris3.X/3.1.0/fe/bin/start_fe.sh --daemon
 ./Doris3.X/3.1.0/be/bin/start_be.sh --daemon
 ```
 
-####  MySQL  8.0 版本  
+
+#### MySQL 8.0 Version
 ```docker-compose.yml
 version: '3.3'
 
@@ -44,37 +48,36 @@ services:
       MYSQL_DATABASE: 'dicomdb'
       MYSQL_USER: 'dicomstore'
       MYSQL_PASSWORD: 'HzS$jox32Pwd!'
-      TZ: 'Asia/Shanghai'  # 设置时区为上海（北京时间）
+      TZ: 'Asia/Shanghai'  # Set timezone to Shanghai (Beijing Time)
     ports:
       - "3306:3306"
     restart: unless-stopped
     volumes:
-      - ./mysql-data:/var/lib/mysql  # 数据持久化
+      - ./mysql-data:/var/lib/mysql  # Data persistence
       - ./my.cnf:/etc/mysql/conf.d/my.cnf:ro
-      - /etc/localtime:/etc/localtime:ro  # 挂载宿主机时区文件
+      - /etc/localtime:/etc/localtime:ro  # Mount host timezone file
 
 ```
-```my.cnf
 [mysqld]
-default-time-zone = '+08:00'                               
-```
+default-time-zone = '+08:00'
 
-####  PgSQL   PgVector-15.0 版本
+
+#### PgSQL PgVector-15.0 Version
 ```docker-compose.yml
 version: '3'
 
 services:
   pgdb:
     image: ankane/pgvector:latest
-    container_name: pgappx  # 你写的是 container:pgappx，应为 container_name
+    container_name: pgappx  # You wrote container:pgappx, should be container_name
     restart: always
     environment:
       POSTGRES_PASSWORD: "HzX1Sjq!12dx0y"
-      POSTGRES_USER: "dicomstore"
+      POSTGRES_USER: "xdicomstore"
       PGTZ: "Asia/Shanghai"
     volumes:
       - ./pgdata:/var/lib/postgresql/data
-      - ./pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf  # ✅ 正确路径
+      - ./pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf  # ✅ Correct path
     ports:
       - "5432:5432"
 ```
@@ -86,30 +89,33 @@ host    all             all             ::1/128                 trust
 host    all             all             192.168.1.0/24          scram-sha-256
 ```
 
-#### 消息队列  RedPandan /  Apache Kafka
-- Redpanda    参考官方文档.
-- Kafka       参考官方文档.
-- 创建4个消息队列实例. 
 
-  - log_queue   用于存储StoreSCP接收的DICOM对象信息, 方便对后续的收图性能及文件占用空间进行评估. 
-  此队列的数据写入Doris dicom_object_meta 表
-    
-  - storage_queue   用于提取DICOM的序列层级信息并写入Pg或是MySQL数据库,方便后续进行检索.
-  
-      ** wado-consumer 消费此队列数据,别发布到另外两个队列.**
-  
-      - dicom_image_queue 用于存储 dicom 图像数据  写入DORIS dicom_image_meta 表
-      - dicom_state_queue 用于存储 dicom 状态数据  写入DORIS dicom_state_meta 表
+#### Message Queue RedPanda / Apache Kafka
+- Redpanda: Refer to official documentation.
+- Kafka: Refer to official documentation.
+- Create 4 message queue instances.
 
-- 创建队列
-```bash 
+  - `log_queue`: Used to store DICOM object information received by StoreSCP, facilitating subsequent evaluation of image receiving performance and file space usage.
+    Data from this queue is written to  ClickHouse or Doris `dicom_object_meta` table
+
+  - `storage_queue`: Used to extract sequence-level information from DICOM and write to Pg or MySQL database, facilitating subsequent retrieval.
+
+    ** wado-consumer   consumes data from this queue and publishes to the other two queues.**
+
+    - `dicom_image_queue`: Used to store DICOM image data, written to ClickHouse or Doris  `dicom_image_meta` table
+    - `dicom_state_queue`: Used to store DICOM status data, written to  ClickHouse or Doris `dicom_state_meta` table
+
+- Create topics
+```bash
+ 
 rpk topic create dicom_image_queue  --partitions 1 --replicas 1
 rpk topic create dicom_state_queue  --partitions 1 --replicas 1
 rpk topic create log_queue          --partitions 1 --replicas 1
 rpk topic create storage_queue      --partitions 1 --replicas 1
 ```
 
-- 清空队列
+
+- Clear topics
 ```bash
 rpk topic trim-prefix dicom_image_queue  -p 0 --offset end --no-confirm
 rpk topic trim-prefix dicom_state_queue  -p 0 --offset end --no-confirm

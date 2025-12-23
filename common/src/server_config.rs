@@ -70,13 +70,6 @@ pub struct MessageQueueConfig {
     pub topic_dicom_image: String,
 }
 
-#[derive(Debug, Deserialize, Clone)]
-pub struct LicenseServerConfig {
-    /// DICOM 许可服务器的 API 密钥  16位字母或是数字字符串
-    pub client_id: String,
-    /// DICOM 许可密钥的HASHCODE
-    pub license_key: String,
-}
 
 // --- 配置结构 ---
 #[derive(Debug, Clone, Deserialize)]
@@ -107,12 +100,6 @@ pub struct WebWorkerConfig {
     pub memory_usage: u16,
 }
 
-// "webworker": {
-// "interval_minute": 5,
-// "cpu_usage": 40,
-// "memory_usage": 70
-// }
-
 #[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
     pub redis: RedisConfig,
@@ -123,7 +110,6 @@ pub struct AppConfig {
     pub local_storage: LocalStorageConfig,
     pub dicom_store_scp: DicomStoreScpConfig,
     pub message_queue: MessageQueueConfig,
-    pub dicom_license_server: Option<LicenseServerConfig>,
     pub wado_oauth2: Option<OAuth2Config>,
     pub webworker: Option<WebWorkerConfig>,
 }
@@ -288,7 +274,7 @@ fn load_config_internal() -> Result<AppConfig, ConfigError> {
     Ok(app_config)
 }
 
-pub fn generate_database_connection(dbconfig: &DatabaseConfig) -> Result<String, String> {
+pub fn generate_mysql_database_connection(dbconfig: &DatabaseConfig) -> Result<String, String> {
     let password = dbconfig
         .password
         .replace("@", "%40")

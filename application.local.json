@@ -1,25 +1,25 @@
 {
   "redis": {
-    "url": "redis://192.168.1.14:6379/"
+    "url": "redis://127.0.0.1:6379/"
   },
   "main_database": {
-    "dbtype": "mysql",
-    "host": "192.168.1.14",
-    "port": 3306,
-    "username": "root",
-    "password": "jp#123",
-    "database": "dicomdb"
+    "dbtype": "postgresql",
+    "host": "127.0.0.1",
+    "port": 5432,
+    "username": "xdcm_admin",
+    "password": "xdicom3ks",
+    "database": "postgres"
   },
   "secondary_database": {
     "dbtype": "DORIS",
-    "host": "192.168.1.14",
+    "host": "127.0.0.1",
     "port": 9030,
     "username": "dicomstore",
     "password": "hzjp#123",
     "database": "dicomdb"
   },
   "server": {
-    "port": 9000,
+    "port": 9999,
     "host": "0.0.0.0",
     "allow_origin": [
       "*"
@@ -27,8 +27,8 @@
   },
   "local_storage": {
     "type": "DISK",
-    "dicm_store_path": "/media/dhz/DCP/dcm",
-    "json_store_path": "/media/dhz/DCP/json"
+    "dicm_store_path": "/home/dhz/jpdata/vdcmdata/xdcm",
+    "json_store_path": "/home/dhz/jpdata/vdcmdata/json"
   },
   "dicom_store_scp": {
     "port": 11111,
@@ -47,7 +47,10 @@
       "1.2.840.10008.1.2.4.57",
       "1.2.840.10008.1.2.4.70",
       "1.2.840.10008.1.2.4.80",
-      "1.2.840.10008.1.2.4.81"
+      "1.2.840.10008.1.2.4.81",
+      "1.2.840.10008.1.2.4.90",
+      "1.2.840.10008.1.2.4.91",
+      "1.2.840.10008.1.2.4.92"
     ]
   },
   "message_queue": {
@@ -58,30 +61,13 @@
     "topic_dicom_image": "dicom_image_queue"
   },
   "kafka": {
-    "brokers": "192.168.1.14:9092",
+    "brokers": "127.0.0.1:19092",
     "queue_buffering_max_messages": 1000,
     "queue_buffering_max_kbytes": 102400,
     "batch_num_messages": 100,
     "queue_buffering_max_ms": 100,
     "linger_ms": 100,
     "compression_codec": "snappy"
-  },
-  "dicom_license_server": {
-    "client_id": "HZXS100020261231",
-    "license_key": "c417aa4802b3441d931c135cbdaab367"
-  },
-  "wado_oauth2": {
-    "issuer_url": "https://keycloak.medical.org:8443/realms/dicom-org-cn",
-    "audience": "wado-rs-api",
-    "jwks_url": "https://keycloak.medical.org:8443/realms/dicom-org-cn/protocol/openid-connect/certs",
-    "roles": {
-      "from": "$.realm_access.roles",
-      "values": ["role_patients"]
-    },
-    "permissions": {
-      "from": "$.resource_access['wado-rs-api'].roles",
-      "values": ["image_reader"]
-    }
   },
   "webworker": {
     "interval_minute": 5,

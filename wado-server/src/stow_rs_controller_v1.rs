@@ -1,12 +1,16 @@
 use actix_web::{HttpRequest, HttpResponse, Result, http::header, post, web};
 use chrono::Datelike;
+use std::fs;
 
 use futures_util::StreamExt as _;
 // use dicom_object::open_file; // 如果需要解析 DICOM，取消注释
 use crate::AppState;
 use crate::constants::STOW_RS_TAG;
+use common::dicom_file_handler::{classify_and_publish_dicom_messages, process_dicom_memobject};
 use common::dicom_utils::{get_date_value_dicom, get_text_value};
+use common::message_sender_kafka::KafkaMessagePublisher;
 use common::storage_config::{StorageConfig, dicom_file_path};
+use database::dicom_meta::DicomStoreMeta;
 use dicom_dictionary_std::tags;
 use dicom_object::DefaultDicomObject;
 use futures_util::io::Cursor;
@@ -390,6 +394,8 @@ async fn process_multipart_fields(
     let log = &app_state.log;
     let storage_confg = StorageConfig::make_storage_config(&app_state.config);
     let mut files: Vec<String> = vec![];
+    // 遍历所有已经处理的文件
+    let mut metas: Vec<DicomStoreMeta> = Vec::with_capacity(150);
     loop {
         match multipart.next_field().await {
             Ok(Some(mut field)) => {
@@ -436,6 +442,8 @@ async fn process_multipart_fields(
                             field_bytes_len += field_chunk.len();
                             // 使用 std::io::Cursor 包装字节流，使其实现 Read trait
                             let cursor = Cursor::new(&field_chunk[start_position..end_position]);
+                            // 用于写入磁盘
+                            let datax = Cursor::new(&field_chunk[start_position..end_position]);
                             // 使用 DicomObject::read_from() 从实现了 Read trait 的源加载对象
                             let loaded_object =
                                 match DefaultDicomObject::from_reader(cursor.into_inner()) {
@@ -445,7 +453,7 @@ async fn process_multipart_fields(
                             if loaded_object.is_none() {
                                 continue;
                             }
-                            let loaded_object = loaded_object.unwrap();
+                            let mut loaded_object = loaded_object.unwrap();
                             let tag_study_uid =
                                 get_text_value(&loaded_object, tags::STUDY_INSTANCE_UID)
                                     .map(|v| v.to_string());
@@ -510,15 +518,33 @@ async fn process_multipart_fields(
 
                             let filepath =
                                 dicom_file_path(&dir_path, sop_inst_uid.unwrap().as_str());
-                            match loaded_object.write_to_file(&filepath) {
-                                Ok(_) => {
-                                    info!(log, "Saved DICOM file to {}", &filepath);
+                            fs::write(&filepath, datax.into_inner())
+                                .expect("write data to disk failed !");
+
+
+                            info!(log, "Saved DICOM file to {}", &filepath);
+                            match process_dicom_memobject(
+                                &mut loaded_object,
+                                &filepath,
+                                tenant_id,
+                                &storage_confg,
+                            )
+                            .await
+                            {
+                                Ok(dicom_meta) => {
+                                    info!(
+                                        log,
+                                        "process_dicom_memobject get DICOM metadata: {:?}",
+                                        dicom_meta
+                                    );
+                                    metas.push(dicom_meta);
                                     files.push(filepath);
                                 }
                                 Err(e) => {
-                                    error!(log, "Failed to save DICOM file: {}", e);
-                                    // return Err(HttpResponse::InternalServerError()
-                                    //     .body("Failed to save DICOM file"));
+                                    warn!(
+                                        log,
+                                        "process_dicom_memobject failed: {} with :{}", filepath, e
+                                    );
                                 }
                             }
                         }
@@ -542,10 +568,50 @@ async fn process_multipart_fields(
             }
         }
     }
-    // 遍历所有已经处理的文件
-    for filepath in files {
-        println!("File: {}", filepath);
+
+    warn!(log, "process_multipart_fields {} files", files.len());
+    // if !files.is_empty() {
+    //     for vf in files {
+    //
+    //             match dicom_object::OpenFileOptions::new()
+    //                 .charset_override(CharacterSetOverride::AnyVr)
+    //                 .read_until(tags::PIXEL_DATA)
+    //                 .open_file(String::from(vf.as_str())){
+    //                 Ok(_) => {
+    //                     info!(log,"Open DICOM is OK");
+    //                 },
+    //                 Err(e) =>{
+    //                     error!(log,"Open DICOM is Error:{}" ,e );
+    //                 }
+    //
+    //             }
+    //
+    //     }
+    // }
+    if !metas.is_empty() {
+        info!(
+            log,
+            "Publishing STOW-RS DICOM messages to Kafka:{}",
+            metas.len()
+        );
+        let queue_config = &app_state.config.message_queue;
+        let queue_topic_main = &queue_config.topic_main.as_str();
+        let queue_topic_log = &queue_config.topic_log.as_str();
+
+        let storage_producer = KafkaMessagePublisher::new(queue_topic_main.parse().unwrap());
+        let log_producer = KafkaMessagePublisher::new(queue_topic_log.parse().unwrap());
+
+        match classify_and_publish_dicom_messages(&metas, &storage_producer, &log_producer).await {
+            Ok(_) => {
+                info!(&log, "Successfully published DICOM messages");
+            }
+            Err(e) => {
+                warn!(&log, "Failed to publish DICOM messages: {}", e);
+            }
+        };
+        metas.clear();
     }
+
     Ok(())
 }
 

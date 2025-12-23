@@ -1,7 +1,4 @@
-extern crate core;
-
 use clap::Parser;
-use common::license_manager::validate_client_certificate;
 use common::server_config;
 use common::utils::{get_logger, setup_logging};
 use dicom_core::{dicom_value, DataElement, VR};
@@ -111,7 +108,6 @@ fn create_cecho_response(message_id: u16) -> InMemDicomObject<StandardDataDictio
 #[tokio::main]
 async fn main() {
     let log = setup_logging("dicom-store-scp");
-
     let config = server_config::load_config();
     let config = match config {
         Ok(config) => config,
@@ -120,79 +116,6 @@ async fn main() {
             std::process::exit(-2);
         }
     };
-
-    let client_info = match validate_client_certificate().await {
-        Ok(client_info) => {
-            info!(
-                log,
-                "Client Certificate Validated, Client ID: {:?}, HashCode:{:?}",
-                client_info.0,
-                client_info.1
-            );
-            client_info
-        }
-        Err(e) => {
-            let error_string = format!("{}", e);
-            info!(
-                log,
-                "Client Certificate Validation Failed: {}", error_string
-            );
-            std::process::exit(-2);
-        }
-    };
-    let (client_id, hash_code) = client_info;
-    // 确保证书中的client_id和hash_code都存在
-    let cert_client_id = match client_id {
-        Some(id) => id,
-        None => {
-            info!(log, "Certificate does not contain a valid Client ID");
-            std::process::exit(-2);
-        }
-    };
-
-    let cert_hash_code = match hash_code {
-        Some(code) => code,
-        None => {
-            info!(log, "Certificate does not contain a valid Hash Code");
-            std::process::exit(-2);
-        }
-    };
-
-    let license = match &config.dicom_license_server {
-        None => {
-            info!(log, "Dicom License Server Config is None");
-            std::process::exit(-2);
-        }
-        Some(license_server) => license_server,
-    };
-    // 使用更安全的比较方法，避免时序攻击
-    let client_id_matches = {
-        let expected = &license.client_id;
-        openssl::memcmp::eq(expected.as_bytes(), cert_client_id.as_bytes())
-    };
-
-    let hash_code_matches = {
-        let expected = &license.license_key; // license_key 实际上存储的是 hash_code
-        openssl::memcmp::eq(expected.as_bytes(), cert_hash_code.as_bytes())
-    };
-
-    if client_id_matches && hash_code_matches {
-        info!(log, "License Server Validation Success");
-    } else {
-        info!(log, "License Server Validation Failed");
-        info!(
-            log,
-            "Expected Client ID: {}, Certificate Client ID: {}", license.client_id, cert_client_id
-        );
-        info!(
-            log,
-            "Expected Hash Code: {}, Certificate Hash Code: {}",
-            license.license_key,
-            cert_hash_code
-        );
-        std::process::exit(-2);
-    }
-
     let mut app = App::parse();
     let scp_config = config.dicom_store_scp;
 
@@ -201,25 +124,6 @@ async fn main() {
     app.calling_ae_title = scp_config.ae_title;
 
     info!(log, "License Server Validation Success");
-
-
-    // if app.non_blocking {
-    //     tokio::runtime::Builder::new_multi_thread()
-    //         .enable_all()
-    //         .build()
-    //         .unwrap()
-    //         .block_on(async move {
-    //             run_async(app).await.unwrap_or_else(|e| {
-    //                 error!("{:?}", e);
-    //                 std::process::exit(-2);
-    //             });
-    //         });
-    // } else {
-    //     run_sync(app).unwrap_or_else(|e| {
-    //         error!("{:?}", e);
-    //         std::process::exit(-2);
-    //     });
-    // }
 
     match app.non_blocking {
         false => {

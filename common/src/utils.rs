@@ -2,19 +2,22 @@ use std::option::Option;
 
 use crate::dicom_object_meta::{make_image_info, make_state_info};
 use crate::message_sender::MessagePublisher;
-use database::dicom_meta::{DicomImageMeta, DicomStateMeta, DicomStoreMeta};
+use database::dicom_meta::{DicomImageMeta, DicomStateMeta, DicomStoreMeta, TransferStatus};
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu::Whatever;
-use dicom_object::ReadError;
 use dicom_object::file::CharacterSetOverride;
-use slog::LevelFilter;
+use dicom_object::{OpenFileOptions, ReadError};
+use gdcm_conv::PhotometricInterpretation;
 use slog::{Drain, Logger, error, info, o};
+use slog::{LevelFilter, warn};
+use snafu::whatever;
 use std::collections::HashSet;
 use std::fs;
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 
 use std::path::Path;
 use std::sync::OnceLock;
+use crate::dicom_utils::get_int_value;
 
 /// 获取当前时间
 pub fn get_current_time() -> chrono::NaiveDateTime {
@@ -165,25 +168,54 @@ pub async fn group_dicom_state(
 
     for message in messages {
         let space_size = Option::from(message.file_size);
-        match dicom_object::OpenFileOptions::new()
+
+        match fs::exists(message.file_path.as_str()) {
+            Ok(true) => {}
+            Ok(false) => {
+                error!(logger, "File not found: {}", message.file_path.as_str());
+                continue;
+            }
+            Err(err) => {
+                error!(logger, "Error checking file existence: {}", err);
+                continue;
+            }
+        }
+
+        // 添加权限检查
+        if !can_read_file(&message.file_path.as_str()) {
+            error!(logger, "No read permission for file: {}", message.file_path);
+            continue;
+        }
+
+        if message.transfer_status == TransferStatus::NeedTransfer {
+            match change_transfersyntax(message.file_path.as_str()).await {
+                Ok(()) => {
+                    warn!(logger, "change_transfersyntax Is Ok");
+                }
+                Err(_e) => {
+                    warn!(logger, "change_transfersyntax Is Error");
+                }
+            }
+        }
+
+        match OpenFileOptions::new()
             .charset_override(CharacterSetOverride::AnyVr)
             .read_until(tags::PIXEL_DATA)
             .open_file(String::from(message.file_path.as_str()))
         {
             Ok(dicom_obj) => {
-                let state_meta =
-                    match make_state_info(message.tenant_id.as_str(), &dicom_obj ) {
-                        Ok(state_meta) => state_meta,
-                        Err(err) => {
-                            error!(
-                                logger,
-                                "Failed to extract state meta from file: {} , message: {:?}",
-                                message.file_path.as_str(),
-                                err
-                            );
-                            continue;
-                        }
-                    };
+                let state_meta = match make_state_info(message.tenant_id.as_str(), &dicom_obj) {
+                    Ok(state_meta) => state_meta,
+                    Err(err) => {
+                        error!(
+                            logger,
+                            "Failed to extract state meta from file: {} , message: {:?}",
+                            message.file_path.as_str(),
+                            err
+                        );
+                        continue;
+                    }
+                };
                 let image_entity =
                     match make_image_info(message.tenant_id.as_str(), &dicom_obj, space_size) {
                         Ok(image_entity) => image_entity,
@@ -214,6 +246,10 @@ pub async fn group_dicom_state(
     }
     state_metas = deduplicate_state_metas(state_metas);
     Ok((state_metas, image_entities))
+}
+
+fn can_read_file(p0: &&str) -> bool {
+    File::open(p0).is_ok()
 }
 
 // 发送消息到指定队列
@@ -275,5 +311,60 @@ pub async fn publish_image_messages(
             error!(logger, "Failed to publish_image_messages: {}", e);
         }
     }
+    Ok(())
+}
+
+pub async fn change_transfersyntax(src_file: &str) -> Result<(), Whatever> {
+    // 步骤 1: 读取 DICOM 文件
+    let obj = match OpenFileOptions::new().open_file(src_file) {
+        Ok(obj) => obj,
+        Err(e) => {
+            whatever!("Failed to open file {}: {}", src_file, e);
+        }
+    };
+    if obj.get(tags::PIXEL_DATA).is_none() {
+        return Ok(());
+    }
+    //-------------创建一个空的向量，用于存储文件内容--长度为文件大小
+    let widths = get_int_value(&obj, tags::COLUMNS).unwrap_or(0) as u64;
+    let heights = get_int_value(&obj, tags::ROWS).unwrap_or(0) as u64;
+    let bits_allocated = get_int_value(&obj, tags::BITS_ALLOCATED).unwrap_or(8) as u64;
+    // ！！！重要：还需要获取 Samples Per Pixel (1 为灰度图, 3 为 RGB)
+    let samples_per_pixel = get_int_value(&obj, tags::SAMPLES_PER_PIXEL).unwrap_or(1) as u64;
+    // 计算逻辑
+    // 1. 计算每个像素占用的字节数 (向上取整到 8 的倍数)
+    let bytes_per_sample = (bits_allocated + 7) / 8;
+    // 2. 总字节数  增加 8K字节用于存储其它字节.
+    let allocated_size = 8192 + widths * heights * samples_per_pixel * bytes_per_sample;
+    let mut input_buffer = Vec::with_capacity(allocated_size as usize);
+    // 将 DICOM 对象写入缓冲区,如果出错,则内存分配失败,直接退出
+    match obj.write_all(&mut input_buffer) {
+        Ok(_) => {}
+        Err(e) => {
+            whatever!("Failed to write to buffer: {}", e);
+        }
+    };
+    match gdcm_conv::pipeline(
+        // Input DICOM file buffer
+        input_buffer,
+        // Estimated Length
+        None,
+        // First Transfer Syntax conversion
+        gdcm_conv::TransferSyntax::ExplicitVRLittleEndian,
+        // Photometric conversion
+        PhotometricInterpretation::None,
+        // Second Transfer Syntax conversion
+        gdcm_conv::TransferSyntax::ImplicitVRLittleEndian,
+    ) {
+        Ok(buffer) => match fs::write(src_file, buffer) {
+            Ok(()) => {}
+            Err(e) => {
+                whatever!("Failed to write to buffer: {}", e);
+            }
+        },
+        Err(e) => {
+            whatever!("Conversion failed: {}", e);
+        }
+    };
     Ok(())
 }

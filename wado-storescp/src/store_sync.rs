@@ -1,9 +1,8 @@
-use crate::{
-    create_cecho_response, create_cstore_response, transfer::ABSTRACT_SYNTAXES,
-    App,
-};
+use crate::{create_cecho_response, create_cstore_response, transfer::ABSTRACT_SYNTAXES, App};
 
+use common::dicom_file_handler::{classify_and_publish_dicom_messages, process_dicom_buffer};
 use common::message_sender_kafka::KafkaMessagePublisher;
+use common::storage_config::StorageConfig;
 use common::utils::get_logger;
 use common::{dicom_file_handler, server_config};
 use dicom_core::Tag;
@@ -12,10 +11,8 @@ use dicom_encoding::snafu::{OptionExt, Report, ResultExt, Whatever};
 use dicom_object::InMemDicomObject;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dicom_ul::{pdu::PDataValueType, Pdu};
-use std::net::TcpStream;
-use common::storage_config::StorageConfig;
 use slog::{debug, info, o, warn};
-use common::dicom_file_handler::{classify_and_publish_dicom_messages, process_dicom_file};
+use std::net::TcpStream;
 
 pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Whatever> {
     let App {
@@ -85,7 +82,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
         association.presentation_contexts()
     );
 
-    let storage_config = StorageConfig::make_storage_config(&app_config );
+    let storage_config = StorageConfig::make_storage_config(&app_config);
     let client_ae_title = association.client_ae_title().to_string();
     let mut dicom_message_lists = vec![];
     loop {
@@ -170,11 +167,25 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                         .to_string();
                                     let tenant = obj.element_opt(Tag::from((0x1211, 0x1217)));
                                     if let Ok(Some(tenant)) = tenant {
-                                        tenant_id = tenant.to_str().unwrap().to_string();
+                                        // 检查是否是 ASCII 编码的数据并进行相应处理
+                                        let raw_tenant_id = tenant.to_str().unwrap();
+                                        let decoded_tenant_id = if raw_tenant_id.contains('\\') {
+                                            // 处理 ASCII 编码的情况
+                                            raw_tenant_id
+                                                .split('\\')
+                                                .filter_map(|s| s.parse::<u8>().ok())
+                                                .map(|b| b as char)
+                                                .collect::<String>()
+                                        } else {
+                                            raw_tenant_id.to_string()
+                                        };
+                                        tenant_id = decoded_tenant_id;
+                                        warn!(logger, "Tenant ID: {}", tenant_id);
                                     } else {
                                         tenant_id = "1234567890".to_string();
                                     }
                                 }
+
                                 instance_buffer.clear();
                             } else if data_value.value_type == PDataValueType::Data
                                 && data_value.is_last
@@ -194,7 +205,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
                                 // )
                                 // .whatever_context("failed to read DICOM data object")?;
 
-                                match process_dicom_file(
+                                match process_dicom_buffer(
                                     &instance_buffer,
                                     &tenant_id,
                                     ts,

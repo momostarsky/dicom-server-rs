@@ -19,6 +19,7 @@ BOUNDARY="DICOM_BOUNDARY"
 TEMP_FILE="multipart_request_largdata.tmp"
 
 # 检查是否有DICOM文件
+# shellcheck disable=SC2207
 DICOM_FILES=($(find "$DICOM_DIR" -type f -name "*.dcm"))
 if [ ${#DICOM_FILES[@]} -eq 0 ]; then
     echo "Warning: No DICOM files found in '$DICOM_DIR'"
@@ -28,6 +29,7 @@ fi
 echo "Found ${#DICOM_FILES[@]} DICOM files"
 
 # 1. 初始化文件（不包含JSON部分）
+# shellcheck disable=SC2188
 > "$TEMP_FILE"
 
 # 2. 循环处理所有DICOM文件（第一个文件不需要前置分隔符）
@@ -35,7 +37,7 @@ for i in "${!DICOM_FILES[@]}"; do
     dicom_file="${DICOM_FILES[$i]}"
 
     # 除了第一个文件，其他文件都需要前置分隔符
-    if [ $i -gt 0 ]; then
+    if [ "$i" -gt 0 ]; then
         printf -- "\r\n--%s\r\n" "$BOUNDARY" >> "$TEMP_FILE"
     else
         # 第一个文件需要起始分隔符
@@ -59,7 +61,7 @@ CONTENT_LENGTH=$(wc -c < "$TEMP_FILE" | tr -d ' ')
 echo "Total content length: $CONTENT_LENGTH bytes"
 
 # 5. 发送请求
-curl -X POST http://localhost:9000/stow-rs/v1/studies \
+curl -X POST http://localhost:9999/stow-rs/v1/studies \
      -H "Content-Type: multipart/related; boundary=$BOUNDARY; type=application/dicom" \
      -H "Accept: application/json" \
      -H "x-tenant: 1234567890" \
