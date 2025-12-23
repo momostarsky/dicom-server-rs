@@ -16,8 +16,6 @@ use slog::o;
 use slog::{error, info};
 use std::collections::HashSet;
 use std::sync::LazyLock;
-use dicom_object::mem::InMemElement;
-use tracing::warn;
 use uuid::Uuid;
 
 static JS_SUPPORTED_TS: LazyLock<HashSet<String>> = LazyLock::new(|| {
