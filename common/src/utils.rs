@@ -11,7 +11,7 @@ use slog::LevelFilter;
 use slog::{Drain, Logger, error, info, o};
 use std::collections::HashSet;
 use std::fs;
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 
 use std::path::Path;
 use std::sync::OnceLock;
@@ -165,25 +165,43 @@ pub async fn group_dicom_state(
 
     for message in messages {
         let space_size = Option::from(message.file_size);
+
+        match fs::exists(message.file_path.as_str()) {
+            Ok(true) => {}
+            Ok(false) => {
+                error!(logger, "File not found: {}", message.file_path.as_str());
+                continue;
+            }
+            Err(err) => {
+                error!(logger, "Error checking file existence: {}", err);
+                continue;
+            }
+        }
+
+        // 添加权限检查
+        if !can_read_file(&message.file_path.as_str()) {
+            error!(logger, "No read permission for file: {}", message.file_path);
+            continue;
+        }
+
         match dicom_object::OpenFileOptions::new()
             .charset_override(CharacterSetOverride::AnyVr)
             .read_until(tags::PIXEL_DATA)
             .open_file(String::from(message.file_path.as_str()))
         {
             Ok(dicom_obj) => {
-                let state_meta =
-                    match make_state_info(message.tenant_id.as_str(), &dicom_obj ) {
-                        Ok(state_meta) => state_meta,
-                        Err(err) => {
-                            error!(
-                                logger,
-                                "Failed to extract state meta from file: {} , message: {:?}",
-                                message.file_path.as_str(),
-                                err
-                            );
-                            continue;
-                        }
-                    };
+                let state_meta = match make_state_info(message.tenant_id.as_str(), &dicom_obj) {
+                    Ok(state_meta) => state_meta,
+                    Err(err) => {
+                        error!(
+                            logger,
+                            "Failed to extract state meta from file: {} , message: {:?}",
+                            message.file_path.as_str(),
+                            err
+                        );
+                        continue;
+                    }
+                };
                 let image_entity =
                     match make_image_info(message.tenant_id.as_str(), &dicom_obj, space_size) {
                         Ok(image_entity) => image_entity,
@@ -214,6 +232,10 @@ pub async fn group_dicom_state(
     }
     state_metas = deduplicate_state_metas(state_metas);
     Ok((state_metas, image_entities))
+}
+
+fn can_read_file(p0: &&str) -> bool {
+    File::open(p0).is_ok()
 }
 
 // 发送消息到指定队列

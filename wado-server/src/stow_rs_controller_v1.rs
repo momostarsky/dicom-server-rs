@@ -5,8 +5,11 @@ use futures_util::StreamExt as _;
 // use dicom_object::open_file; // 如果需要解析 DICOM，取消注释
 use crate::AppState;
 use crate::constants::STOW_RS_TAG;
+use common::dicom_file_handler::{classify_and_publish_dicom_messages, process_dicom_memobject};
 use common::dicom_utils::{get_date_value_dicom, get_text_value};
+use common::message_sender_kafka::KafkaMessagePublisher;
 use common::storage_config::{StorageConfig, dicom_file_path};
+use database::dicom_meta::{DicomStoreMeta};
 use dicom_dictionary_std::tags;
 use dicom_object::DefaultDicomObject;
 use futures_util::io::Cursor;
@@ -390,6 +393,8 @@ async fn process_multipart_fields(
     let log = &app_state.log;
     let storage_confg = StorageConfig::make_storage_config(&app_state.config);
     let mut files: Vec<String> = vec![];
+    // 遍历所有已经处理的文件
+    let mut metas: Vec<DicomStoreMeta> = Vec::with_capacity(150);
     loop {
         match multipart.next_field().await {
             Ok(Some(mut field)) => {
@@ -513,7 +518,16 @@ async fn process_multipart_fields(
                             match loaded_object.write_to_file(&filepath) {
                                 Ok(_) => {
                                     info!(log, "Saved DICOM file to {}", &filepath);
-                                    files.push(filepath);
+                                    match process_dicom_memobject(&loaded_object, &filepath, tenant_id, &storage_confg).await {
+                                        Ok(dicom_meta) => {
+                                            info!(log, "process_dicom_memobject get DICOM metadata: {:?}", dicom_meta);
+                                            metas.push(dicom_meta);
+                                            files.push(filepath);
+                                        }
+                                        Err(e) => {
+                                            warn!(log, "process_dicom_memobject failed: {} with :{}", filepath,e );
+                                        }
+                                    }
                                 }
                                 Err(e) => {
                                     error!(log, "Failed to save DICOM file: {}", e);
@@ -542,10 +556,32 @@ async fn process_multipart_fields(
             }
         }
     }
-    // 遍历所有已经处理的文件
-    for filepath in files {
-        println!("File: {}", filepath);
+
+    warn!(log, "process_multipart_fields {} files", files.len());
+    if !metas.is_empty() {
+        info!(
+            log,
+            "Publishing STOW-RS DICOM messages to Kafka:{}",
+            metas.len()
+        );
+        let queue_config = &app_state.config.message_queue;
+        let queue_topic_main = &queue_config.topic_main.as_str();
+        let queue_topic_log = &queue_config.topic_log.as_str();
+
+        let storage_producer = KafkaMessagePublisher::new(queue_topic_main.parse().unwrap());
+        let log_producer = KafkaMessagePublisher::new(queue_topic_log.parse().unwrap());
+
+        match classify_and_publish_dicom_messages(&metas, &storage_producer, &log_producer).await {
+            Ok(_) => {
+                info!(&log, "Successfully published DICOM messages");
+            }
+            Err(e) => {
+                warn!(&log, "Failed to publish DICOM messages: {}", e);
+            }
+        };
+        metas.clear();
     }
+
     Ok(())
 }
 
