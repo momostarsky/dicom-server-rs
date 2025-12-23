@@ -255,8 +255,8 @@ pub async fn process_dicom_memobject(
     );
 
 
-    let boox =obj.get(tags::PIXEL_DATA);
-    match  boox {
+
+    let has_pixel_data = match  obj.get(tags::PIXEL_DATA) {
         None => {
             error!(
                     logger,
@@ -264,18 +264,20 @@ pub async fn process_dicom_memobject(
                     dicom_file_path.to_string()
 
                 );
+            true
         }
         Some(_) => {
             info!(logger, "Has PxielData");
+            false
         }
-    }
+    };
     let study_uid_hash_v = hash_uid(study_uid.as_str());
     let series_uid_hash_v = hash_uid(series_uid.as_str());
     let uuid_v7 = Uuid::now_v7();
     let trace_uid = uuid_v7.to_string(); // 或直接用 format!("{}", uuid_v7)
     let mut transcode_status = TransferStatus::NoNeedTransfer;
     let mut final_ts = transfer_syntax_uid.to_string();
-    if !JS_SUPPORTED_TS.contains(transfer_syntax_uid.as_str()) {
+    if has_pixel_data && !JS_SUPPORTED_TS.contains(transfer_syntax_uid.as_str()) {
         let target_ts = TransferSyntaxRegistry
             .get(JS_CHANGE_TO_TS.as_str())
             .unwrap();

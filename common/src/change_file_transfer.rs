@@ -132,6 +132,9 @@ pub async fn convert_ts_with_transcode(
             )));
         }
     };
+    if obj.get(tags::PIXEL_DATA).is_none(){
+        return Ok(());
+    }
 
     // transcode to explicit VR little endian
     obj.transcode(&DEFLATED_EXPLICIT_VR_LITTLE_ENDIAN.erased())

@@ -891,12 +891,12 @@ dependencies = [
  "der",
  "dicom-core 0.9.0",
  "dicom-dictionary-std 0.9.0",
- "dicom-encoding 0.9.0",
- "dicom-object 0.9.0",
+ "dicom-encoding",
+ "dicom-object",
  "dicom-pixeldata",
  "dicom-test-files",
- "dicom-transfer-syntax-registry 0.9.0",
- "dicom-ul 0.9.0",
+ "dicom-transfer-syntax-registry",
+ "dicom-ul",
  "dotenv",
  "encoding_rs",
  "futures",
@@ -1271,11 +1271,11 @@ dependencies = [
  "der",
  "dicom-core 0.9.0",
  "dicom-dictionary-std 0.9.0",
- "dicom-encoding 0.9.0",
- "dicom-object 0.9.0",
+ "dicom-encoding",
+ "dicom-object",
  "dicom-pixeldata",
- "dicom-transfer-syntax-registry 0.9.0",
- "dicom-ul 0.9.0",
+ "dicom-transfer-syntax-registry",
+ "dicom-ul",
  "dotenv",
  "encoding_rs",
  "futures",
@@ -1484,19 +1484,6 @@ dependencies = [
 
 [[package]]
 name = "dicom-encoding"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9664d8c8de377e29b1e5b8fe8efa7c3cc3ea848ee6a70247f906fa5e00fdc97"
-dependencies = [
- "byteordered",
- "dicom-core 0.8.2",
- "dicom-dictionary-std 0.8.1",
- "encoding",
- "snafu",
-]
-
-[[package]]
-name = "dicom-encoding"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6076f4ef3627291ab2b5beecd2fde1df7f8e0219b8d1fe4ec45a773416409f13"
@@ -1510,24 +1497,6 @@ dependencies = [
 
 [[package]]
 name = "dicom-object"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f460ce81c9a0c2d958888cce45243846845b5447a0023f144d8164e822989fe6"
-dependencies = [
- "byteordered",
- "dicom-core 0.8.2",
- "dicom-dictionary-std 0.8.1",
- "dicom-encoding 0.8.2",
- "dicom-parser 0.8.2",
- "dicom-transfer-syntax-registry 0.8.2",
- "itertools 0.14.0",
- "smallvec",
- "snafu",
- "tracing",
-]
-
-[[package]]
-name = "dicom-object"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e550fd9def08c12b64e0410e83cb491821767d62e59b74d8b960c12ebd51490"
@@ -1535,24 +1504,10 @@ dependencies = [
  "byteordered",
  "dicom-core 0.9.0",
  "dicom-dictionary-std 0.9.0",
- "dicom-encoding 0.9.0",
- "dicom-parser 0.9.0",
- "dicom-transfer-syntax-registry 0.9.0",
+ "dicom-encoding",
+ "dicom-parser",
+ "dicom-transfer-syntax-registry",
  "itertools 0.14.0",
- "smallvec",
- "snafu",
- "tracing",
-]
-
-[[package]]
-name = "dicom-parser"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7986f989ccdf19c71a742690e20c66b02f5751964876076ce69d2fc43f6eaff"
-dependencies = [
- "dicom-core 0.8.2",
- "dicom-dictionary-std 0.8.1",
- "dicom-encoding 0.8.2",
  "smallvec",
  "snafu",
  "tracing",
@@ -1566,7 +1521,7 @@ checksum = "e73d8c380a0655e819adf06263b2144d0ac55120aa3a66f2f6848b15e3de93e8"
 dependencies = [
  "dicom-core 0.9.0",
  "dicom-dictionary-std 0.9.0",
- "dicom-encoding 0.9.0",
+ "dicom-encoding",
  "smallvec",
  "snafu",
  "tracing",
@@ -1581,9 +1536,9 @@ dependencies = [
  "byteorder",
  "dicom-core 0.9.0",
  "dicom-dictionary-std 0.9.0",
- "dicom-encoding 0.9.0",
- "dicom-object 0.9.0",
- "dicom-transfer-syntax-registry 0.9.0",
+ "dicom-encoding",
+ "dicom-object",
+ "dicom-transfer-syntax-registry",
  "image",
  "num-traits",
  "rayon",
@@ -1605,29 +1560,13 @@ dependencies = [
 
 [[package]]
 name = "dicom-transfer-syntax-registry"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62672d33f29f7c049a92a662c4bd7ef34e85b5eaea379627d335d93b5d25edf6"
-dependencies = [
- "byteordered",
- "dicom-core 0.8.2",
- "dicom-encoding 0.8.2",
- "jpeg-decoder",
- "jpeg-encoder",
- "jxl-oxide",
- "lazy_static",
- "tracing",
-]
-
-[[package]]
-name = "dicom-transfer-syntax-registry"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b680acd7f349598f94f3291266196ed687150af5ff57691184a493e5cfce090d"
 dependencies = [
  "byteordered",
  "dicom-core 0.9.0",
- "dicom-encoding 0.9.0",
+ "dicom-encoding",
  "flate2",
  "jpeg-decoder",
  "jpeg-encoder",
@@ -1641,29 +1580,14 @@ dependencies = [
 
 [[package]]
 name = "dicom-ul"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96af12961f5e98687dba1b452f6facd3d5322d2440f5b6f6954859ff940b9ba0"
-dependencies = [
- "byteordered",
- "bytes",
- "dicom-encoding 0.8.2",
- "dicom-transfer-syntax-registry 0.8.2",
- "snafu",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "dicom-ul"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68ddedfa3a1d3667147dd1fa3dfef2bc496ae2951bffbf3e8504ab1e7d2db76e"
 dependencies = [
  "byteordered",
  "bytes",
- "dicom-encoding 0.9.0",
- "dicom-transfer-syntax-registry 0.9.0",
+ "dicom-encoding",
+ "dicom-transfer-syntax-registry",
  "snafu",
  "tokio",
  "tracing",
@@ -3372,12 +3296,12 @@ dependencies = [
  "chrono",
  "clap",
  "config",
- "dicom-core 0.8.2",
+ "dicom-core 0.9.0",
  "dicom-dictionary-std 0.8.1",
- "dicom-encoding 0.8.2",
- "dicom-object 0.8.2",
- "dicom-transfer-syntax-registry 0.8.2",
- "dicom-ul 0.8.2",
+ "dicom-encoding",
+ "dicom-object",
+ "dicom-transfer-syntax-registry",
+ "dicom-ul",
  "dotenv",
  "futures",
  "futures-util",
@@ -6119,10 +6043,10 @@ dependencies = [
  "database",
  "dicom-core 0.9.0",
  "dicom-dictionary-std 0.9.0",
- "dicom-encoding 0.9.0",
- "dicom-object 0.9.0",
- "dicom-transfer-syntax-registry 0.9.0",
- "dicom-ul 0.9.0",
+ "dicom-encoding",
+ "dicom-object",
+ "dicom-transfer-syntax-registry",
+ "dicom-ul",
  "dotenv",
  "futures",
  "rdkafka",
@@ -6151,11 +6075,11 @@ dependencies = [
  "database",
  "dicom-core 0.9.0",
  "dicom-dictionary-std 0.9.0",
- "dicom-encoding 0.9.0",
- "dicom-object 0.9.0",
+ "dicom-encoding",
+ "dicom-object",
  "dicom-pixeldata",
- "dicom-transfer-syntax-registry 0.9.0",
- "dicom-ul 0.9.0",
+ "dicom-transfer-syntax-registry",
+ "dicom-ul",
  "futures",
  "futures-util",
  "gdcm_conv",
@@ -6203,11 +6127,11 @@ dependencies = [
  "database",
  "dicom-core 0.9.0",
  "dicom-dictionary-std 0.9.0",
- "dicom-encoding 0.9.0",
- "dicom-object 0.9.0",
+ "dicom-encoding",
+ "dicom-object",
  "dicom-pixeldata",
- "dicom-transfer-syntax-registry 0.9.0",
- "dicom-ul 0.9.0",
+ "dicom-transfer-syntax-registry",
+ "dicom-ul",
  "dotenv",
  "futures",
  "futures-util",
@@ -6236,11 +6160,11 @@ dependencies = [
  "database",
  "dicom-core 0.9.0",
  "dicom-dictionary-std 0.9.0",
- "dicom-encoding 0.9.0",
- "dicom-object 0.9.0",
+ "dicom-encoding",
+ "dicom-object",
  "dicom-pixeldata",
- "dicom-transfer-syntax-registry 0.9.0",
- "dicom-ul 0.9.0",
+ "dicom-transfer-syntax-registry",
+ "dicom-ul",
  "futures",
  "futures-util",
  "gdcm_conv",

@@ -10,6 +10,7 @@ pub enum TransferStatus {
     NoNeedTransfer,
     Success,
     Failed,
+    NeedTransfer,
 }
 
 impl Display for TransferStatus {
@@ -18,6 +19,7 @@ impl Display for TransferStatus {
             TransferStatus::NoNeedTransfer => write!(f, "NoNeedTransfer"),
             TransferStatus::Success => write!(f, "Success"),
             TransferStatus::Failed => write!(f, "Failed"),
+            TransferStatus::NeedTransfer => write!(f, "NeedTransfer"),
         }
     }
 }
