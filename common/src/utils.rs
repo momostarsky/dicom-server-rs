@@ -16,6 +16,7 @@ use std::fs::{File, OpenOptions};
 use crate::change_file_transfer::convert_ts_with_gdcm_conv;
 use std::path::Path;
 use std::sync::OnceLock;
+use uuid::Uuid;
 
 /// 获取当前时间
 pub fn get_current_time() -> chrono::NaiveDateTime {
@@ -186,14 +187,17 @@ pub async fn group_dicom_state(
         }
 
         if message.transfer_status == TransferStatus::NeedTransfer {
-            let fsize = match fs::metadata( &message.file_path.as_str()) {
+            let fsize = match fs::metadata(&message.file_path.as_str()) {
                 Ok(metadata) => metadata.len(),
                 Err(_) => 0u64,
             };
+            let uuid_v7 = Uuid::now_v7();
+            let trace_uid = uuid_v7.to_string(); // 或直接用 format!("{}", uuid_v7)
+            let tmp_path = format!("./{}.dcm", trace_uid);
             match convert_ts_with_gdcm_conv(
                 &message.file_path.as_str(),
                 fsize,
-                "./cc.dcm",
+                tmp_path.as_str(),
                 true,
             )
             .await
@@ -201,6 +205,10 @@ pub async fn group_dicom_state(
                 Ok(()) => {
                     warn!(logger, "convert_ts_with_transcode Is Ok");
                 }
+                Err(_e) => {}
+            }
+            match fs::remove_file(tmp_path.as_str()) {
+                Ok(()) => {}
                 Err(_e) => {}
             }
         }
