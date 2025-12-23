@@ -6045,6 +6045,7 @@ dependencies = [
  "dicom-dictionary-std 0.9.0",
  "dicom-encoding",
  "dicom-object",
+ "dicom-pixeldata",
  "dicom-transfer-syntax-registry",
  "dicom-ul",
  "dotenv",
