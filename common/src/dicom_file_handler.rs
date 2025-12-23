@@ -16,6 +16,8 @@ use slog::o;
 use slog::{error, info};
 use std::collections::HashSet;
 use std::sync::LazyLock;
+use dicom_object::mem::InMemElement;
+use tracing::warn;
 use uuid::Uuid;
 
 static JS_SUPPORTED_TS: LazyLock<HashSet<String>> = LazyLock::new(|| {
@@ -191,7 +193,7 @@ pub async fn process_dicom_buffer(
 }
 
 pub async fn process_dicom_memobject(
-    obj: &DefaultDicomObject,
+    obj: &mut DefaultDicomObject,
     dicom_file_path: &String,
     tenant_id: &String,
     _storage_config: &StorageConfig<'_>,
@@ -231,8 +233,7 @@ pub async fn process_dicom_memobject(
     };
     let transfer_syntax_uid = match get_bounder_string::<64>(&obj, tags::TRANSFER_SYNTAX_UID) {
         Some(v) => v,
-        None => BoundedString::<64>::make_str( obj.meta().transfer_syntax())
-
+        None => BoundedString::<64>::make_str(obj.meta().transfer_syntax()),
     };
 
     let accession_number = get_bounder_string::<16>(&obj, tags::ACCESSION_NUMBER);
@@ -254,6 +255,22 @@ pub async fn process_dicom_memobject(
         study_date,
         frames
     );
+
+
+    let boox =obj.get(tags::PIXEL_DATA);
+    match  boox {
+        None => {
+            error!(
+                    logger,
+                    "no pixeldata  success:  {}",
+                    dicom_file_path.to_string()
+
+                );
+        }
+        Some(_) => {
+            info!(logger, "Has PxielData");
+        }
+    }
     let study_uid_hash_v = hash_uid(study_uid.as_str());
     let series_uid_hash_v = hash_uid(series_uid.as_str());
     let uuid_v7 = Uuid::now_v7();
@@ -264,13 +281,8 @@ pub async fn process_dicom_memobject(
         let target_ts = TransferSyntaxRegistry
             .get(JS_CHANGE_TO_TS.as_str())
             .unwrap();
-        let mut trans_obj = match OpenFileOptions::new().open_file(&dicom_file_path) {
-            Ok(obj) => obj,
-            Err(e) => {
-                whatever!("process_dicom_file_from_file open dicom file failed: {}", e)
-            }
-        };
-        match trans_obj.transcode(target_ts) {
+
+        match obj.transcode(target_ts) {
             Ok(_) => {
                 final_ts = target_ts.uid().to_string();
                 info!(

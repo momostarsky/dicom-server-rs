@@ -1,5 +1,7 @@
+use std::fs;
 use actix_web::{HttpRequest, HttpResponse, Result, http::header, post, web};
 use chrono::Datelike;
+use std::fs::File;
 
 use futures_util::StreamExt as _;
 // use dicom_object::open_file; // 如果需要解析 DICOM，取消注释
@@ -9,8 +11,9 @@ use common::dicom_file_handler::{classify_and_publish_dicom_messages, process_di
 use common::dicom_utils::{get_date_value_dicom, get_text_value};
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::storage_config::{StorageConfig, dicom_file_path};
-use database::dicom_meta::{DicomStoreMeta};
+use database::dicom_meta::DicomStoreMeta;
 use dicom_dictionary_std::tags;
+use dicom_object::collector::CharacterSetOverride;
 use dicom_object::DefaultDicomObject;
 use futures_util::io::Cursor;
 use multer::Multipart;
@@ -221,7 +224,7 @@ async fn process_and_store_instances(
 
     // 策略: 小于10MB使用内存缓冲区，大于等于10MB使用内存映射文件
     const MEMORY_MAPPING_THRESHOLD: usize = 10 * 1024 * 1024; // 10MB阈值
-    let use_memory_mapping = content_length >= MEMORY_MAPPING_THRESHOLD;
+    let use_memory_mapping =  content_length >= MEMORY_MAPPING_THRESHOLD;
 
     info!(
         log,
@@ -441,6 +444,8 @@ async fn process_multipart_fields(
                             field_bytes_len += field_chunk.len();
                             // 使用 std::io::Cursor 包装字节流，使其实现 Read trait
                             let cursor = Cursor::new(&field_chunk[start_position..end_position]);
+                            // 用于写入磁盘
+                            let datax =  Cursor::new(&field_chunk[start_position..end_position]);
                             // 使用 DicomObject::read_from() 从实现了 Read trait 的源加载对象
                             let loaded_object =
                                 match DefaultDicomObject::from_reader(cursor.into_inner()) {
@@ -450,7 +455,7 @@ async fn process_multipart_fields(
                             if loaded_object.is_none() {
                                 continue;
                             }
-                            let loaded_object = loaded_object.unwrap();
+                            let mut loaded_object = loaded_object.unwrap();
                             let tag_study_uid =
                                 get_text_value(&loaded_object, tags::STUDY_INSTANCE_UID)
                                     .map(|v| v.to_string());
@@ -515,26 +520,38 @@ async fn process_multipart_fields(
 
                             let filepath =
                                 dicom_file_path(&dir_path, sop_inst_uid.unwrap().as_str());
-                            match loaded_object.write_to_file(&filepath) {
-                                Ok(_) => {
-                                    info!(log, "Saved DICOM file to {}", &filepath);
-                                    match process_dicom_memobject(&loaded_object, &filepath, tenant_id, &storage_confg).await {
-                                        Ok(dicom_meta) => {
-                                            info!(log, "process_dicom_memobject get DICOM metadata: {:?}", dicom_meta);
-                                            metas.push(dicom_meta);
-                                            files.push(filepath);
-                                        }
-                                        Err(e) => {
-                                            warn!(log, "process_dicom_memobject failed: {} with :{}", filepath,e );
-                                        }
-                                    }
+                            fs::write(&filepath, datax.into_inner()).expect("write data to disk failed !");
+
+                            info!(log, "Saved DICOM file to {}", &filepath);
+                            match process_dicom_memobject(
+                                &mut loaded_object,
+                                &filepath,
+                                tenant_id,
+                                &storage_confg,
+                            )
+                            .await
+                            {
+                                Ok(dicom_meta) => {
+                                    info!(
+                                        log,
+                                        "process_dicom_memobject get DICOM metadata: {:?}",
+                                        dicom_meta
+                                    );
+                                    metas.push(dicom_meta);
+                                    files.push(filepath);
                                 }
                                 Err(e) => {
-                                    error!(log, "Failed to save DICOM file: {}", e);
-                                    // return Err(HttpResponse::InternalServerError()
-                                    //     .body("Failed to save DICOM file"));
+                                    warn!(
+                                        log,
+                                        "process_dicom_memobject failed: {} with :{}",
+                                        filepath,
+                                        e
+                                    );
                                 }
                             }
+
+
+
                         }
                         Ok(None) => break, // 没有更多数据块了
                         Err(e) => {
@@ -558,6 +575,24 @@ async fn process_multipart_fields(
     }
 
     warn!(log, "process_multipart_fields {} files", files.len());
+    // if !files.is_empty() {
+    //     for vf in files {
+    //
+    //             match dicom_object::OpenFileOptions::new()
+    //                 .charset_override(CharacterSetOverride::AnyVr)
+    //                 .read_until(tags::PIXEL_DATA)
+    //                 .open_file(String::from(vf.as_str())){
+    //                 Ok(_) => {
+    //                     info!(log,"Open DICOM is OK");
+    //                 },
+    //                 Err(e) =>{
+    //                     error!(log,"Open DICOM is Error:{}" ,e );
+    //                 }
+    //
+    //             }
+    //
+    //     }
+    // }
     if !metas.is_empty() {
         info!(
             log,
