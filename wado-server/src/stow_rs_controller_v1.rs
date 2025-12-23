@@ -1,19 +1,18 @@
-use std::fs;
 use actix_web::{HttpRequest, HttpResponse, Result, http::header, post, web};
 use chrono::Datelike;
-use std::fs::File;
+use std::fs;
 
 use futures_util::StreamExt as _;
 // use dicom_object::open_file; // 如果需要解析 DICOM，取消注释
 use crate::AppState;
 use crate::constants::STOW_RS_TAG;
+use common::change_file_transfer::{convert_ts_with_gdcm_conv};
 use common::dicom_file_handler::{classify_and_publish_dicom_messages, process_dicom_memobject};
 use common::dicom_utils::{get_date_value_dicom, get_text_value};
 use common::message_sender_kafka::KafkaMessagePublisher;
 use common::storage_config::{StorageConfig, dicom_file_path};
 use database::dicom_meta::DicomStoreMeta;
 use dicom_dictionary_std::tags;
-use dicom_object::collector::CharacterSetOverride;
 use dicom_object::DefaultDicomObject;
 use futures_util::io::Cursor;
 use multer::Multipart;
@@ -224,7 +223,7 @@ async fn process_and_store_instances(
 
     // 策略: 小于10MB使用内存缓冲区，大于等于10MB使用内存映射文件
     const MEMORY_MAPPING_THRESHOLD: usize = 10 * 1024 * 1024; // 10MB阈值
-    let use_memory_mapping =  content_length >= MEMORY_MAPPING_THRESHOLD;
+    let use_memory_mapping = content_length >= MEMORY_MAPPING_THRESHOLD;
 
     info!(
         log,
@@ -445,7 +444,7 @@ async fn process_multipart_fields(
                             // 使用 std::io::Cursor 包装字节流，使其实现 Read trait
                             let cursor = Cursor::new(&field_chunk[start_position..end_position]);
                             // 用于写入磁盘
-                            let datax =  Cursor::new(&field_chunk[start_position..end_position]);
+                            let datax = Cursor::new(&field_chunk[start_position..end_position]);
                             // 使用 DicomObject::read_from() 从实现了 Read trait 的源加载对象
                             let loaded_object =
                                 match DefaultDicomObject::from_reader(cursor.into_inner()) {
@@ -520,7 +519,9 @@ async fn process_multipart_fields(
 
                             let filepath =
                                 dicom_file_path(&dir_path, sop_inst_uid.unwrap().as_str());
-                            fs::write(&filepath, datax.into_inner()).expect("write data to disk failed !");
+                            fs::write(&filepath, datax.into_inner())
+                                .expect("write data to disk failed !");
+
 
                             info!(log, "Saved DICOM file to {}", &filepath);
                             match process_dicom_memobject(
@@ -543,15 +544,10 @@ async fn process_multipart_fields(
                                 Err(e) => {
                                     warn!(
                                         log,
-                                        "process_dicom_memobject failed: {} with :{}",
-                                        filepath,
-                                        e
+                                        "process_dicom_memobject failed: {} with :{}", filepath, e
                                     );
                                 }
                             }
-
-
-
                         }
                         Ok(None) => break, // 没有更多数据块了
                         Err(e) => {

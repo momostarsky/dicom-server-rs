@@ -102,7 +102,7 @@ pub async fn process_dicom_buffer(
         .transfer_syntax(ts)
         .build()
         .whatever_context("failed to build DICOM meta file information")?;
-    let mut file_obj = obj.with_exact_meta(file_meta);
+    let file_obj = obj.with_exact_meta(file_meta);
 
     let study_date_str = study_date.format("%Y%m%d").to_string();
     let dir_path = storage_config
@@ -123,28 +123,11 @@ pub async fn process_dicom_buffer(
     let file_path = storage_config::dicom_file_path(&dir_path, sop_instance_uid);
 
     info!(logger, "file path: {}", file_path);
-    let mut final_ts = ts.to_string();
+    let final_ts = ts.to_string();
     let mut transcode_status = TransferStatus::NoNeedTransfer;
     if !JS_SUPPORTED_TS.contains(ts) {
-        let target_ts = TransferSyntaxRegistry
-            .get(JS_CHANGE_TO_TS.as_str())
-            .unwrap();
-        match file_obj.transcode(target_ts) {
-            Ok(_) => {
-                final_ts = target_ts.uid().to_string();
-                info!(
-                    logger,
-                    "transcode success: {} -> {}",
-                    ts.to_string(),
-                    final_ts
-                );
-                transcode_status = TransferStatus::Success;
-            }
-            Err(e) => {
-                error!(logger, "transcode failed: {}", e);
-                transcode_status = TransferStatus::Failed;
-            }
-        }
+        transcode_status = TransferStatus::NeedTransfer;
+
     } else {
         info!(logger, "not need transcode: {}", ts.to_string());
     }
@@ -256,65 +239,18 @@ pub async fn process_dicom_memobject(
 
 
 
-    let has_pixel_data = match  obj.get(tags::PIXEL_DATA) {
-        None => {
-            error!(
-                    logger,
-                    "no pixeldata  success:  {}",
-                    dicom_file_path.to_string()
 
-                );
-            true
-        }
-        Some(_) => {
-            info!(logger, "Has PxielData");
-            false
-        }
-    };
     let study_uid_hash_v = hash_uid(study_uid.as_str());
     let series_uid_hash_v = hash_uid(series_uid.as_str());
     let uuid_v7 = Uuid::now_v7();
     let trace_uid = uuid_v7.to_string(); // 或直接用 format!("{}", uuid_v7)
     let mut transcode_status = TransferStatus::NoNeedTransfer;
-    let mut final_ts = transfer_syntax_uid.to_string();
-    if has_pixel_data && !JS_SUPPORTED_TS.contains(transfer_syntax_uid.as_str()) {
-        let target_ts = TransferSyntaxRegistry
-            .get(JS_CHANGE_TO_TS.as_str())
-            .unwrap();
-
-        match obj.transcode(target_ts) {
-            Ok(_) => {
-                final_ts = target_ts.uid().to_string();
-                info!(
-                    logger,
-                    "transcode success: {} -> {}",
-                    transfer_syntax_uid.to_string(),
-                    final_ts
-                );
-                transcode_status = TransferStatus::Success;
-            }
-            Err(e) => {
-                error!(logger, "transcode failed: {}", e);
-                transcode_status = TransferStatus::Failed;
-            }
-        }
-        match transcode_status {
-            TransferStatus::Success => {
-                obj.write_to_file(&dicom_file_path)
-                    .whatever_context(format!(
-                        "transcode success, biut save file to disk failed: {:?}",
-                        dicom_file_path
-                    ))?;
-            }
-            _ => {}
-        }
-    } else {
-        info!(
-            logger,
-            "not need transcode: {}",
-            transfer_syntax_uid.to_string()
-        );
+    let final_ts = transfer_syntax_uid.to_string();
+    if !JS_SUPPORTED_TS.contains(transfer_syntax_uid.as_str()) {
+        transcode_status = TransferStatus::NeedTransfer;
     }
+
+
     let fsize = match std::fs::metadata(&dicom_file_path) {
         Ok(metadata) => metadata.len(),
         Err(_) => 0u64,

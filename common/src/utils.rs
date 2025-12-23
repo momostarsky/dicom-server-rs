@@ -2,17 +2,18 @@ use std::option::Option;
 
 use crate::dicom_object_meta::{make_image_info, make_state_info};
 use crate::message_sender::MessagePublisher;
-use database::dicom_meta::{DicomImageMeta, DicomStateMeta, DicomStoreMeta};
+use database::dicom_meta::{DicomImageMeta, DicomStateMeta, DicomStoreMeta, TransferStatus};
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu::Whatever;
 use dicom_object::ReadError;
 use dicom_object::file::CharacterSetOverride;
-use slog::LevelFilter;
 use slog::{Drain, Logger, error, info, o};
+use slog::{LevelFilter, warn};
 use std::collections::HashSet;
 use std::fs;
 use std::fs::{File, OpenOptions};
 
+use crate::change_file_transfer::convert_ts_with_gdcm_conv;
 use std::path::Path;
 use std::sync::OnceLock;
 
@@ -182,6 +183,26 @@ pub async fn group_dicom_state(
         if !can_read_file(&message.file_path.as_str()) {
             error!(logger, "No read permission for file: {}", message.file_path);
             continue;
+        }
+
+        if message.transfer_status == TransferStatus::NeedTransfer {
+            let fsize = match fs::metadata( &message.file_path.as_str()) {
+                Ok(metadata) => metadata.len(),
+                Err(_) => 0u64,
+            };
+            match convert_ts_with_gdcm_conv(
+                &message.file_path.as_str(),
+                fsize,
+                "./cc.dcm",
+                true,
+            )
+            .await
+            {
+                Ok(()) => {
+                    warn!(logger, "convert_ts_with_transcode Is Ok");
+                }
+                Err(_e) => {}
+            }
         }
 
         match dicom_object::OpenFileOptions::new()
