@@ -15,9 +15,11 @@ use std::collections::HashSet;
 use std::fs;
 use std::fs::{File, OpenOptions};
 
-use std::path::Path;
-use std::sync::OnceLock;
 use crate::dicom_utils::get_int_value;
+use std::path::Path;
+use std::sync::{Arc, OnceLock};
+use dashmap::DashMap;
+use futures_util::stream;
 
 /// 获取当前时间
 pub fn get_current_time() -> chrono::NaiveDateTime {
@@ -152,6 +154,10 @@ pub fn deduplicate_state_metas(state_metas: Vec<DicomStateMeta>) -> Vec<DicomSta
 
     unique_map.into_values().collect()
 }
+
+// 定义并发度，根据磁盘 IO 性能调整
+const CONCURRENT_LIMIT: usize = 16;
+use futures::{StreamExt};
 pub async fn group_dicom_state(
     messages: &[DicomStoreMeta],
 ) -> Result<(Vec<DicomStateMeta>, Vec<DicomImageMeta>), ReadError> {
@@ -163,89 +169,106 @@ pub async fn group_dicom_state(
         messages.len()
     );
 
-    let mut state_metas: Vec<DicomStateMeta> = Vec::new();
-    let mut image_entities: Vec<DicomImageMeta> = Vec::new();
+    // 1. 使用 DashMap 充当运行时的“排他锁”，防止相同路径争用
+    // 即使在并行环境下，同一时间也只有一个任务能操作同一个 file_path
+    let active_paths = Arc::new(DashMap::new());
 
-    for message in messages {
-        let space_size = Option::from(message.file_size);
+    // 2. 将消息转化为流
+    let results = stream::iter(messages)
+        .map(|message| {
+            let logger = logger.clone();
+            let active_paths = Arc::clone(&active_paths);
 
-        match fs::exists(message.file_path.as_str()) {
-            Ok(true) => {}
-            Ok(false) => {
-                error!(logger, "File not found: {}", message.file_path.as_str());
-                continue;
-            }
-            Err(err) => {
-                error!(logger, "Error checking file existence: {}", err);
-                continue;
-            }
-        }
+            // 为每个消息创建一个异步 Future
+            async move {
+                let file_path = message.file_path.clone();
 
-        // 添加权限检查
-        if !can_read_file(&message.file_path.as_str()) {
-            error!(logger, "No read permission for file: {}", message.file_path);
-            continue;
-        }
-
-        if message.transfer_status == TransferStatus::NeedTransfer {
-            match change_transfersyntax(message.file_path.as_str()).await {
-                Ok(()) => {
-                    warn!(logger, "change_transfersyntax Is Ok");
+                // --- 路径争用检查 ---
+                // 如果路径已在处理中，则直接跳过（解决重复文件问题）
+                if active_paths.contains_key(&file_path) {
+                    warn!(logger, "Duplicate file path detected, skipping: {}", file_path);
+                    return None;
                 }
-                Err(_e) => {
-                    warn!(logger, "change_transfersyntax Is Error");
-                }
-            }
-        }
+                active_paths.insert(file_path.clone(), ());
 
-        match OpenFileOptions::new()
-            .charset_override(CharacterSetOverride::AnyVr)
-            .read_until(tags::PIXEL_DATA)
-            .open_file(String::from(message.file_path.as_str()))
-        {
-            Ok(dicom_obj) => {
-                let state_meta = match make_state_info(message.tenant_id.as_str(), &dicom_obj) {
-                    Ok(state_meta) => state_meta,
-                    Err(err) => {
-                        error!(
-                            logger,
-                            "Failed to extract state meta from file: {} , message: {:?}",
-                            message.file_path.as_str(),
-                            err
-                        );
-                        continue;
-                    }
-                };
-                let image_entity =
-                    match make_image_info(message.tenant_id.as_str(), &dicom_obj, space_size) {
-                        Ok(image_entity) => image_entity,
-                        Err(err) => {
-                            error!(
-                                logger,
-                                "Failed to extract image entity from file: {} , message: {:?}",
-                                message.file_path.as_str(),
-                                err
-                            );
-                            continue;
-                        }
-                    };
+                // 执行核心逻辑
+                let res = process_single_dicom(message, &logger).await;
 
-                state_metas.push(state_meta);
+                // --- 处理完成，释放路径锁 ---
+                active_paths.remove(&file_path);
+                res
+            }
+        })
+        // 3. 并发执行：允许同时运行 CONCURRENT_LIMIT 个任务
+        // 顺序是无序的，谁先好谁先返回，效率最高
+        .buffer_unordered(CONCURRENT_LIMIT)
+        .collect::<Vec<Option<(DicomStateMeta, DicomImageMeta)>>>()
+        .await;
 
-                image_entities.push(image_entity);
-            }
-            Err(err) => {
-                error!(
-                    logger,
-                    "Failed to open DICOM file: {} , file_path: {}",
-                    err,
-                    message.file_path.as_str()
-                );
-            }
+    // 4. 汇总结果
+    let mut state_metas = Vec::with_capacity(messages.len());
+    let mut image_entities = Vec::with_capacity(messages.len());
+
+    for res in results.into_iter().flatten() {
+        state_metas.push(res.0);
+        image_entities.push(res.1);
+    }
+
+    let state_metas = deduplicate_state_metas(state_metas);
+    Ok((state_metas, image_entities))
+
+}
+
+/// 封装原有的单个文件处理逻辑（保持逻辑清晰）
+async fn process_single_dicom(
+    message: &DicomStoreMeta,
+    logger: &Logger,
+) -> Option<(DicomStateMeta, DicomImageMeta)> {
+    let space_size = Option::from(message.file_size);
+
+    // 检查存在性
+    if !fs::exists(&message.file_path.as_str()).unwrap_or(false) {
+        error!(logger, "File not found: {}", message.file_path);
+        return None;
+    }
+
+    // 权限检查
+    if !can_read_file(&message.file_path.as_str()) {
+        error!(logger, "No read permission: {}", message.file_path);
+        return None;
+    }
+
+    // 转换传输语法（此时受 DashMap 保护，不会有并发冲突）
+    if message.transfer_status == TransferStatus::NeedTransfer {
+        if let Err(e) = change_transfersyntax(&message.file_path.as_str()).await {
+            warn!(
+                logger,
+                "change_transfersyntax Error: {:?} for {}", e, message.file_path
+            );
+            // 决定是否在转换失败时继续...
         }
     }
-    state_metas = deduplicate_state_metas(state_metas);
-    Ok((state_metas, image_entities))
+
+    // 打开并解析
+    match OpenFileOptions::new()
+        .charset_override(CharacterSetOverride::AnyVr)
+        .read_until(tags::PIXEL_DATA)
+        .open_file(&message.file_path.as_str())
+    {
+        Ok(dicom_obj) => {
+            let state_meta = make_state_info(&message.tenant_id.as_str(), &dicom_obj).ok()?;
+            let image_entity =
+                make_image_info(&message.tenant_id.as_str(), &dicom_obj, space_size).ok()?;
+            Some((state_meta, image_entity))
+        }
+        Err(err) => {
+            error!(
+                logger,
+                "Failed to open DICOM: {} , path: {}", err, message.file_path
+            );
+            None
+        }
+    }
 }
 
 fn can_read_file(p0: &&str) -> bool {

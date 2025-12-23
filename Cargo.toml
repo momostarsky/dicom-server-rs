@@ -99,3 +99,4 @@ jsonpath_lib = "0.3.0"
 log = "0.4.28"
 actix-multipart = "0.7.2"
 memchr = "2.7.6"
+dashmap = "5.5" # 高性能并发 Map
