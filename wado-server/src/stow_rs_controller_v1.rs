@@ -596,7 +596,7 @@ async fn process_multipart_fields(
         );
         let queue_config = &app_state.config.message_queue;
         let queue_topic_main = &queue_config.topic_main.as_str();
-        let queue_topic_log = &queue_config.topic_log.as_str();
+        let queue_topic_log = &queue_config.topic_dicom_receive.as_str();
 
         let storage_producer = KafkaMessagePublisher::new(queue_topic_main.parse().unwrap());
         let log_producer = KafkaMessagePublisher::new(queue_topic_log.parse().unwrap());

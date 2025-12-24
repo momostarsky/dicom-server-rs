@@ -64,8 +64,7 @@ pub struct KafkaConfig {
 pub struct MessageQueueConfig {
     pub consumer_group_id: String,
     pub topic_main: String,
-    pub topic_log: String,
-
+    pub topic_dicom_receive: String,
     pub topic_dicom_state: String,
     pub topic_dicom_image: String,
 }

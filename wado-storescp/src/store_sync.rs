@@ -31,7 +31,7 @@ pub async fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Wha
     let app_config = server_config::load_config().whatever_context("failed to load config")?;
     let queue_config = &app_config.message_queue;
     let queue_topic_main = &queue_config.topic_main.as_str();
-    let queue_topic_log = &queue_config.topic_log.as_str();
+    let queue_topic_log = &queue_config.topic_dicom_receive.as_str();
 
     let storage_producer = KafkaMessagePublisher::new(queue_topic_main.parse().unwrap());
     let log_producer = KafkaMessagePublisher::new(queue_topic_log.parse().unwrap());
