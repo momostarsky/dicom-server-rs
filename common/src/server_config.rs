@@ -63,9 +63,13 @@ pub struct KafkaConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct MessageQueueConfig {
     pub consumer_group_id: String,
+    /// 存放待处理的消息
     pub topic_main: String,
+    /// 存放收图记录的消息---此消息队列直接导入ClickHouse数据库.
     pub topic_dicom_receive: String,
+    /// 存放处理状态的消息
     pub topic_dicom_state: String,
+    /// 存放DICOM切片信息
     pub topic_dicom_image: String,
 }
 
