@@ -3,6 +3,7 @@ pub mod dicom_dbtype;
 pub mod dicom_meta;
 pub mod dicom_pg;
 pub mod dicom_pg_types;
+pub mod dicom_access_log;
 
 pub fn add(left: u64, right: u64) -> u64 {
     left + right

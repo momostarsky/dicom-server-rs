@@ -227,3 +227,29 @@ create index idx_dicom_object_meta_date on dicom_object_meta (tenant_id, study_d
 create index idx_dicom_object_meta_createdate on dicom_object_meta (tenant_id, created_time);
 
 -----------------------收图记录-------------------------
+-- 创建访问日志表
+CREATE TABLE IF NOT EXISTS dicom_access_log (
+    log_id              VARCHAR(36)   NOT NULL,
+    tenant_id           VARCHAR(64)   NOT NULL,
+    user_id             VARCHAR(64)   NOT NULL,
+    username            VARCHAR(128)  NOT NULL,
+    operation_type      VARCHAR(32)   NOT NULL,
+    operation_path      VARCHAR(512)  NOT NULL,
+    operation_method    VARCHAR(10)   NOT NULL,
+    operation_result    VARCHAR(16)   NOT NULL,
+    resource_type       VARCHAR(32)   NOT NULL,
+    resource_id         VARCHAR(64)   NOT NULL,
+    ip_address          VARCHAR(45)   NOT NULL,
+    user_agent          VARCHAR(512)  NULL,
+    response_time       BIGINT        NOT NULL,
+    description         VARCHAR(1024) NULL,
+    created_time        TIMESTAMP     NOT NULL,
+    PRIMARY KEY (log_id)
+);
+
+-- 为访问日志表创建索引
+CREATE INDEX idx_access_log_tenant ON dicom_access_log (tenant_id);
+CREATE INDEX idx_access_log_user ON dicom_access_log (user_id);
+CREATE INDEX idx_access_log_resource ON dicom_access_log (resource_type, resource_id);
+CREATE INDEX idx_access_log_time ON dicom_access_log (created_time);
+CREATE INDEX idx_access_log_operation ON dicom_access_log (operation_type, operation_result);
