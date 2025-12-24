@@ -1,25 +1,24 @@
 use std::option::Option;
 
 use crate::dicom_object_meta::{make_image_info, make_state_info};
+use crate::dicom_utils::get_int_value;
 use crate::message_sender::MessagePublisher;
+use dashmap::DashMap;
 use database::dicom_meta::{DicomImageMeta, DicomStateMeta, DicomStoreMeta, TransferStatus};
 use dicom_dictionary_std::tags;
 use dicom_encoding::snafu::Whatever;
 use dicom_object::file::CharacterSetOverride;
 use dicom_object::{OpenFileOptions, ReadError};
+use futures_util::stream;
 use gdcm_conv::PhotometricInterpretation;
 use slog::{Drain, Logger, error, info, o};
 use slog::{LevelFilter, warn};
 use snafu::whatever;
 use std::collections::HashSet;
-use std::fs;
 use std::fs::{File, OpenOptions};
-
-use crate::dicom_utils::get_int_value;
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
-use dashmap::DashMap;
-use futures_util::stream;
+use std::{fs, thread};
 
 /// 获取当前时间
 pub fn get_current_time() -> chrono::NaiveDateTime {
@@ -155,9 +154,7 @@ pub fn deduplicate_state_metas(state_metas: Vec<DicomStateMeta>) -> Vec<DicomSta
     unique_map.into_values().collect()
 }
 
-// 定义并发度，根据磁盘 IO 性能调整
-const CONCURRENT_LIMIT: usize = 16;
-use futures::{StreamExt};
+use futures::StreamExt;
 pub async fn group_dicom_state(
     messages: &[DicomStoreMeta],
 ) -> Result<(Vec<DicomStateMeta>, Vec<DicomImageMeta>), ReadError> {
@@ -168,6 +165,11 @@ pub async fn group_dicom_state(
         "group_dicom_state batch of {} messages",
         messages.len()
     );
+    let cpus = thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4); // 如果获取失败，给个默认值
+
+    let concurrency = cpus - 1;
 
     // 1. 使用 DashMap 充当运行时的“排他锁”，防止相同路径争用
     // 即使在并行环境下，同一时间也只有一个任务能操作同一个 file_path
@@ -182,26 +184,23 @@ pub async fn group_dicom_state(
             // 为每个消息创建一个异步 Future
             async move {
                 let file_path = message.file_path.clone();
-
-                // --- 路径争用检查 ---
-                // 如果路径已在处理中，则直接跳过（解决重复文件问题）
+                // --- check confilicted file ---
+                // if file_path is processiong then skip !
                 if active_paths.contains_key(&file_path) {
-                    warn!(logger, "Duplicate file path detected, skipping: {}", file_path);
+                    warn!(
+                        logger,
+                        "Duplicate file path detected, skipping: {}", file_path
+                    );
                     return None;
                 }
                 active_paths.insert(file_path.clone(), ());
-
-                // 执行核心逻辑
                 let res = process_single_dicom(message, &logger).await;
-
                 // --- 处理完成，释放路径锁 ---
                 active_paths.remove(&file_path);
                 res
             }
         })
-        // 3. 并发执行：允许同时运行 CONCURRENT_LIMIT 个任务
-        // 顺序是无序的，谁先好谁先返回，效率最高
-        .buffer_unordered(CONCURRENT_LIMIT)
+        .buffer_unordered(concurrency)
         .collect::<Vec<Option<(DicomStateMeta, DicomImageMeta)>>>()
         .await;
 
@@ -216,7 +215,6 @@ pub async fn group_dicom_state(
 
     let state_metas = deduplicate_state_metas(state_metas);
     Ok((state_metas, image_entities))
-
 }
 
 /// 封装原有的单个文件处理逻辑（保持逻辑清晰）
@@ -256,15 +254,23 @@ async fn process_single_dicom(
         .open_file(&message.file_path.as_str())
     {
         Ok(dicom_obj) => {
-            let state_meta = make_state_info(&message.tenant_id.as_str(), &dicom_obj).ok()?;
-            let image_entity =
-                make_image_info(&message.tenant_id.as_str(), &dicom_obj, space_size).ok()?;
-            Some((state_meta, image_entity))
+            let state_meta = make_state_info(&message.tenant_id.as_str(), &dicom_obj);
+            let image_entity = make_image_info(&message.tenant_id.as_str(), &dicom_obj, space_size);
+            if state_meta.is_ok() && image_entity.is_ok() {
+                Some((state_meta.unwrap(), image_entity.unwrap()))
+            } else {
+                error!(
+                    logger,
+                    "Failed to make_state_info and  make_image_info  path: {}",
+                    &message.file_path.as_str()
+                );
+                None
+            }
         }
         Err(err) => {
             error!(
                 logger,
-                "Failed to open DICOM: {} , path: {}", err, message.file_path
+                "Failed to open DICOM: {} , path: {}", err, &message.file_path
             );
             None
         }

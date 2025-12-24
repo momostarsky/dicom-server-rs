@@ -1,6 +1,7 @@
 -- 存储收图记录  dicom_object_meta
 -- 存储切片信息  dicom_image_meta
 -- 存储WADO调阅日志 dicom_wado_log
+-- 存储访问日志 dicom_access_log
 -- DUPLICATE KEY:
 -- 不会自动去重，允许多条具有相同 key 的数据存在
 -- 所有数据行都会被保留
@@ -38,6 +39,29 @@ DUPLICATE KEY(tenant_id,patient_id,study_uid,series_uid,sop_uid)  -- 逻辑主�
 DISTRIBUTED BY HASH(tenant_id) BUCKETS 1
 PROPERTIES("replication_num" = "1");
 
+-- 存储访问日志
+DROP TABLE IF EXISTS dicom_access_log;
+CREATE TABLE IF NOT EXISTS dicom_access_log (
+    log_id              VARCHAR(36)   NOT NULL COMMENT '日志ID，作为主键',
+    tenant_id           VARCHAR(64)   NOT NULL COMMENT '租户ID',
+    user_id             VARCHAR(64)   NOT NULL COMMENT '用户ID',
+    username            VARCHAR(128)  NOT NULL COMMENT '用户名',
+    operation_type      VARCHAR(32)   NOT NULL COMMENT '操作类型 (READ, WRITE, DELETE, QUERY等)',
+    operation_path      VARCHAR(512)  NOT NULL COMMENT '操作路径',
+    operation_method    VARCHAR(10)   NOT NULL COMMENT '操作方法 (GET, POST, PUT, DELETE等)',
+    operation_result    VARCHAR(16)   NOT NULL COMMENT '操作结果 (SUCCESS, FAILED)',
+    resource_type       VARCHAR(32)   NOT NULL COMMENT '资源类型 (STUDY, SERIES, INSTANCE等)',
+    resource_id         VARCHAR(64)   NOT NULL COMMENT '资源ID (StudyUID, SeriesUID, SOPInstanceUID)',
+    ip_address          VARCHAR(45)   NOT NULL COMMENT 'IP地址',
+    user_agent          VARCHAR(512)  NULL COMMENT '用户代理',
+    response_time       BIGINT        NOT NULL COMMENT '响应时间(毫秒)',
+    description         VARCHAR(1024) NULL COMMENT '操作描述',
+    created_time        DATETIME      NOT NULL COMMENT '创建时间'
+)
+ENGINE=OLAP
+DUPLICATE KEY(log_id)  -- 逻辑主键，自动去重
+DISTRIBUTED BY HASH(log_id) BUCKETS 1
+PROPERTIES("replication_num" = "1");
 
 DROP TABLE IF  EXISTS dicom_state_meta;
 CREATE TABLE IF NOT EXISTS dicom_state_meta (
@@ -84,7 +108,6 @@ ENGINE=OLAP
 UNIQUE KEY(tenant_id, patient_id, study_uid, series_uid)
 DISTRIBUTED BY HASH(tenant_id) BUCKETS 1
 PROPERTIES("replication_num" = "1");
-
 
 DROP TABLE IF   EXISTS dicom_image_meta ;
 CREATE TABLE IF NOT EXISTS dicom_image_meta (

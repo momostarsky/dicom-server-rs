@@ -31,6 +31,35 @@ PROPERTIES (
     "store_row_column" = "true"                   -- 加速点查（3.0+ 新特性）
 );
 
+-- 创建访问日志表
+CREATE TABLE IF NOT EXISTS dicom_access_log (
+    log_id              VARCHAR(36)   NOT NULL COMMENT '日志ID，作为主键',
+    tenant_id           VARCHAR(64)   NOT NULL COMMENT '租户ID',
+    user_id             VARCHAR(64)   NOT NULL COMMENT '用户ID',
+    username            VARCHAR(128)  NOT NULL COMMENT '用户名',
+    operation_type      VARCHAR(32)   NOT NULL COMMENT '操作类型 (READ, WRITE, DELETE, QUERY等)',
+    operation_path      VARCHAR(512)  NOT NULL COMMENT '操作路径',
+    operation_method    VARCHAR(10)   NOT NULL COMMENT '操作方法 (GET, POST, PUT, DELETE等)',
+    operation_result    VARCHAR(16)   NOT NULL COMMENT '操作结果 (SUCCESS, FAILED)',
+    resource_type       VARCHAR(32)   NOT NULL COMMENT '资源类型 (STUDY, SERIES, INSTANCE等)',
+    resource_id         VARCHAR(64)   NOT NULL COMMENT '资源ID (StudyUID, SeriesUID, SOPInstanceUID)',
+    ip_address          VARCHAR(45)   NOT NULL COMMENT 'IP地址',
+    user_agent          VARCHAR(512)  NULL COMMENT '用户代理',
+    response_time       BIGINT        NOT NULL COMMENT '响应时间(毫秒)',
+    description         VARCHAR(1024) NULL COMMENT '操作描述',
+    created_time        DATETIME      NOT NULL COMMENT '创建时间',
+    PRIMARY KEY (log_id)
+) ENGINE = InnoDB
+  COMMENT = 'DICOM访问日志表'
+  COLLATE = utf8mb4_unicode_ci;
+
+-- 为访问日志表创建索引
+CREATE INDEX idx_access_log_tenant ON dicom_access_log (tenant_id);
+CREATE INDEX idx_access_log_user ON dicom_access_log (user_id);
+CREATE INDEX idx_access_log_resource ON dicom_access_log (resource_type, resource_id);
+CREATE INDEX idx_access_log_time ON dicom_access_log (created_time);
+CREATE INDEX idx_access_log_operation ON dicom_access_log (operation_type, operation_result);
+
 #
 #
 # CREATE ROUTINE LOAD dicom_routine_load ON dicom_object_meta

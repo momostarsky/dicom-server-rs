@@ -181,7 +181,35 @@ async fn persist_message_loop(
 ) {
     let logger = get_logger();
     info!(logger, "Starting message persistence loop...");
+    let app_config = match server_config::load_config() {
+        Ok(config) => config,
+        Err(e) => {
+            error!(logger, "Failed to load config: {}", e);
+            return;
+        }
+    };
+    let queue_config = app_config.message_queue;
 
+    let topic_state = &queue_config.topic_dicom_state.as_str();
+    let topic_image = &queue_config.topic_dicom_image.as_str();
+
+    let topic_dicom_state = match topic_state.parse::<String>() {
+        Ok(val) => val,
+        Err(e) => {
+            error!(logger, "Failed to parse topic_dicom_state: {}", e);
+            return;
+        }
+    };
+    let topic_dicom_image = match topic_image.parse::<String>() {
+        Ok(val) => val,
+        Err(e) => {
+            error!(logger, "Failed to parse topic_image: {}", e);
+            return;
+        }
+    };
+
+    let state_producer = KafkaMessagePublisher::new(topic_dicom_state);
+    let image_producer = KafkaMessagePublisher::new(topic_dicom_image);
     loop {
         let should_process = {
             let vec = vec.lock().unwrap();
@@ -227,9 +255,15 @@ async fn persist_message_loop(
             Ok((state_metas, image_entities)) => (state_metas, image_entities),
             Err(e) => {
                 error!(logger, "Failed to group dicom state: {}", e);
-                continue;
+                (vec![] ,vec![])
             }
         };
+        if state_metas.is_empty() && image_entities.is_empty() {
+            // 批量处理完成，更新最后处理时间
+            let mut time = last_process_time.lock().unwrap();
+            *time = Instant::now();
+            continue;
+        }
         //TODO 遍历输出状态
         for state_meta in &state_metas {
             info!(logger, "DicomStateMeta: {:?}", state_meta);
@@ -238,48 +272,7 @@ async fn persist_message_loop(
         for image_entity in &image_entities {
             info!(logger, "ImageEntity: {:?}", image_entity);
         }
-        let app_config = match server_config::load_config() {
-            Ok(config) => config,
-            Err(e) => {
-                error!(logger, "Failed to load config: {}", e);
-                continue;
-            }
-        };
-        let queue_config = app_config.message_queue;
 
-        let topic_state = &queue_config.topic_dicom_state.as_str();
-        let topic_image = &queue_config.topic_dicom_image.as_str();
-
-        let topic_dicom_state = match topic_state.parse::<String>() {
-            Ok(val) => val,
-            Err(e) => {
-                error!(logger, "Failed to parse topic_dicom_state: {}", e);
-                continue;
-            }
-        };
-        let topic_dicom_image = match topic_image.parse::<String>() {
-            Ok(val) => val,
-            Err(e) => {
-                error!(logger, "Failed to parse topic_image: {}", e);
-                continue;
-            }
-        };
-
-        let state_producer = KafkaMessagePublisher::new(topic_dicom_state);
-        let image_producer = KafkaMessagePublisher::new(topic_dicom_image);
-
-        // 发布状态消息和图像消息
-        if let Err(e) = publish_dicom_meta(
-            &state_metas,
-            &image_entities,
-            &state_producer,
-            &image_producer,
-        )
-        .await
-        {
-            error!(logger, "Failed to publish dicom meta: {}", e);
-            continue;
-        }
         match database_factory::create_db_instance(&app_config.main_database).await {
             Ok(db) => {
                 // 保存收图记录
@@ -300,10 +293,19 @@ async fn persist_message_loop(
             }
             Err(e) => {
                 error!(logger, "Failed to create database: {}", e);
-                continue;
             }
         };
-
+        // 发布状态消息和图像消息
+        if let Err(e) = publish_dicom_meta(
+            &state_metas,
+            &image_entities,
+            &state_producer,
+            &image_producer,
+        )
+        .await
+        {
+            error!(logger, "Failed to publish dicom meta: {}", e);
+        }
         // 更新最后处理时间
         {
             let mut time = last_process_time.lock().unwrap();
@@ -312,7 +314,7 @@ async fn persist_message_loop(
 
         info!(
             logger,
-            "Successfully processed batch of {} messages",
+            "processed  {} messages over!",
             messages_to_process.len()
         );
     }
@@ -377,41 +379,6 @@ async fn publish_dicom_meta(
             );
         }
     }
-    //
-    // match common::utils::publish_state_messages(state_producer, &state_metaes).await {
-    //     Ok(_) => {
-    //         info!(
-    //             logger,
-    //             "Successfully published {} supported messages to Kafka: {}",
-    //             state_metaes.len(),
-    //             state_topic_name
-    //         );
-    //     }
-    //     Err(e) => {
-    //         error!(
-    //             logger,
-    //             "Failed to publish messages to Kafka: {}, topic: {}", e, state_topic_name
-    //         );
-    //     }
-    // }
-    //
-    //
-    // match common::utils::publish_image_messages(image_producer, &image_metaes).await {
-    //     Ok(_) => {
-    //         info!(
-    //             logger,
-    //             "Successfully published {} messages to Kafka: {}",
-    //             image_metaes.len(),
-    //             image_topic_name
-    //         );
-    //     }
-    //     Err(e) => {
-    //         error!(
-    //             logger,
-    //             "Failed to publish image messages to Kafka: {}, topic: {}", e, image_topic_name
-    //         );
-    //     }
-    // }
 
     Ok(())
 }
