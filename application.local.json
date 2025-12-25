@@ -73,5 +73,34 @@
     "interval_minute": 5,
     "cpu_usage": 40,
     "memory_usage": 70
+  },
+
+  "wado_oauth2": {
+    "issuer_url": "http://localhost:8080/realms/xdicom",
+    "audience": "wado-rs-api",
+    "jwks_url": "http://localhost:8080/realms/xdicom/protocol/openid-connect/certs",
+    "roles": {
+      "from": "$.realm_access.roles",
+      "values": ["role_patients"]
+    },
+    "permissions": {
+      "from": "$.resource_access['wado-rs-api'].roles",
+      "values": ["image_reader"]
+    }
+  },
+
+ "stow_oauth2": {
+    "issuer_url": "http://localhost:8080/realms/xdicom",
+    "audience": "stow-rs-api",
+    "jwks_url": "http://localhost:8080/realms/xdicom/protocol/openid-connect/certs",
+    "roles": {
+      "from": "$.realm_access.roles",
+      "values": ["role_doctor"]
+    },
+    "permissions": {
+      "from": "$.resource_access['stow-rs-api'].roles",
+      "values": ["image_writer"]
+    }
   }
+
 }

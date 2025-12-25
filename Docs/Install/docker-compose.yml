@@ -100,6 +100,32 @@ services:
     depends_on:
       - redpanda  # 添加对 redpanda 服务的依赖
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: xdcm_keycloak
+    command: start-dev # 开发模式，不需要配置 SSL
+    environment:
+      # Keycloak 基础配置
+      KC_BOOTSTRAP_ADMIN_USERNAME: "admin"
+      KC_BOOTSTRAP_ADMIN_PASSWORD: "admin"
+
+      # 数据库连接配置
+      KC_DB: postgres
+      KC_DB_URL: "jdbc:postgresql://postgresql:5432/keycloak" # 指向你刚创建的数据库
+      KC_DB_USERNAME: "xdcm_admin"
+      KC_DB_PASSWORD: "xdicom3ks"
+
+      # HTTP 配置
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+    ports:
+      - "8080:8080"
+    networks:
+      - xdicom_network
+    depends_on:
+      - postgresql
+    restart: always
+
 networks:
   xdicom_network:
     driver: bridge

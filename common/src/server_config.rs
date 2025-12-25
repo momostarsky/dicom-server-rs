@@ -114,6 +114,7 @@ pub struct AppConfig {
     pub dicom_store_scp: DicomStoreScpConfig,
     pub message_queue: MessageQueueConfig,
     pub wado_oauth2: Option<OAuth2Config>,
+    pub stow_oauth2: Option<OAuth2Config>,
     pub webworker: Option<WebWorkerConfig>,
 }
 

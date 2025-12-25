@@ -38,15 +38,16 @@ impl RedisHelper {
     ) -> Result<(), redis::RedisError> {
         let mut conn = self.get_connection().await?;
         match conn
-            .set_ex::<String, String, ()>(key, txt, expire_seconds)
+            .set_ex::<&str , &str, ()>(key.as_str(), txt.as_str(), expire_seconds)
             .await
         {
             Ok(_) => {}
-            Err(e) => {
+            Err(_e) => {
+
                 return Err(redis::RedisError::from((
                     redis::ErrorKind::IoError,
-                    "Failed to set_key_value_expire",
-                    e.to_string(),
+                    "redisHelper Failed to set_key_value_expire ",
+                    key,
                 )));
             }
         }
@@ -55,25 +56,25 @@ impl RedisHelper {
 
     async fn get_value(&self, key: String) -> Result<String, redis::RedisError> {
         let mut conn = self.get_connection().await?;
-        match conn.get(key).await {
+        match conn.get(&key).await {
             Ok(jwks_url) => Ok(jwks_url),
-            Err(e) => Err(redis::RedisError::from((
+            Err(_e) => Err(redis::RedisError::from((
                 redis::ErrorKind::IoError,
-                "Failed to get_value",
-                e.to_string(),
+                "redisHelper Failed to get_value from key",
+                key,
             ))),
         }
     }
 
     async fn del_key(&self, key: String) -> Result<(), redis::RedisError> {
         let mut conn = self.get_connection().await?;
-        match conn.del(key).await {
+        match conn.del(&key).await {
             Ok(()) => {}
-            Err(e) => {
+            Err(_e) => {
                 return Err(redis::RedisError::from((
                     redis::ErrorKind::IoError,
-                    "Failed to delete Redis key:{}",
-                    e.to_string(),
+                    "redisHelper Failed to delete Redis key",
+                    key ,
                 )));
             }
         }
@@ -122,7 +123,7 @@ impl RedisHelper {
         let serialized_metas = serde_json::to_string(metas).map_err(|e| {
             redis::RedisError::from((
                 redis::ErrorKind::TypeError,
-                "Failed to serialize DicomStateMeta",
+                "redisHelper Failed to serialize DicomStateMeta",
                 e.to_string(),
             ))
         })?;
@@ -154,7 +155,7 @@ impl RedisHelper {
                 serde_json::from_str::<Vec<DicomStateMeta>>(&cached_data).map_err(|e| {
                     redis::RedisError::from((
                         redis::ErrorKind::TypeError,
-                        "Failed to deserialize DicomStateMeta",
+                        "redisHelper Failed to deserialize DicomStateMeta",
                         e.to_string(),
                     ))
                 })
@@ -288,7 +289,7 @@ mod tests {
             patient_weight: Option::from(37.0),
             study_date: NaiveDate::parse_from_str("2020-03-01", "%Y-%m-%d").unwrap(),
             study_time: Option::from(NaiveTime::parse_from_str("120346", "%H%M%S").unwrap()),
-            accession_number: Some(  BoundedString::<16>::make_str("8328989")),
+            accession_number: Some(BoundedString::<16>::make_str("8328989")),
             study_id: Option::from(BoundedString::<16>::from_str("8328989").unwrap()),
             study_description: Option::from(BoundedString::<64>::from_str("8328989").unwrap()),
             modality: Some(BoundedString::<16>::from_str("CT").unwrap()),

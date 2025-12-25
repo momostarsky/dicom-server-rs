@@ -56,3 +56,4 @@ jsonpath_lib = { workspace = true }
 log = { workspace = true }
 actix-multipart = { workspace = true }
 memchr = { workspace = true }
+actix-web-httpauth = "0.8.2"

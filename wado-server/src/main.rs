@@ -3,10 +3,10 @@ pub mod common_utils;
 mod auth_middleware_kc;
 mod common_controller;
 mod constants;
+mod payload_helper;
 mod stow_rs_controller_v1;
 mod wado_rs_controller_v1;
 mod wado_rs_models;
-mod payload_helper;
 
 // use crate::wado_rs_controller_v1::{
 //     echo_v1, retrieve_instance, retrieve_instance_frames, retrieve_series_metadata,
@@ -90,7 +90,6 @@ async fn main() -> std::io::Result<()> {
             return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
         }
     };
-
 
     let db_provider = match database_factory::create_db_instance(&config.main_database).await {
         Ok(db_provider) => db_provider,
@@ -190,7 +189,7 @@ async fn main() -> std::io::Result<()> {
                             .wrap(AuthMiddleware {
                                 logger: app_state.log.clone(),
                                 redis: app_state.redis_helper.clone(),
-                                config: app_state.config.clone(),
+                                oauth2_config: app_state.config.wado_oauth2.clone(),
                             })
                             .service(wado_rs_controller_v1::retrieve_study_metadata)
                             .service(wado_rs_controller_v1::retrieve_study_subseries)
@@ -205,11 +204,11 @@ async fn main() -> std::io::Result<()> {
                     .service(
                         scope::scope("/v1")
                             // 关闭权限验证
-                            // .wrap(AuthMiddleware {
-                            //     logger: app_state.log.clone(),
-                            //     redis: app_state.redis_helper.clone(),
-                            //     config: app_state.config.clone(),
-                            // })
+                            .wrap(AuthMiddleware {
+                                logger: app_state.log.clone(),
+                                redis: app_state.redis_helper.clone(),
+                                oauth2_config: app_state.config.stow_oauth2.clone(),
+                            })
                             .service(stow_rs_controller_v1::store_instances)
                             .service(stow_rs_controller_v1::store_instances_to_study), // .service(stow_rs_controller_v1::echo_v1)
                     ),

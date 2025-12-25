@@ -9,7 +9,7 @@ use futures_util::future::LocalBoxFuture;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use slog::{Logger, error, info};
+use slog::{Logger, debug, error, info, warn};
 use std::future::{Ready, ready};
 use std::rc::Rc;
 
@@ -25,9 +25,8 @@ pub(crate) struct Claims {
     preferred_username: Option<String>,
     given_name: Option<String>,
     family_name: Option<String>,
-    // // pub(crate) realm_access: Option<RealmAccess>, // realm 级别权限
-    // // pub(crate) resource_access: Option<std::collections::HashMap<String, ResourceAccess>>, // 资源级别权限
-    // pub(crate) scope: Option<String>, // 权限范围
+    realm_access: Option<RealmAccess>, // realm 级别权限
+    resource_access: Option<std::collections::HashMap<String, ResourceAccess>>, // 资源级别权限
 }
 
 #[allow(dead_code)]
@@ -87,8 +86,8 @@ pub(crate) struct ResourceAccess {
 #[derive(Debug)]
 pub struct AuthMiddleware {
     pub(crate) logger: Logger,
-    pub(crate) redis: RedisHelper, // 添加这一行
-    pub(crate) config: AppConfig,  // 添加这一行
+    pub(crate) redis: RedisHelper,
+    pub(crate) oauth2_config: Option<OAuth2Config>,
 }
 
 impl<S, B> Transform<S, ServiceRequest> for AuthMiddleware
@@ -107,8 +106,8 @@ where
         ready(Ok(AuthMiddlewareService {
             service: Rc::new(service),
             redis_helper: self.redis.clone(),
-            config: self.config.clone(),
             log: self.logger.clone(),
+            oauth2_cfg: self.oauth2_config.clone(),
         }))
     }
 }
@@ -116,8 +115,8 @@ where
 pub struct AuthMiddlewareService<S> {
     service: Rc<S>,
     redis_helper: RedisHelper, // 添加这一行
-    config: AppConfig,
     log: Logger,
+    oauth2_cfg: Option<OAuth2Config>,
 }
 
 impl<S, B> Service<ServiceRequest> for AuthMiddlewareService<S>
@@ -133,20 +132,18 @@ where
     actix_web::dev::forward_ready!(service);
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
+        println!("AuthMiddlewareService::call::{:?}", req);
         let service = self.service.clone();
         let log = self.log.clone();
-        let gconfig = self.config.clone();
-
-        // 如果没有配置 OAuth2，则直接跳过认证
-        if gconfig.wado_oauth2.is_none() {
-            info!(log, "wado_oauth2 is not configured, skip authentication");
+        let redis_helper = self.redis_helper.clone();
+        if self.oauth2_cfg.is_none() {
+            error!(log, "oauth2_cfg is not configured, skip authentication");
             return Box::pin(async move {
-                let res = service.call(req).await.map_err(actix_web::Error::from)?;
+                let res = service.call(req).await.map_err(Error::from)?;
                 Ok(res.map_into_left_body())
             });
         }
-        let redis_helper = self.redis_helper.clone();
-        let oauth2_cfg = gconfig.wado_oauth2.unwrap().clone();
+        let oauth2_cfg = self.oauth2_cfg.clone().unwrap();
         let issuer_url = oauth2_cfg.issuer_url;
         let audience = oauth2_cfg.audience;
 
@@ -159,7 +156,7 @@ where
                 "role_mapping and permission_mapping are not configured, skip authentication"
             );
             return Box::pin(async move {
-                let res = service.call(req).await.map_err(actix_web::Error::from)?;
+                let res = service.call(req).await.map_err(Error::from)?;
                 Ok(res.map_into_left_body())
             });
         }
@@ -169,7 +166,6 @@ where
             let jwks_uri_content = match redis_helper.get_jwks_url_content().await {
                 Ok(content) => {
                     info!(log, "get_jwks_url_content success");
-                    info!(log, "Received jwk_urs_content: {}", content);
                     content
                 }
                 Err(e) => {
@@ -204,6 +200,7 @@ where
                 let res = req.into_response(response.map_into_boxed_body().map_into_right_body());
                 return Ok(res);
             }
+           
 
             let auth_str = auth_str.unwrap();
             if !auth_str.starts_with("Bearer ") {
@@ -218,7 +215,11 @@ where
             }
 
             let token = &auth_str[7..];
-            info!(log, "Received AccessToken:{}", token);
+            debug!(log, "Received AccessToken:{}", token);
+
+            // 根据token头部的kdeid选择正确的密钥
+            let token_header = jsonwebtoken::decode_header(token).unwrap();
+            let kid = token_header.kid.as_ref().unwrap();
 
             let jwks: Value = match serde_json::from_str(&jwks_uri_content) {
                 Ok(jwks) => jwks,
@@ -230,12 +231,40 @@ where
                     return Ok(res);
                 }
             };
-            info!(log, "JWKS loaded:{}", jwks);
 
-            let n = match jwks["keys"][0]["n"].as_str() {
+            warn!(log, "JWKS loaded:{}", jwks);
+
+            // 查找匹配的密钥
+            let matching_key = jwks["keys"].as_array().unwrap().iter().find(|key| {
+                key.get("kid")
+                    .and_then(|k| k.as_str())
+                    .map(|k| k == kid)
+                    .unwrap_or(false)
+                    && key
+                        .get("use")
+                        .and_then(|u| u.as_str())
+                        .map(|u| u == "sig") // 确保是签名密钥
+                        .unwrap_or(false)
+            });
+
+            let matching_key = match matching_key {
+                Some(key) => key,
+                None => {
+                    info!(log, "No matching signing key found for kid: {}", kid);
+                    let response =
+                        HttpResponse::Unauthorized().body("No matching signing key found");
+                    let res =
+                        req.into_response(response.map_into_boxed_body().map_into_right_body());
+                    return Ok(res);
+                }
+            };
+
+            warn!(log, "Matching key:{}", matching_key);
+
+            let n = match matching_key["n"].as_str() {
                 Some(n) => n,
                 None => {
-                    info!(log, "Invalid RSA key format,keys[0][n] is missing");
+                    info!(log, "Invalid RSA key format, n is missing");
                     let response = HttpResponse::Unauthorized().body("Invalid RSA key format");
                     let res =
                         req.into_response(response.map_into_boxed_body().map_into_right_body());
@@ -243,16 +272,38 @@ where
                 }
             };
 
-            let e = match jwks["keys"][0]["e"].as_str() {
+            let e = match matching_key["e"].as_str() {
                 Some(e) => e,
                 None => {
-                    info!(log, "Invalid RSA key format, keys[0][e] is missing");
+                    info!(log, "Invalid RSA key format, e is missing");
                     let response = HttpResponse::Unauthorized().body("Invalid RSA key format");
                     let res =
                         req.into_response(response.map_into_boxed_body().map_into_right_body());
                     return Ok(res);
                 }
             };
+
+            // let n = match jwks["keys"][0]["n"].as_str() {
+            //     Some(n) => n,
+            //     None => {
+            //         info!(log, "Invalid RSA key format,keys[0][n] is missing");
+            //         let response = HttpResponse::Unauthorized().body("Invalid RSA key format");
+            //         let res =
+            //             req.into_response(response.map_into_boxed_body().map_into_right_body());
+            //         return Ok(res);
+            //     }
+            // };
+            //
+            // let e = match jwks["keys"][0]["e"].as_str() {
+            //     Some(e) => e,
+            //     None => {
+            //         info!(log, "Invalid RSA key format, keys[0][e] is missing");
+            //         let response = HttpResponse::Unauthorized().body("Invalid RSA key format");
+            //         let res =
+            //             req.into_response(response.map_into_boxed_body().map_into_right_body());
+            //         return Ok(res);
+            //     }
+            // };
 
             let decoding_key = match DecodingKey::from_rsa_components(n, e) {
                 Ok(key) => key,
@@ -274,10 +325,16 @@ where
                 "RS512" => Algorithm::RS512,
                 _ => Algorithm::RS256,
             };
+            info!(log, "Algorithm:{:?}", &algorithm);
+            info!(log, "Issuer:{}", issuer_url);
+            info!(log, "Audience:{}", audience);
+            info!(log, "JWK n:{}", jwks["keys"][0]["n"]);
+            info!(log, "JWK e:{}", jwks["keys"][0]["e"]);
             let mut validation = Validation::new(algorithm);
             // let mut validation = Validation::new(Algorithm::RS256);
             validation.set_issuer(&[issuer_url]);
-            validation.set_audience(&[audience]);
+            // validation.set_audience(&[audience.as_str(), "account"]);
+            validation.set_audience(&[audience.as_str()]);
 
             info!(log, "系统策略");
             info!(log, "用 Realm Roles 表达“身份”（Who you are）");
@@ -289,6 +346,7 @@ where
                 Ok(token_data) => {
                     // Token有效（包括未过期），继续处理请求
                     let claims = token_data.claims;
+                    warn!(log, "Claims:{:?}", claims);
                     // 将用户信息存储在请求扩展中，供后续权限检查使用
                     req.extensions_mut().insert(claims.clone());
 
@@ -312,10 +370,11 @@ where
                         return Ok(res);
                     }
 
-                    let res = service.call(req).await.map_err(actix_web::Error::from)?;
+                    let res = service.call(req).await.map_err(Error::from)?;
                     Ok(res.map_into_left_body())
                 }
-                Err(_) => {
+                Err(e) => {
+                    info!(log, "Token decoding failed: {}", e);
                     // Token无效（可能包括过期、签名错误等）
                     let response = HttpResponse::Unauthorized().body("Invalid token");
                     let res =
@@ -329,23 +388,27 @@ where
 
 use crate::AppState;
 use common::redis_key::RedisHelper;
-use common::server_config::{AppConfig, RoleRule};
+use common::server_config::{OAuth2Config, RoleRule};
 use tokio::time::{Duration, interval};
 
 pub(crate) async fn update_jwks_task(app_state: AppState) {
     let mut interval = interval(Duration::from_secs(600)); // 10分钟 = 600秒
 
     let jwks_url = app_state.config.wado_oauth2.unwrap().jwks_url;
+    info!(
+        app_state.log,
+        "update_jwks_task starting .... ，JWKS URL: {}", jwks_url
+    );
     loop {
         interval.tick().await;
 
         match fetch_and_store_jwks(&app_state.redis_helper, &app_state.log, jwks_url.clone()).await
         {
             Ok(_) => {
-                info!(app_state.log, "JWKS更新成功");
+                info!(app_state.log, "JWKS Update Successful");
             }
             Err(e) => {
-                error!(app_state.log, "JWKS更新失败: {:?}", e);
+                error!(app_state.log, "JWKS Update Failed: {:?}", e);
             }
         }
     }
@@ -380,13 +443,16 @@ async fn fetch_and_store_jwks(
 
     // 验证JWKS结构
     if !jwks.is_object() || !jwks["keys"].is_array() {
-        return Err("JWKS格式无效".into());
+        return Err("JWKS Foramt is invaliated".into());
     }
 
     info!(log, "get {} contenxt:\n{}", &jwks_url, txt);
 
     // 将JWKS内容存储到Redis中
-    let _ = redis_helper.set_jwks_url_content(txt, 6000); // 设置10分钟过期时间
+    match redis_helper.set_jwks_url_content(txt, 6000).await {
+        Ok(_) => info!(log, "JWKS Write To Cache Successful"),
+        Err(e) => error!(log, "JWKS Write To Cache Failed: {:?}", e),
+    }; // 设置10分钟过期时间
 
     Ok(())
 }
@@ -408,7 +474,7 @@ fn validate_user_permissions(
         Ok(json) => json,
         Err(_) => return false,
     };
-    info!(log, "Claims JSON:{}", claims_json);
+    warn!(log, "Claims JSON:{}", claims_json);
     // 验证角色映射
     if role_mapping.is_some() {
         let role_mapping = role_mapping.as_ref();

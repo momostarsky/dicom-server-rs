@@ -10,11 +10,11 @@ export NO_PROXY=medical.org,.medical.org,keycloak.medical.org,127.0.0.1,localhos
 #   -d "grant_type=client_credentials" \
 #   -d "audience=wado-rs-api" | jq -r '.access_token')
 
-ACCESS_TOKEN=$( curl -k  -X POST https://keycloak.medical.org:8443/realms/dicom-org-cn/protocol/openid-connect/token \
+ACCESS_TOKEN=$( curl -k  -X POST http://localhost:8080/realms/xdicom/protocol/openid-connect/token \
                   -d "client_id=wado-rs-api" \
                   -d "client_secret=TJibFrPe5xv67fEUA681pEQBmRbrrhNl" \
                   -d "username=Pat001" \
-                  -d "password=jp#1233" \
+                  -d "password=Xdicom3ks" \
                   -d "grant_type=password" \
                   -d "scope=openid profile email" | jq -r '.access_token')
 
