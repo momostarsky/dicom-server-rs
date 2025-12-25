@@ -77,7 +77,7 @@
 
   "wado_oauth2": {
     "issuer_url": "http://localhost:8080/realms/xdicom",
-    "audience": "wado-rs-api",
+    "audience": "XDICOM",
     "jwks_url": "http://localhost:8080/realms/xdicom/protocol/openid-connect/certs",
     "roles": {
       "from": "$.realm_access.roles",
@@ -91,7 +91,7 @@
 
  "stow_oauth2": {
     "issuer_url": "http://localhost:8080/realms/xdicom",
-    "audience": "stow-rs-api",
+    "audience": "XDICOM",
     "jwks_url": "http://localhost:8080/realms/xdicom/protocol/openid-connect/certs",
     "roles": {
       "from": "$.realm_access.roles",

@@ -19,6 +19,7 @@ pub(crate) struct Claims {
     sub: Option<String>, //主题（subject），指用户唯一标识（通常为用户 ID）	必须（标准）
     aud: Value,          //受众（audience），JWT 颁发给哪个客户端/应用	必须（强烈建议)
     exp: usize,          //过期时间（expiration），用于 token 有效期控制	必须（强烈建议）
+    azp: Option<String>,
     email: Option<String>,
     name: Option<String>,
     username: Option<String>,
@@ -352,6 +353,7 @@ where
 
                     info!(log, "Claims iss:{}", claims.iss);
                     info!(log, "Claims sub:{:?}", claims.sub);
+                    info!(log, "Claims azp:{:?}", claims.azp);
                     info!(log, "Claims email:{:?}", claims.email);
                     info!(log, "Claims name:{:?}", claims.name);
                     info!(log, "Claims username:{:?}", claims.username);
