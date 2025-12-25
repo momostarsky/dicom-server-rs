@@ -28,6 +28,7 @@ pub(crate) struct Claims {
     family_name: Option<String>,
     realm_access: Option<RealmAccess>, // realm 级别权限
     resource_access: Option<std::collections::HashMap<String, ResourceAccess>>, // 资源级别权限
+    scope: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -363,6 +364,37 @@ where
                     );
                     info!(log, "Claims given_name:{:?}", claims.given_name);
                     info!(log, "Claims family_name:{:?}", claims.family_name);
+                    info!(log, "Claims scope:{:?}", claims.scope);
+
+                    if oauth2_cfg.scope.is_some() {
+                        if claims.scope.is_none() {
+                            info!(log, "Claims scope is missing");
+                            let response = HttpResponse::Unauthorized().body("Invalid token:scope is missing");
+                            let res = req.into_response(
+                                response.map_into_boxed_body().map_into_right_body(),
+                            );
+                            return Ok(res);
+                        }
+                        let scope_arr: Vec<&str> = claims.scope.as_ref().unwrap().split(" ").collect();
+                        // 获取配置的 scope
+
+                        let required_scopes: Vec<&str> = oauth2_cfg.scope.as_ref().unwrap().iter().map(|s| s.as_str()).collect();
+
+                        // 检查所有配置的 scope 是否都在 token scope 中
+                        let all_scopes_present = required_scopes.iter().all(|&req_scope| {
+                            scope_arr.contains(&req_scope)
+                        });
+
+                        if !all_scopes_present {
+                            info!(log, "Required scopes are not fully present in token");
+                            let response = HttpResponse::Unauthorized().body("Insufficient scopes");
+                            let res = req.into_response(
+                                response.map_into_boxed_body().map_into_right_body(),
+                            );
+                            return Ok(res);
+                        }
+
+                    }
 
                     // 在调用 validate_user_permissions 时使用转换后的变量
                     if !validate_user_permissions(&req, &role_mapping, &permission_mapping, &log) {
@@ -506,6 +538,7 @@ fn validate_role_or_permission(claims: &Value, rule: &RoleRule, logger: &Logger)
 }
 
 use std::collections::HashSet;
+use futures_util::AsyncReadExt;
 
 /// Extract values (as strings) from `claims_json` using `json_path`.
 /// Returns a Vec\<String\> of all extracted scalar/array items converted to strings.

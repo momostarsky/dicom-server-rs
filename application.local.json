@@ -100,7 +100,10 @@
     "permissions": {
       "from": "$.resource_access['stow-rs-api'].roles",
       "values": ["image_writer"]
-    }
+    },
+    "scope" :[
+       "xdicom:full"
+    ]
   }
 
 }
