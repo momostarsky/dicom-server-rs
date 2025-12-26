@@ -71,6 +71,8 @@ pub struct MessageQueueConfig {
     pub topic_dicom_state: String,
     /// 存放DICOM切片信息
     pub topic_dicom_image: String,
+    /// WADO-RS, STOW-RS Access Record
+    pub topic_webapi_access: String,
 }
 
 // --- 配置结构 ---

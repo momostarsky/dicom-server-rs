@@ -23,6 +23,7 @@ pub mod encrypt_helper;
 pub mod redis_key;
 pub mod storage_config;
 pub mod dicom_file_handler;
+pub mod logevents;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DicomMessage {

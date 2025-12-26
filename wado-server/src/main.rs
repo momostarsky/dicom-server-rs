@@ -22,6 +22,8 @@ use crate::apilog_middleware_kc::ApiLoggerMiddleware;
 use crate::auth_middleware_kc::{AuthMiddleware, update_jwks_task};
 use crate::constants::{STOW_RS_CONTEXT_PATH, WADO_RS_CONTEXT_PATH};
 use actix_web::middleware::Logger as DefaultLogger;
+use common::message_sender_kafka::KafkaMessagePublisher;
+use common::message_sender_kafka::MessagePublisher;
 use common::redis_key::RedisHelper;
 use common::server_config::AppConfig;
 use common::utils::setup_logging;
@@ -32,7 +34,7 @@ use slog::{Logger, error, info};
 use std::sync::Arc;
 use utoipa::OpenApi;
 use utoipa_actix_web::{AppExt, scope};
-use utoipa_swagger_ui::SwaggerUi;
+use utoipa_swagger_ui::SwaggerUi; // 添加 MessagePublisher trait 导入
 // use crate::auth_middleware::AuthMiddleware;
 // 将原来的简单结构体定义替换为完整的 OpenApi 配置
 
@@ -180,6 +182,13 @@ async fn main() -> std::io::Result<()> {
         let cors = configure_origin(cors_config());
         let wado_rs_cors = configure_origin(cors_config());
         let stow_rs_cors = configure_origin(cors_config());
+        let api_queue = &config.message_queue.topic_webapi_access.clone();
+
+        let webapi_publisher: Arc<dyn MessagePublisher + Send + Sync> =
+            Arc::new(KafkaMessagePublisher::new(api_queue.clone()));
+
+        let webapi_publisher_wado_rs = webapi_publisher.clone();
+        let webapi_publisher_stow_rs = webapi_publisher.clone();
 
         let (app, mut api) = App::new()
             .into_utoipa_app()
@@ -198,6 +207,7 @@ async fn main() -> std::io::Result<()> {
                             })
                             .wrap(ApiLoggerMiddleware {
                                 logger: log.clone(),
+                                publisher: webapi_publisher_wado_rs,
                             })
                             .service(wado_rs_controller_v1::retrieve_study_metadata)
                             .service(wado_rs_controller_v1::retrieve_study_subseries)
@@ -220,6 +230,7 @@ async fn main() -> std::io::Result<()> {
                             })
                             .wrap(ApiLoggerMiddleware {
                                 logger: log.clone(),
+                                publisher: webapi_publisher_stow_rs,
                             })
                             .service(stow_rs_controller_v1::store_instances)
                             .service(stow_rs_controller_v1::store_instances_to_study), // .service(stow_rs_controller_v1::echo_v1)

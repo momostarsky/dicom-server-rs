@@ -58,7 +58,8 @@
     "topic_main": "storage_queue",
     "topic_dicom_receive": "log_queue",
     "topic_dicom_state": "dicom_state_queue",
-    "topic_dicom_image": "dicom_image_queue"
+    "topic_dicom_image": "dicom_image_queue",
+    "topic_webapi_access" : "webapi_access_queue"
   },
   "kafka": {
     "brokers": "127.0.0.1:19092",

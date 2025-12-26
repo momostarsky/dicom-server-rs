@@ -1,5 +1,5 @@
  
-use crate::message_sender::MessagePublisher;
+pub use crate::message_sender::MessagePublisher;
 use crate::server_config;
 use async_trait::async_trait;
 use futures_util::future::join_all;
@@ -8,12 +8,14 @@ use rdkafka::producer::{FutureProducer, FutureRecord, Producer};
 use rdkafka::util::Timeout;
 use std::collections::HashMap;
 use std::error::Error;
+use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, error, info};
 use database::dicom_meta::{DicomImageMeta, DicomStateMeta, DicomStoreMeta};
+use crate::logevents::ApiLogEvent;
 
 pub struct KafkaMessagePublisher {
-    producer: FutureProducer,
+    producer: Arc<FutureProducer>,
     topic: String,
 }
 impl KafkaMessagePublisher {
@@ -50,8 +52,16 @@ impl KafkaMessagePublisher {
             .create()
             .expect("Failed to create KafkaMessagePublisher");
         Self {
-            producer,
+            producer: Arc::new(producer),
             topic: topic_name,
+        }
+    }
+}
+impl Clone for KafkaMessagePublisher {
+    fn clone(&self) -> Self {
+        KafkaMessagePublisher {
+            producer: Arc::clone(&self.producer),
+            topic: self.topic.clone(),
         }
     }
 }
@@ -169,7 +179,6 @@ impl MessagePublisher for KafkaMessagePublisher {
                                              msg.series_uid.as_str());
                     let key = format!("{:x}", md5::compute(key_source));
                     wait_message.insert(key, payload);
-                   
                 }
                 Err(e) => {
                     error!("Failed to serialize DicomStateMeta message: {:?}", e);
@@ -288,4 +297,69 @@ impl MessagePublisher for KafkaMessagePublisher {
             Ok(())
         }
     }
+
+    async fn send_webapi_messages(&self, messages: &[ApiLogEvent]) -> Result<(), Box<dyn Error>> {
+        info!(
+            "KafkaMessagePublisher send_api_log_messages: {} to topic {}",
+            messages.len(),
+            self.topic
+        );
+
+        let mut wait_message = HashMap::new();
+
+        for msg in messages {
+            match serde_json::to_vec(msg) {
+                Ok(payload) => {
+                    let key = msg.request_id.as_str();
+                    wait_message.insert(key, payload);
+                }
+                Err(e) => {
+                    error!("Failed to serialize DicomImageMeta message: {:?}", e);
+                    return Err(Box::new(e));
+                }
+            }
+        }
+
+        let futures: Vec<_> = wait_message
+            .iter()
+            .map(|(key, payload)| {
+                let record = FutureRecord::to(&*self.topic)
+                    .key(&key[..])
+                    .payload(&payload[..]);
+                // 增加超时时间到10秒
+                self.producer
+                    .send(record, Timeout::After(Duration::from_secs(10)))
+            })
+            .collect();
+
+        let results = join_all(futures).await;
+
+        let mut success_count = 0;
+        let mut error_count = 0;
+
+        for result in results {
+            match result {
+                Ok(_) => success_count += 1,
+                Err(e) => {
+                    error!("Failed to send ApiLogEvent message: {:?}", e);
+                    error_count += 1;
+                }
+            }
+        }
+
+        info!(
+            "✅ 批量发送 ApiLogEvent 完成: 成功 {} 条, 失败 {} 条",
+            success_count, error_count
+        );
+
+        // 如果有错误，返回错误信息
+        if error_count > 0 {
+            Err("Some ApiLogEvent messages failed to send".into())
+        } else {
+            Ok(())
+        }
+    }
+    // fn clone_box(&self) -> Box<dyn MessagePublisher> {
+    //     Box::new(self.clone())
+    // }
 }
