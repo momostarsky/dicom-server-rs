@@ -7,6 +7,7 @@ mod payload_helper;
 mod stow_rs_controller_v1;
 mod wado_rs_controller_v1;
 mod wado_rs_models;
+mod auth_information;
 
 // use crate::wado_rs_controller_v1::{
 //     echo_v1, retrieve_instance, retrieve_instance_frames, retrieve_series_metadata,

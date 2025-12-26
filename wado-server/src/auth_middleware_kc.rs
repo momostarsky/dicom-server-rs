@@ -8,82 +8,10 @@ use actix_web::{
 use futures_util::future::LocalBoxFuture;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
 use slog::{Logger, debug, error, info, warn};
 use std::future::{Ready, ready};
 use std::rc::Rc;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub(crate) struct Claims {
-    iss: String,         //签发方（issuer），明确这个 JWT 是哪个认证系统生成的	必须（标准）
-    sub: Option<String>, //主题（subject），指用户唯一标识（通常为用户 ID）	必须（标准）
-    aud: Value,          //受众（audience），JWT 颁发给哪个客户端/应用	必须（强烈建议)
-    exp: usize,          //过期时间（expiration），用于 token 有效期控制	必须（强烈建议）
-    azp: Option<String>,
-    email: Option<String>,
-    name: Option<String>,
-    username: Option<String>,
-    preferred_username: Option<String>,
-    given_name: Option<String>,
-    family_name: Option<String>,
-    realm_access: Option<RealmAccess>, // realm 级别权限
-    resource_access: Option<std::collections::HashMap<String, ResourceAccess>>, // 资源级别权限
-    scope: Option<String>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub(crate) struct RealmAccess {
-    pub(crate) roles: Option<Vec<String>>, // realm 角色
-}
-#[allow(dead_code)]
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub(crate) struct ResourceAccess {
-    pub(crate) roles: Option<Vec<String>>, // 资源角色
-}
-
-// #[derive(Debug, thiserror::Error)]
-// enum AuthError {
-//     #[error("Missing authorization header")]
-//     MissingAuthHeader,
-//     #[error("Invalid bearer token format")]
-//     InvalidTokenFormat,
-//     #[error("JWT error: {0}")]
-//     Jwt(#[from] jsonwebtoken::errors::Error),
-//     #[error("HTTP fetch error: {0}")]
-//     Http(#[from] reqwest::Error),
-//     #[error("File I/O error: {0}")]
-//     Io(#[from] std::io::Error),
-//     #[error("Actix web error: {0}")]
-//     Actix(#[from] Error), // 添加这一行
-//     #[error("Redis error: {0}")]
-//     Redis(#[from] RedisError),
-//     #[error("Audience mismatch")]
-//     AudienceMismatch,
-//     #[error("Issuer mismatch")]
-//     IssuerMismatch,
-// }
-// impl ResponseError for AuthError {
-//     fn error_response(&self) -> HttpResponse {
-//         match self {
-//             AuthError::MissingAuthHeader | AuthError::InvalidTokenFormat => {
-//                 HttpResponse::Unauthorized().json("Unauthorized")
-//             }
-//             AuthError::Jwt(_)
-//             | AuthError::Http(_)
-//             | AuthError::Io(_)
-//             | AuthError::Actix(_) // 添加这一行
-//             | AuthError::Redis(_)
-//             | AuthError::AudienceMismatch
-//             | AuthError::IssuerMismatch => HttpResponse::Unauthorized().json("Invalid token"),
-//         }
-//     }
-// }
-// const ISSUER_URL: &str = "https://keycloak.medical.org:8443/realms/dicom-org-cn";
-// const AUDIENCE: &str = "wado-rs-api";
-// const SERVER_PORT: u16 = 8080;
-// // const JWKS_URL: &str =    "https://keycloak.medical.org:8443/realms/dicom-org-cn/protocol/openid-connect/certs";
-// const JWKS_URL: &str = "https://127.0.0.1:8443/realms/dicom-org-cn/protocol/openid-connect/certs";
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct AuthMiddleware {
@@ -284,29 +212,7 @@ where
                     return Ok(res);
                 }
             };
-
-            // let n = match jwks["keys"][0]["n"].as_str() {
-            //     Some(n) => n,
-            //     None => {
-            //         info!(log, "Invalid RSA key format,keys[0][n] is missing");
-            //         let response = HttpResponse::Unauthorized().body("Invalid RSA key format");
-            //         let res =
-            //             req.into_response(response.map_into_boxed_body().map_into_right_body());
-            //         return Ok(res);
-            //     }
-            // };
-            //
-            // let e = match jwks["keys"][0]["e"].as_str() {
-            //     Some(e) => e,
-            //     None => {
-            //         info!(log, "Invalid RSA key format, keys[0][e] is missing");
-            //         let response = HttpResponse::Unauthorized().body("Invalid RSA key format");
-            //         let res =
-            //             req.into_response(response.map_into_boxed_body().map_into_right_body());
-            //         return Ok(res);
-            //     }
-            // };
-
+            
             let decoding_key = match DecodingKey::from_rsa_components(n, e) {
                 Ok(key) => key,
                 Err(_) => {
@@ -538,7 +444,7 @@ fn validate_role_or_permission(claims: &Value, rule: &RoleRule, logger: &Logger)
 }
 
 use std::collections::HashSet;
-use futures_util::AsyncReadExt;
+use crate::auth_information::Claims;
 
 /// Extract values (as strings) from `claims_json` using `json_path`.
 /// Returns a Vec\<String\> of all extracted scalar/array items converted to strings.
