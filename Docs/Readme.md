@@ -1,10 +1,10 @@
 #### Installation
 
 how to deploy to test ?
+create  Client:  wado-rs-api  stow-rs-api  in KeyCloak.
+and  add users:  docker_lily , Pat001.
+use  curl to get    JWT Content like :
 
-在KeyCloak中添加Client wado-rs-api  stow-rs-api 
-和用户  docker_lily , Pat001.
-通过curl 命令获取的JWT 能输出如下格式:
 ```json
 {
   "exp": 1766655234,

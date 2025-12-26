@@ -1,16 +1,16 @@
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
-// cornerstonejs 支持的传输语法
-//参考: https://github.com/cornerstonejs/cornerstoneWADOImageLoader/blob/main/src/imageLoader/wadouri/getTransferSyntax.js
+/// Transfer syntaxes supported by cornerstonejs
+/// Reference: https://github.com/cornerstonejs/cornerstoneWADOImageLoader/blob/master/src/imageLoader/decodeImageFrame.js
+/// JPEG2000 is not supported since some mobile devices don't support JPEG2000
 pub static SUPPORTED_TRANSFER_SYNTAXES: LazyLock<HashSet<&'static str>> =
     LazyLock::new(supported_transfer_syntaies);
-// cornerstonejs 支持的传输语法
-// https://github.com/cornerstonejs/cornerstone3D/blob/main/packages/dicomImageLoader/src/imageLoader/decodeImageFrame.ts
 
-/// cornerstonejs 支持的传输语法
-/// 参考: https://github.com/cornerstonejs/cornerstoneWADOImageLoader/blob/master/src/imageLoader/decodeImageFrame.js
-/// 由于部分手机端不支持JPEG2000，所以这里也不支持JPEG2000
+
+/// Transfer syntaxes supported by cornerstonejs
+/// Reference: https://github.com/cornerstonejs/cornerstoneWADOImageLoader/blob/master/src/imageLoader/decodeImageFrame.js
+/// JPEG2000 is not supported since some mobile devices don't support JPEG2000
 fn supported_transfer_syntaies() -> HashSet<&'static str> {
     vec![
         "1.2.840.10008.1.2",  // Implicit VR Little Endian
