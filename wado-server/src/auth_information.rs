@@ -2,6 +2,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct RealmAccess {
+    pub(crate) roles: Option<Vec<String>>, // realm 角色
+}
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct ResourceAccess {
+    pub(crate) roles: Option<Vec<String>>, // 资源角色
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct Claims {
     pub(crate) iss: String, //签发方（issuer），明确这个 JWT 是哪个认证系统生成的	必须（标准）
     pub(crate) sub: Option<String>, //主题（subject），指用户唯一标识（通常为用户 ID）	必须（标准）
@@ -17,15 +26,4 @@ pub(crate) struct Claims {
     pub(crate) realm_access: Option<RealmAccess>, // realm 级别权限
     pub(crate) resource_access: Option<std::collections::HashMap<String, ResourceAccess>>, // 资源级别权限
     pub(crate) scope: Option<String>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub(crate) struct RealmAccess {
-    pub(crate) roles: Option<Vec<String>>, // realm 角色
-}
-#[allow(dead_code)]
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub(crate) struct ResourceAccess {
-    pub(crate) roles: Option<Vec<String>>, // 资源角色
 }

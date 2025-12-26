@@ -212,7 +212,7 @@ where
                     return Ok(res);
                 }
             };
-            
+
             let decoding_key = match DecodingKey::from_rsa_components(n, e) {
                 Ok(key) => key,
                 Err(_) => {
@@ -255,6 +255,7 @@ where
                     // Token有效（包括未过期），继续处理请求
                     let claims = token_data.claims;
                     warn!(log, "Claims:{:?}", claims);
+
                     // 将用户信息存储在请求扩展中，供后续权限检查使用
                     req.extensions_mut().insert(claims.clone());
 

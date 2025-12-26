@@ -1,5 +1,7 @@
 pub mod common_utils;
 
+mod apilog_middleware_kc;
+mod auth_information;
 mod auth_middleware_kc;
 mod common_controller;
 mod constants;
@@ -7,7 +9,6 @@ mod payload_helper;
 mod stow_rs_controller_v1;
 mod wado_rs_controller_v1;
 mod wado_rs_models;
-mod auth_information;
 
 // use crate::wado_rs_controller_v1::{
 //     echo_v1, retrieve_instance, retrieve_instance_frames, retrieve_series_metadata,
@@ -17,8 +18,10 @@ use actix_cors::Cors;
 use actix_web::{App, HttpResponse, HttpServer, Responder, middleware, web};
 
 // use crate::auth_middleware_kc::AuthMiddleware;
+use crate::apilog_middleware_kc::ApiLoggerMiddleware;
 use crate::auth_middleware_kc::{AuthMiddleware, update_jwks_task};
 use crate::constants::{STOW_RS_CONTEXT_PATH, WADO_RS_CONTEXT_PATH};
+use actix_web::middleware::Logger as DefaultLogger;
 use common::redis_key::RedisHelper;
 use common::server_config::AppConfig;
 use common::utils::setup_logging;
@@ -186,11 +189,15 @@ async fn main() -> std::io::Result<()> {
                     .wrap(wado_rs_cors)
                     .service(
                         scope::scope("/v1")
+                            .wrap(DefaultLogger::default()) // 添加默认日志中间件
                             // 关闭权限验证
                             .wrap(AuthMiddleware {
                                 logger: app_state.log.clone(),
                                 redis: app_state.redis_helper.clone(),
                                 oauth2_config: app_state.config.wado_oauth2.clone(),
+                            })
+                            .wrap(ApiLoggerMiddleware {
+                                logger: log.clone(),
                             })
                             .service(wado_rs_controller_v1::retrieve_study_metadata)
                             .service(wado_rs_controller_v1::retrieve_study_subseries)
@@ -204,17 +211,22 @@ async fn main() -> std::io::Result<()> {
                     .wrap(stow_rs_cors)
                     .service(
                         scope::scope("/v1")
+                            .wrap(DefaultLogger::default()) // 添加默认日志中间件
                             // 关闭权限验证
                             .wrap(AuthMiddleware {
                                 logger: app_state.log.clone(),
                                 redis: app_state.redis_helper.clone(),
                                 oauth2_config: app_state.config.stow_oauth2.clone(),
                             })
+                            .wrap(ApiLoggerMiddleware {
+                                logger: log.clone(),
+                            })
                             .service(stow_rs_controller_v1::store_instances)
                             .service(stow_rs_controller_v1::store_instances_to_study), // .service(stow_rs_controller_v1::echo_v1)
                     ),
             )
             .split_for_parts();
+
         api.info.title = "DICOMWeb API".to_string();
         app.wrap(middleware::Compress::default())
             .wrap(cors)
