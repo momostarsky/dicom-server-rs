@@ -1,9 +1,9 @@
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ApiLogEvent {
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: NaiveDateTime,
     pub tenant_id:String,
     pub request_id: String,
     pub method: String,

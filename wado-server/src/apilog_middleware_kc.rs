@@ -1,17 +1,18 @@
 // src/api_logger_middleware.rs
+use crate::auth_information::Claims;
 use actix_web::{
     Error, HttpMessage,
     dev::{Service, ServiceRequest, ServiceResponse, Transform},
 };
 use common::logevents::ApiLogEvent;
 use common::message_sender::MessagePublisher;
+use common::utils::get_current_time;
 use futures_util::future::LocalBoxFuture;
 use slog::{Logger, error, info};
 use std::future::{Ready, ready};
 use std::rc::Rc;
 use std::sync::Arc;
-
-use crate::auth_information::Claims;
+use uuid::{NoContext, Timestamp};
 
 pub struct ApiLoggerMiddleware {
     pub logger: Logger,
@@ -122,7 +123,7 @@ where
                 .unwrap_or_else(|| "unknown".to_string());
             // 创建API日志事件
             let log_event = ApiLogEvent {
-                timestamp: chrono::Utc::now(),
+                timestamp: get_current_time(),
                 request_id: generate_request_id(),
                 method: method.as_str().to_string(),
                 path: path.clone(),
@@ -167,10 +168,10 @@ where
 }
 
 fn generate_request_id() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
-        .as_nanos();
-    format!("{:x}", now)
+        .as_millis() as u64;
+    let ts = Timestamp::from_unix(NoContext, now, 0);
+    uuid::Uuid::new_v7(ts).to_string()
 }
