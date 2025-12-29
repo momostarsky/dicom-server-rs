@@ -4,7 +4,7 @@
 
 1. **RedPanda**: 作为 Apache Kafka 的替代消息队列。生产环境建议使用 RedPanda 企业版或 Apache Kafka。
 
-2. **Apache Doris、ClickHouse**: 作为数据仓库，提供 `DicomStateMeta`、`DicomImageMeta` 及 `WadoAccessLog` 存储，支持后续的查询及统计分析。
+2. **Doris or ClickHouse**: 作为数据仓库，提供 `DicomStateMeta`、`DicomImageMeta` 及 `WadoAccessLog` 存储，支持后续的查询及统计分析。
 
 3. **PostgreSQL**: 作为数据库，提供数据存储功能及检查索引功能，仅存储 `PatientInformation`、`StudyInformation`、`SeriesInformation` 这一级别的元数据，充分利用关系数据库的 ACID 特性。生产环境建议采用 Citus。
 
@@ -28,7 +28,7 @@
 2. **主索引信息处理**
    - wado-consumer  服务读取消息队列 `{ storage_queue }`
    - 持久化主索引信息 `{ DicomStateMeta, DicomImageMeta }`
-   - 同时发布消息到 Topic `{ dicom_state_queue, dicom_image_queue }`
+   - 发布消息到 Topic `{ dicom_state_queue, dicom_image_queue }`
 
 3. **索引信息完善**
    - ClickHouse 或 Doris 数据库消费消息队列 `{ dicom_state_queue, dicom_image_queue }`

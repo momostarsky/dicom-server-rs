@@ -3,9 +3,9 @@ use dicom_encoding::TransferSyntaxIndex;
 use dicom_transfer_syntax_registry::TransferSyntaxRegistry;
 use dotenv::dotenv;
 use serde::Deserialize;
-use std::{env, fs};
 use std::path::PathBuf;
 use std::sync::Once;
+use std::{env, fs};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct RedisConfig {
@@ -63,13 +63,17 @@ pub struct KafkaConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct MessageQueueConfig {
     pub consumer_group_id: String,
+    /// 存放待处理的消息
     pub topic_main: String,
-    pub topic_log: String,
-
+    /// 存放收图记录的消息---此消息队列直接导入ClickHouse数据库.
+    pub topic_dicom_receive: String,
+    /// 存放处理状态的消息
     pub topic_dicom_state: String,
+    /// 存放DICOM切片信息
     pub topic_dicom_image: String,
+    /// WADO-RS, STOW-RS Access Record
+    pub topic_webapi_access: String,
 }
-
 
 // --- 配置结构 ---
 #[derive(Debug, Clone, Deserialize)]
@@ -89,6 +93,7 @@ pub struct OAuth2Config {
     pub roles: Option<RoleRule>,
     #[serde(default)]
     pub permissions: Option<RoleRule>,
+    pub scope: Option<Vec<String>>,
 }
 #[derive(Debug, Deserialize, Clone)]
 pub struct WebWorkerConfig {
@@ -111,51 +116,53 @@ pub struct AppConfig {
     pub dicom_store_scp: DicomStoreScpConfig,
     pub message_queue: MessageQueueConfig,
     pub wado_oauth2: Option<OAuth2Config>,
+    pub stow_oauth2: Option<OAuth2Config>,
     pub webworker: Option<WebWorkerConfig>,
 }
 
- 
 static APP_ENV: &str = "APP_ENV";
 static APP_PREFIX: &str = "DICOM";
 
 // 全局配置实例和初始化状态
 static INIT: Once = Once::new();
 static mut CONFIG: Option<AppConfig> = None;
- fn validate_and_create_path(path: &str, path_name: &str) -> Result<(), ConfigError> {
+fn validate_and_create_path(path: &str, path_name: &str) -> Result<(), ConfigError> {
     if path.len() > 64 {
         return Err(ConfigError::Message(format!(
-            "{} length must be less than 64 characters", path_name
+            "{} length must be less than 64 characters",
+            path_name
         )));
     }
 
     match fs::exists(path) {
         Ok(exists) => {
             if !exists {
-                fs::create_dir_all(path)
-                    .map_err(|e| ConfigError::Message(format!(
-                        "Could not create {} directory: {}", path_name, e
-                    )))?;
+                fs::create_dir_all(path).map_err(|e| {
+                    ConfigError::Message(format!("Could not create {} directory: {}", path_name, e))
+                })?;
             }
         }
         Err(e) => {
             return Err(ConfigError::Message(format!(
-                "Could not check if {} directory exists: {}", path_name, e
+                "Could not check if {} directory exists: {}",
+                path_name, e
             )));
         }
     }
 
     // 测试写入权限
     let test_dir = format!("{}/{}/{}/{}", path, "test", "sub", "dir");
-    fs::create_dir_all(&test_dir)
-        .map_err(|e| ConfigError::Message(format!(
-            "Could not create test directory in {}: {}", path_name, e
-        )))?;
+    fs::create_dir_all(&test_dir).map_err(|e| {
+        ConfigError::Message(format!(
+            "Could not create test directory in {}: {}",
+            path_name, e
+        ))
+    })?;
 
     let test_file = format!("{}/test.tmp", test_dir);
-    fs::write(&test_file, b"test")
-        .map_err(|e| ConfigError::Message(format!(
-            "Could not write test file in {}: {}", path_name, e
-        )))?;
+    fs::write(&test_file, b"test").map_err(|e| {
+        ConfigError::Message(format!("Could not write test file in {}: {}", path_name, e))
+    })?;
 
     fs::remove_file(&test_file).ok();
     fs::remove_dir_all(&test_dir).ok();
@@ -163,19 +170,15 @@ static mut CONFIG: Option<AppConfig> = None;
     Ok(())
 }
 
-
-
- pub fn load_config() -> Result<AppConfig, ConfigError> {
+pub fn load_config() -> Result<AppConfig, ConfigError> {
     unsafe {
-        INIT.call_once(|| {
-            match load_config_internal() {
-                Ok(app_config) => {
-                    CONFIG = Some(app_config);
-                }
-                Err(e) => {
-                    eprintln!("Failed to load configuration: {}", e);
-                    CONFIG = None;
-                }
+        INIT.call_once(|| match load_config_internal() {
+            Ok(app_config) => {
+                CONFIG = Some(app_config);
+            }
+            Err(e) => {
+                eprintln!("Failed to load configuration: {}", e);
+                CONFIG = None;
             }
         });
 
@@ -197,9 +200,7 @@ fn load_config_internal() -> Result<AppConfig, ConfigError> {
         // try current_dir, then CARGO_MANIFEST_DIR, then fallback to "."
         let candidate = env::current_dir()
             .or_else(|_| env::var("CARGO_MANIFEST_DIR").map(PathBuf::from))
-            .map_err(|e| ConfigError::Message(format!(
-                "Failed to determine current dir: {}", e
-            )))?;
+            .map_err(|e| ConfigError::Message(format!("Failed to determine current dir: {}", e)))?;
         // try to canonicalize (make absolute / normalize). If canonicalize fails, keep candidate.
         fs::canonicalize(&candidate).unwrap_or(candidate)
     };

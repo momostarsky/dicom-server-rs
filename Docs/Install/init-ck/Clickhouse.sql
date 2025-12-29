@@ -41,8 +41,8 @@ create table dicom_image_meta
     created_time               Nullable(DateTime),
     updated_time               Nullable(DateTime)
 )
-    engine = MergeTree ORDER BY (tenant_id, patient_id, study_uid, series_uid, sop_uid)
-        SETTINGS index_granularity = 8192;
+engine = MergeTree ORDER BY (tenant_id, patient_id, study_uid, series_uid, sop_uid)
+SETTINGS index_granularity = 8192;
 
 create table dicom_image_meta_kafka
 (
@@ -85,7 +85,15 @@ create table dicom_image_meta_kafka
     created_time               Nullable(String),
     updated_time               Nullable(String)
 )
-    engine = Kafka SETTINGS kafka_broker_list = 'redpanda:9092', kafka_topic_list = 'dicom_image_queue', kafka_group_name = 'medical_image_group', kafka_format = 'JSONEachRow', kafka_max_block_size = 1048576, kafka_skip_broken_messages = 1;
+engine = Kafka
+SETTINGS
+    kafka_broker_list = 'redpanda:9092',
+    kafka_topic_list = 'dicom_image_queue',
+    kafka_group_name = 'medical_image_group',
+    kafka_format = 'JSONEachRow',
+    kafka_max_block_size = 1048576,
+    kafka_skip_broken_messages = 1;
+
 
 create table dicom_object_meta
 (
@@ -110,8 +118,8 @@ create table dicom_object_meta
     trace_id            String,
     worker_node_id      String
 )
-    engine = MergeTree ORDER BY (tenant_id, patient_id, study_uid, series_uid, sop_uid)
-        SETTINGS index_granularity = 8192;
+engine = MergeTree ORDER BY (tenant_id, patient_id, study_uid, series_uid, sop_uid)
+SETTINGS index_granularity = 8192;
 
 create table dicom_object_meta_kafka
 (
@@ -136,7 +144,14 @@ create table dicom_object_meta_kafka
     trace_id            String,
     worker_node_id      String
 )
-    engine = Kafka SETTINGS kafka_broker_list = 'redpanda:9092', kafka_topic_list = 'log_queue', kafka_group_name = 'medical_object_group', kafka_format = 'JSONEachRow', kafka_max_block_size = 1048576, kafka_skip_broken_messages = 1;
+engine = Kafka
+SETTINGS
+    kafka_broker_list = 'redpanda:9092',
+    kafka_topic_list = 'log_queue',
+    kafka_group_name = 'medical_object_group',
+    kafka_format = 'JSONEachRow',
+    kafka_max_block_size = 1048576,
+    kafka_skip_broken_messages = 1;
 
 create table dicom_state_meta
 (
@@ -170,8 +185,8 @@ create table dicom_state_meta
     created_time       Nullable(DateTime),
     updated_time       Nullable(DateTime)
 )
-    engine = MergeTree ORDER BY (tenant_id, patient_id, study_uid, series_uid)
-        SETTINGS index_granularity = 8192;
+engine = MergeTree ORDER BY (tenant_id, patient_id, study_uid, series_uid)
+SETTINGS index_granularity = 8192;
 
 create table dicom_state_meta_kafka
 (
@@ -205,7 +220,14 @@ create table dicom_state_meta_kafka
     created_time       Nullable(String),
     updated_time       Nullable(String)
 )
-    engine = Kafka SETTINGS kafka_broker_list = 'redpanda:9092', kafka_topic_list = 'dicom_state_queue', kafka_group_name = 'medical_state_group', kafka_format = 'JSONEachRow', kafka_max_block_size = 1048576, kafka_skip_broken_messages = 1;
+engine = Kafka
+SETTINGS
+    kafka_broker_list = 'redpanda:9092',
+    kafka_topic_list = 'dicom_state_queue',
+    kafka_group_name = 'medical_state_group',
+    kafka_format = 'JSONEachRow',
+    kafka_max_block_size = 1048576,
+    kafka_skip_broken_messages = 1;
 
 CREATE MATERIALIZED VIEW default.dicom_image_meta_mv
             TO default.dicom_image_meta
@@ -401,4 +423,69 @@ SELECT tenant_id,
        parseDateTimeBestEffortOrNull(created_time) AS created_time,
        parseDateTimeBestEffortOrNull(updated_time) AS updated_time
 FROM default.dicom_state_meta_kafka;
+
+create table default.api_logs
+(
+    timestamp      DateTime64(3),
+    tenant_id      String,
+    request_id     String,
+    method         LowCardinality(String),
+    path           String,
+    query_params   String,
+    peer_addr      String,
+    headers        String,
+    `user`         String,
+    user_id        String,
+    status         UInt16,
+    content_length String,
+    duration_ms    UInt64
+)
+engine = MergeTree PARTITION BY toYYYYMM(timestamp)
+ORDER BY (tenant_id, timestamp, request_id)
+SETTINGS index_granularity = 8192;
+
+create table default.api_logs_queue
+(
+    timestamp      DateTime64(3),
+    tenant_id      String,
+    request_id     String,
+    method         LowCardinality(String),
+    path           String,
+    query_params   String,
+    peer_addr      String,
+    headers        String,
+    `user`          String,
+    user_id        String,
+    status         UInt16,
+    content_length String,
+    duration_ms    UInt64
+)
+engine = Kafka
+SETTINGS
+    kafka_broker_list = 'redpanda:9092',
+    kafka_topic_list = 'webapi_access_queue',
+    kafka_group_name = 'clickhouse_webapi_consumer',
+    kafka_format = 'JSONEachRow';
+
+
+
+CREATE MATERIALIZED VIEW default.api_logs_mv  TO default.api_logs
+(
+`timestamp` DateTime64(3),
+`tenant_id` String,
+`request_id` String,
+`method` LowCardinality(String),
+`path` String,
+`query_params` String,
+`peer_addr` IPv4,
+`headers` String,
+`user` String,
+`user_id` String,
+`status` UInt16,
+`content_length` UInt64,
+`duration_ms` UInt64
+)
+AS
+SELECT *
+FROM default.api_logs_queue;
 

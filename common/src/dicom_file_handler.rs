@@ -458,21 +458,23 @@ pub async fn classify_and_publish_dicom_messages(
         return Ok(());
     }
 
+    let message_count = dicom_message_lists.len();
+
     let topic_name = storage_producer.topic();
 
     match utils::publish_messages(storage_producer, &dicom_message_lists).await {
         Ok(_) => {
             info!(
                 logger,
-                "Successfully published {} supported messages to Kafka: {}",
-                dicom_message_lists.len(),
+                "classify_and_publish_dicom_messages Successfully published {} supported messages to Kafka: {}",
+                message_count,
                 topic_name
             );
         }
         Err(e) => {
             error!(
                 logger,
-                "Failed to publish messages to Kafka: {}, topic: {}", e, topic_name
+                "classify_and_publish_dicom_messages Failed to publish messages to Kafka: {},  topic: {}", e, topic_name
             );
         }
     }
@@ -482,15 +484,15 @@ pub async fn classify_and_publish_dicom_messages(
         Ok(_) => {
             info!(
                 logger,
-                "Successfully published {} messages to Kafka: {}",
-                dicom_message_lists.len(),
+                "classify_and_publish_dicom_messages Successfully published {} messages to Kafka: {}",
+                message_count,
                 log_topic_name
             );
         }
         Err(e) => {
             error!(
                 logger,
-                "Failed to publish log messages to Kafka: {}, topic: {}", e, log_topic_name
+                "classify_and_publish_dicom_messages Failed to publish log messages to Kafka: {}, topic: {}", e, log_topic_name
             );
         }
     }

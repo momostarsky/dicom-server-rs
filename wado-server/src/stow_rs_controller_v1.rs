@@ -591,22 +591,22 @@ async fn process_multipart_fields(
     if !metas.is_empty() {
         info!(
             log,
-            "Publishing STOW-RS DICOM messages to Kafka:{}",
+            "Begin Publishing STOW-RS DICOM messages to Kafka:{}",
             metas.len()
         );
         let queue_config = &app_state.config.message_queue;
         let queue_topic_main = &queue_config.topic_main.as_str();
-        let queue_topic_log = &queue_config.topic_log.as_str();
+        let queue_topic_log = &queue_config.topic_dicom_receive.as_str();
 
         let storage_producer = KafkaMessagePublisher::new(queue_topic_main.parse().unwrap());
         let log_producer = KafkaMessagePublisher::new(queue_topic_log.parse().unwrap());
 
         match classify_and_publish_dicom_messages(&metas, &storage_producer, &log_producer).await {
             Ok(_) => {
-                info!(&log, "Successfully published DICOM messages");
+                info!(&log, "Endwith Successfully published DICOM messages");
             }
             Err(e) => {
-                warn!(&log, "Failed to publish DICOM messages: {}", e);
+                warn!(&log, "Endwith Failed to publish DICOM messages: {}", e);
             }
         };
         metas.clear();

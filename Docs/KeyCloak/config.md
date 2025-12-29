@@ -1,5 +1,7 @@
 #### KeyCload  在oauth2 中的认证说明
 
+#### 本机可以参考![keycloak](file:///media/dhz/DCP/Keycloak)
+
 ```json
 {
   "wado_oauth2": {

@@ -659,7 +659,7 @@ async fn retrieve_instance_impl(
 }
 
 
-use crate::auth_middleware_kc::Claims; // 确保能访问Claims结构
+use crate::auth_information::Claims; // 确保能访问Claims结构
 
 #[allow(dead_code)]
 /// 用户权限检查函数
