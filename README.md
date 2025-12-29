@@ -1,7 +1,7 @@
 ### 总体架构
 
 1. RedPanda: As a message queue,replace Apache Kafka. For production environments, it is recommended to use RedPanda Enterprise Edition or Apache Kafka.
-2. Apache Doris, ClickHouse: As data warehouses. Provide storage for DicomStateMeta, DicomImageMeta, and WadoAccessLog, enabling subsequent querying and statistical analysis.
+2. Doris or ClickHouse: As data warehouses. Provide storage for DicomStateMeta, DicomImageMeta, and WadoAccessLog, enabling subsequent querying and statistical analysis.
 3. PostgreSQL: As a database. Provides data storage functionality and examination indexing features. Only stores metadata at the PatientInformation, StudyInformation, SeriesInformation levels. Fully utilizes the ACID characteristics of relational databases. For production environments, Citus is recommended.
 4. Redis: As a cache. Provides data caching functionality.
 5. Nginx: As a reverse proxy server. Provides load balancing, static files, TLS passthrough, etc. For production environments, Nginx Plus or LVS+DR mode is recommended to improve performance.
@@ -16,14 +16,13 @@
 ### Server
 
 1. Write Dicom File To Disk -->  PublishMessage To Topic :{ log_quene,storage_queue }
-    - ClickHouse or Doris --> Consume Topices: { log_quene } --> Persistent { DicomObjectMeta } To Database
+    ---> ClickHouse  Consume Topices: { log_quene } --> Persistent { DicomObjectMeta } To ClickHouseDatabase
 
-2. Consumer {storage_queue } --> Persistent { DicomStateMeta,DicomImageMeta} To MainDatabase
-    - Consumer {dicom_state_queue,dicom_image_queue }
-    - --> PublishMessag To Topic :{ dicom_state_queue,dicom_image_queue }
+2. Consumer {storage_queue } fetch metadata:{DicomStateMeta,DicomImageMeta}
+    - --> Persistent { DicomStateMeta,DicomImageMeta} To MainDatabase--PostgreSQL
+    - --> PublishMessag To Topic :{ dicom_state_queue,dicom_image_queue } 
 
-3. ClickHouse or Doris --> Consume Topices: { dicom_state_queue,dicom_image_queue }
-    - --> Persistent {DicomStateMeta,DicomImageMeta} To Database
+3. ClickHouse or Doris --> Consume Topices: { dicom_state_queue,dicom_image_queue } --> Persistent {DicomStateMeta,DicomImageMeta} To Database
 
 ### Mobile or Web
 
