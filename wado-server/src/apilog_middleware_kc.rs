@@ -85,11 +85,14 @@ where
             }
         }
 
+        let peer_addr = peer_addr
+            .map(|addr| addr.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
         info!(logger, "API Request Started"; 
               "method" => method.as_str(), 
               "path" => &path, 
               "query_params" => &query_string,
-              "peer_addr" => format!("{:?}", peer_addr),
+              "peer_addr" => &peer_addr,
               "tenant_id" => &tenant_id,
               "headers" => serde_json::to_string(&headers_info).unwrap_or_default(),
               "request_id" => generate_request_id());
@@ -128,7 +131,7 @@ where
                 method: method.as_str().to_string(),
                 path: path.clone(),
                 query_params: query_string,
-                peer_addr: format!("{:?}", peer_addr),
+                peer_addr,
                 headers: serde_json::to_string(&headers_info).unwrap_or_default(),
                 user: user_info.clone(),
                 user_id: user_id.clone(),
