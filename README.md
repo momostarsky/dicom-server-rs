@@ -1,4 +1,4 @@
-### 总体架构
+### Summary
 
 1. RedPanda: As a message queue,replace Apache Kafka. For production environments, it is recommended to use RedPanda Enterprise Edition or Apache Kafka.
 2. Doris or ClickHouse: As data warehouses. Provide storage for DicomStateMeta, DicomImageMeta, and WadoAccessLog, enabling subsequent querying and statistical analysis.
