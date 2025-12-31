@@ -5,6 +5,7 @@ TEMP_FILE="multipart_request.tmp"
 
 # 1. 写入 JSON 数据的分隔符和头部
 printf -- "--%s\r\n" "$BOUNDARY" > "$TEMP_FILE"
+# shellcheck disable=SC2129
 printf -- "Content-Type: application/dicom\r\n\r\n" >> "$TEMP_FILE"
 # 4. 附加 dcm1.dcm 的内容
 cat dcm1.dcm >> "$TEMP_FILE"
