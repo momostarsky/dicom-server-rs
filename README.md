@@ -40,3 +40,19 @@
 ### How to deploy for testing
 
 [Docs/Install](./Docs/Readme.md)
+
+### RoadMAP
+
+- [✓] Basic DICOM C-STORE SCP Support
+- [✓] Basic DICOMWeb WADO-RS Support
+- [✓] Basic DICOM Metadata Extraction and Storage
+- [✓] DICOMWeb STOW-RS Support
+- [✓] OAuth2 Support  for WADO-RS , STOW-RS
+- [ ] Add S3 Storage Support
+- [ ] Web-based Viewer Integration
+- [ ] Add Prometheus & Grafana Monitoring Support
+- [ ] DICOM Query-Retrieve (C-FIND, C-MOVE, C-GET) Support
+- [ ] Advanced Metadata Search and Filtering
+- [ ] User Management and Access Control
+- [ ] Performance Optimization and Scalability Improvements
+- [ ] Comprehensive Testing and Documentation

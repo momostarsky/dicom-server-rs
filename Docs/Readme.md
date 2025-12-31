@@ -1,5 +1,26 @@
 #### Installation
 
+### GitClone and  Deploy Docker-compose
+
+```bash
+git clone https://github.com/momostarsky/dicom-server-rs.git
+cd dicom-server-rs
+mkdir ~/verify-dicom
+cp -r Docs/Install ~/verify-dicom/
+cd ~/verify-dicom/Install
+docker-compose up -d
+```
+### Deploy Docker-compose for Test
+**wado-storescp  wado-server wado-consumer wado-webworker*** 
+**configuration file : application.local.json**
+**.env **
+.env file content like :
+```text
+APP_ENV=local
+```
+
+### OAuth2  KeyCloak  Configuration
+
 how to deploy to test ?
 create  Client:  wado-rs-api  stow-rs-api  in KeyCloak.
 and  add users:  docker_lily , Pat001.
