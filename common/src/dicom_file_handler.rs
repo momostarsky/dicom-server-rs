@@ -38,14 +38,14 @@ static JS_CHANGE_TO_TS: LazyLock<String> = LazyLock::new(|| {
 });
 
 pub async fn process_dicom_buffer(
-    instance_buffer: &[u8],    //DICOM文件的字节数组或是二进制流
-    tenant_id: &String,        //机构ID,或是医院ID, 用于区分多个医院.
-    ts: &String,               //传输语法
-    sop_instance_uid: &String, //当前文件的SOP实例ID
-    sop_class_uid: &String,    //当前文件的SOP实例ID
-    ip: String,
-    client_ae: String,
-    storage_config: &StorageConfig<'_>,
+    instance_buffer: &[u8],    //DICOM ByteStream
+    tenant_id: &String,        //hospital  or tenant id , or department id
+    ts: &String,               //Transfer Syntax UID
+    sop_instance_uid: &String, //Current file's SOP Instance UID
+    sop_class_uid: &String,    //Current file's SOP Class UID
+    ip: String,  // source  IP address of the DICOM sender
+    client_ae: String, // source  AE Title of the DICOM sender
+    storage_config: &StorageConfig<'_>, // storage config
 ) -> Result<DicomStoreMeta, Whatever> {
     let root_logger = get_logger();
     let logger = root_logger.new(o!("wado-storescp"=>"process_dicom_file"));
@@ -141,8 +141,7 @@ pub async fn process_dicom_buffer(
         Ok(metadata) => metadata.len(),
         Err(_) => 0u64,
     };
-    // 修复后：
-    // let saved_path = PathBuf::from(file_path); // 此时可以安全转移所有权
+
     let uuid_v7 = Uuid::now_v7();
     let trace_uid = uuid_v7.to_string(); // 或直接用 format!("{}", uuid_v7)
     // 修改为
@@ -164,7 +163,6 @@ pub async fn process_dicom_buffer(
         transfer_status: transcode_status,
         number_of_frames: frames,
         created_time: cdate,
-        // 修改为使用 from_string 方法创建 BoundedString<20>
         series_uid_hash: BoundedString::<20>::make_str(&series_uid_hash_v),
         study_uid_hash: BoundedString::<20>::make_str(&study_uid_hash_v),
         accession_number,
@@ -437,15 +435,15 @@ pub async fn process_dicom_file_from_file(
         source_ae: BoundedString::<64>::make_str(&"STOW-RS-API"),
     })
 }
-///  无论转码成功与否，均会保存文件到本地磁盘
+/// Publishes DICOM metadata to Kafka topics
+/// Files are saved to local disk regardless of transcoding success or failure
 ///
-/// # 参数
-/// * `dicom_message_lists` - 需要处理的 DICOM 对象元数据列表
-/// * `storage_producer` - 用于提取PatientInfo, StudyInfo,SerisInfo 符合DICOM标准的实体信息
-/// * `log_producer` - 用于记录收图日志信息,方便后续统计收图效率
-/// * `logger` - 日志记录器
-/// * `queue_topic_main` - 主题名称（用于storage_consumer）
-/// * `queue_topic_log` - 主题名称（用于日志提取）
+/// # Parameters
+/// * `dicom_message_lists` - List of DICOM object metadata to be processed
+/// * `storage_producer` - Kafka producer for extracting PatientInfo, StudyInfo, SeriesInfo as DICOM standard entities
+/// * `log_producer` - Kafka producer for recording image receiving logs, facilitating subsequent efficiency statistics
+/// # Returns
+/// * `Result<(), Box<dyn std::error::Error>>` - Returns Ok(()) if successful, otherwise returns an error
 pub async fn classify_and_publish_dicom_messages(
     dicom_message_lists: &Vec<DicomStoreMeta>,
     storage_producer: &KafkaMessagePublisher,

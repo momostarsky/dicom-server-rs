@@ -80,8 +80,7 @@ pub fn generate_study_json(
         .media_storage_sop_class_uid("1.2.840.10008.5.1.4.1.1.1")
         .media_storage_sop_instance_uid(media_storage_sop_instance_uid)
         .implementation_class_uid("1.2.345.6.7890.1.234")
-        .build()
-        .unwrap();
+        .build()?;
     let results: Vec<(
         HashMap<(String, u32), Value>,
         HashMap<(String, String, u32), Value>,

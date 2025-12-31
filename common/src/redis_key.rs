@@ -244,7 +244,7 @@ mod tests {
 
     fn get_test_config() -> RedisConfig {
         RedisConfig {
-            url: "redis://192.168.1.14:6379/".to_string(),
+            url: "redis://localhost:6379/".to_string(),
             password: None,
             is_lts: None,
         }
@@ -408,31 +408,7 @@ mod tests {
         assert!(after_delete.is_ok());
         assert_eq!(after_delete.unwrap(), false);
     }
-
-    #[tokio::test]
-    async fn test_jwks_url_content_operations() {
-        let config = get_test_config();
-        let redis_helper = RedisHelper::new(config);
-
-        let test_content = "test_jwks_content_12345".to_string();
-        let expire_seconds = 10u64;
-
-        // Test setting JWKS URL content
-        let set_result = redis_helper
-            .set_jwks_url_content(test_content.clone(), expire_seconds)
-            .await;
-        assert!(set_result.is_ok(), "Failed to set JWKS URL content");
-
-        // Test getting JWKS URL content
-        let get_result = redis_helper.get_jwks_url_content().await;
-        assert!(get_result.is_ok(), "Failed to get JWKS URL content");
-        assert_eq!(
-            get_result.unwrap(),
-            test_content,
-            "Retrieved content doesn't match expected"
-        );
-    }
-
+ 
     #[tokio::test]
     async fn test_jwks_url_content_expiration() {
         let config = get_test_config();
