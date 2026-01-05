@@ -2,7 +2,6 @@ extern crate core;
 
 use serde::{Deserialize, Serialize};
 
-pub mod cert_helper;
 pub mod change_file_transfer;
 pub mod cornerstonejs;
 
