@@ -20,11 +20,20 @@ until rpk cluster info --brokers localhost:9092 &> /dev/null; do
 done
 
 echo "Creating topics..."
-rpk topic create dicom_image_queue --partitions 1 --replicas 1 --brokers localhost:9092
-rpk topic create dicom_state_queue --partitions 1 --replicas 1 --brokers localhost:9092
-rpk topic create log_queue --partitions 1 --replicas 1 --brokers localhost:9092
-rpk topic create storage_queue --partitions 1 --replicas 1 --brokers localhost:9092
-rpk topic create webapi_access_queue --partitions 1 --replicas 1 --brokers localhost:9092
+
+# 定义要创建的主题列表
+TOPICS=("dicom_image_queue" "dicom_state_queue" "log_queue" "storage_queue" "webapi_access_queue")
+
+# 检查并创建主题
+for topic in "${TOPICS[@]}"; do
+  if rpk topic list --brokers localhost:9092 | grep -q "^$topic "; then
+    echo "Topic '$topic' already exists, skipping..."
+  else
+    echo "Creating topic '$topic'..."
+    rpk topic create "$topic" --partitions 1 --replicas 1 --brokers localhost:9092
+    echo "Topic '$topic' created"
+  fi
+done
 
 echo "Topics created completed"
 
