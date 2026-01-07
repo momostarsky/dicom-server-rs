@@ -12,12 +12,18 @@ docker-compose up -d
 ```
 ### Deploy Docker-compose for Test
 **wado-storescp  wado-server wado-consumer wado-webworker*** 
-**configuration file : application.local.json**
+**configuration file : application.Sample.json**
 **.env **
 .env file content like :
 ```text
-APP_ENV=local
+APP_ENV=Sample
 ```
+### Important Notice
+
+in config file : application.Sample.json 
+
+The configuration items wado_oauth2 and stow_oauth2 can be removed.
+
 
 ### OAuth2  KeyCloak  Configuration
 

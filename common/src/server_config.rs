@@ -110,7 +110,6 @@ pub struct AppConfig {
     pub redis: RedisConfig,
     pub kafka: KafkaConfig,
     pub main_database: DatabaseConfig,
-    pub secondary_database: DatabaseConfig,
     pub server: ServerConfig,
     pub local_storage: LocalStorageConfig,
     pub dicom_store_scp: DicomStoreScpConfig,
