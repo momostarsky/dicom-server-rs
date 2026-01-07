@@ -222,6 +222,10 @@ fn load_config_internal() -> Result<AppConfig, ConfigError> {
         .try_deserialize()
         .map_err(|err| ConfigError::Message(format!("Error parsing config: {}", err)))?;
 
+    // 展开并标准化本地存储路径
+    app_config.local_storage.dicm_store_path = expand_path(&app_config.local_storage.dicm_store_path)?;
+    app_config.local_storage.json_store_path = expand_path(&app_config.local_storage.json_store_path)?;
+
     // 验证本地存储路径
     validate_and_create_path(&app_config.local_storage.dicm_store_path, "dicm_store_path")?;
 
@@ -330,4 +334,39 @@ pub fn generate_pg_database_connection(dbconfig: &DatabaseConfig) -> Result<Stri
     println!("postgresql database connection string: {}", db_conn);
 
     Ok(db_conn)
+}
+
+use std::path::{Path};
+
+fn expand_path(path: &str) -> Result<String, ConfigError> {
+    let path = Path::new(path);
+
+    let expanded_path = if path.starts_with("~") {
+        // 处理 ~ 开头的路径
+        let home_dir = dirs::home_dir()
+            .ok_or_else(|| ConfigError::Message("Could not determine home directory".to_string()))?;
+
+        let relative_path = path.strip_prefix("~")
+            .map_err(|_| ConfigError::Message("Failed to strip ~ prefix".to_string()))?;
+
+        home_dir.join(relative_path)
+    } else if path.starts_with("./") || path.starts_with(".") {
+        // 处理 . 开头的相对路径
+        let current_dir = env::current_dir()
+            .map_err(|e| ConfigError::Message(format!("Failed to get current directory: {}", e)))?;
+
+        let relative_path = path.strip_prefix("./")
+            .or_else(|_| path.strip_prefix("."))
+            .map_err(|_| ConfigError::Message("Failed to strip . prefix".to_string()))?;
+
+        current_dir.join(relative_path)
+    } else {
+        // 已经是绝对路径，直接返回
+        PathBuf::from(path)
+    };
+
+    Ok(expanded_path
+        .to_str()
+        .ok_or_else(|| ConfigError::Message("Invalid UTF-8 in path".to_string()))?
+        .to_string())
 }

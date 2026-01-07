@@ -62,3 +62,4 @@ database = { path = "../database" }
 
 dicom-test-files = "0.3.1"
 dashmap =  { workspace = true }
+dirs =  { workspace = true }

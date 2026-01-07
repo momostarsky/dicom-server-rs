@@ -19,8 +19,8 @@
   },
   "local_storage": {
     "type": "DISK",
-    "dicm_store_path": "/home/dhz/jpdata/vdcmdata/xdcm",
-    "json_store_path": "/home/dhz/jpdata/vdcmdata/json"
+    "dicm_store_path": "~/jpdata/vdcmdata/xdcm",
+    "json_store_path": "~/jpdata/vdcmdata/json"
   },
   "dicom_store_scp": {
     "port": 11111,
