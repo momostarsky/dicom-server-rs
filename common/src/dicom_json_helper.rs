@@ -5,14 +5,16 @@ use std::path::PathBuf;
 use dicom_object::{DefaultDicomObject, FileDicomObject, FileMetaTableBuilder, OpenFileOptions};
 
 use crate::dicom_utils::get_tag_values;
+use crate::encrypt_helper::{EncryptHelper, Salsa20Encryptor};
 use crate::storage_config::StorageConfig;
+use crate::utils::get_current_time;
 use crate::{dicom_utils, server_config};
 use database::dicom_meta::DicomStateMeta;
 use dicom_dictionary_std::tags;
 use dicom_object::file::CharacterSetOverride;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelRefIterator;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Error, Write};
@@ -51,6 +53,8 @@ pub fn get_string(tag: Tag, dicom_obj: &DefaultDicomObject) -> String {
 }
 
 pub fn generate_study_json(
+    tenant_id: &str,
+    study_uid: &str,
     file: &PathBuf,
     json_save_to: &PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -244,12 +248,16 @@ pub fn generate_study_json(
         });
         study_vec.push(json_str);
     }
-
+    let cd = get_current_time();
+    let data = format!("{}_{}", tenant_id,study_uid);
+    let encryptor = Salsa20Encryptor::new();
+    let encrypted_data = encryptor.encrypt_string(data.as_str() )?;
+    let expires_str = cd.to_string();
     let study_json = json!({
        "seriesData": study_vec,
-       "hiscode":"89269",
-       "expires":"2025-06-20T13-05-16",
-       "token":"cbcbc2c203fe3877737c0befd6a769fa"
+       "hiscode":tenant_id,
+       "created": expires_str,
+       "token":encrypted_data
     });
     let file = File::create(json_save_to);
     match file {
@@ -274,9 +282,9 @@ pub async fn generate_series_json(series_info: &DicomStateMeta) -> Result<String
             ));
         }
     };
-    let storage_config = StorageConfig::make_storage_config( &app_config);
+    let storage_config = StorageConfig::make_storage_config(&app_config);
 
-    let json_file_path = match storage_config.json_metadata_path_for_series(series_info,true) {
+    let json_file_path = match storage_config.json_metadata_path_for_series(series_info, true) {
         Ok(v) => v,
         Err(e) => {
             return Err(Error::new(
@@ -286,7 +294,7 @@ pub async fn generate_series_json(series_info: &DicomStateMeta) -> Result<String
         }
     };
 
-    let dicom_dir = match storage_config.dicom_series_dir(series_info,false) {
+    let dicom_dir = match storage_config.dicom_series_dir(series_info, false) {
         Ok(vv) => vv,
         Err(_) => {
             return Err(Error::new(

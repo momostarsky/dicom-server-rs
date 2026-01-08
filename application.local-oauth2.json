@@ -1,22 +1,14 @@
 {
   "redis": {
-    "url": "redis://192.168.1.14:6379/"
+    "url": "redis://127.0.0.1:6379/"
   },
   "main_database": {
     "dbtype": "postgresql",
-    "host": "192.168.1.14",
+    "host": "127.0.0.1",
     "port": 5432,
-    "username": "root",
-    "password": "jp#123",
+    "username": "xdcm_admin",
+    "password": "xdicom3ks",
     "database": "postgres"
-  },
-  "secondary_database": {
-    "dbtype": "DORIS",
-    "host": "192.168.1.14",
-    "port": 9030,
-    "username": "dicomstore",
-    "password": "hzjp#123",
-    "database": "dicomdb"
   },
   "server": {
     "port": 9999,
@@ -27,8 +19,8 @@
   },
   "local_storage": {
     "type": "DISK",
-    "dicm_store_path": "/media/dhz/DCP/xdcm",
-    "json_store_path": "/media/dhz/DCP/json"
+    "dicm_store_path": "~/jpdata/vdcmdata/xdcm",
+    "json_store_path": "~/jpdata/vdcmdata/json"
   },
   "dicom_store_scp": {
     "port": 11111,
@@ -47,7 +39,10 @@
       "1.2.840.10008.1.2.4.57",
       "1.2.840.10008.1.2.4.70",
       "1.2.840.10008.1.2.4.80",
-      "1.2.840.10008.1.2.4.81"
+      "1.2.840.10008.1.2.4.81",
+      "1.2.840.10008.1.2.4.90",
+      "1.2.840.10008.1.2.4.91",
+      "1.2.840.10008.1.2.4.92"
     ]
   },
   "message_queue": {
@@ -55,10 +50,11 @@
     "topic_main": "storage_queue",
     "topic_dicom_receive": "log_queue",
     "topic_dicom_state": "dicom_state_queue",
-    "topic_dicom_image": "dicom_image_queue"
+    "topic_dicom_image": "dicom_image_queue",
+    "topic_webapi_access" : "webapi_access_queue"
   },
   "kafka": {
-    "brokers": "192.168.1.14:9092",
+    "brokers": "127.0.0.1:19092",
     "queue_buffering_max_messages": 1000,
     "queue_buffering_max_kbytes": 102400,
     "batch_num_messages": 100,
@@ -66,16 +62,16 @@
     "linger_ms": 100,
     "compression_codec": "snappy"
   },
-
   "webworker": {
     "interval_minute": 5,
     "cpu_usage": 40,
     "memory_usage": 70
   },
+
   "wado_oauth2": {
-    "issuer_url": "https://keycloak.medical.org:8443/realms/dicom-org-cn",
-    "audience": "wado-rs-api",
-    "jwks_url": "https://keycloak.medical.org:8443/realms/dicom-org-cn/protocol/openid-connect/certs",
+    "issuer_url": "http://localhost:8080/realms/xdicom",
+    "audience": "XDICOM",
+    "jwks_url": "http://localhost:8080/realms/xdicom/protocol/openid-connect/certs",
     "roles": {
       "from": "$.realm_access.roles",
       "values": ["role_patients"]
@@ -84,5 +80,23 @@
       "from": "$.resource_access['wado-rs-api'].roles",
       "values": ["image_reader"]
     }
+  },
+
+ "stow_oauth2": {
+    "issuer_url": "http://localhost:8080/realms/xdicom",
+    "audience": "XDICOM",
+    "jwks_url": "http://localhost:8080/realms/xdicom/protocol/openid-connect/certs",
+    "roles": {
+      "from": "$.realm_access.roles",
+      "values": ["role_doctor"]
+    },
+    "permissions": {
+      "from": "$.resource_access['stow-rs-api'].roles",
+      "values": ["image_writer"]
+    },
+    "scope" :[
+       "xdicom:full"
+    ]
   }
+
 }

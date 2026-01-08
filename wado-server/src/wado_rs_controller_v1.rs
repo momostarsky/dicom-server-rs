@@ -16,6 +16,7 @@ use dicom_object::OpenFileOptions;
 use common::dicom_json_helper::generate_series_json;
 use slog::{error, info};
 use std::path::PathBuf;
+use std::time::Instant;
 
 static ACCEPT_DICOM_JSON_TYPE: &str = "application/dicom+json";
 static ACCEPT_JSON_TYPE: &str = "application/json";
@@ -240,7 +241,7 @@ async fn retrieve_study_metadata(
         let dicom_path = PathBuf::from(&dicom_dir);
         let json_path = PathBuf::from(&json_path);
         info!(log, "DICOM directory: {:?}", dicom_path);
-        if let Err(e) = dicom_json_helper::generate_study_json(&dicom_path, &json_path) {
+        if let Err(e) = dicom_json_helper::generate_study_json(&tenant_id,study_uid.as_str(), &dicom_path, &json_path) {
             return HttpResponse::InternalServerError().body(format!(
                 "retrieve_study_metadata Failed to generate JSON file: {}: {}",
                 json_path.display(),
@@ -440,17 +441,46 @@ async fn retrieve_series_metadata(
     };
 
     info!(log, "Series Info: {:?}", series_info);
-
-    while rh
-        .get_series_metadata_gererate(tenant_id.as_str(), series_uid.as_str())
-        .await
-        .is_ok()
-    {
-        info!(
+    info!(
             log,
-            "get_series_metadata_gererate is Ok , sleep 100 ms to wait generating json stopped"
+            "get_series_metadata_gererate:{},{}",
+            tenant_id,
+            series_uid
         );
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // 修复后的逻辑
+    let start_time = Instant::now();
+    let timeout_duration = std::time::Duration::from_secs(5);
+
+    loop {
+        match rh
+            .get_series_metadata_gererate(tenant_id.as_str(), series_uid.as_str())
+            .await
+        {
+            Ok(true) => {
+                // 检查是否超时
+                if start_time.elapsed() >= timeout_duration {
+                    info!(log, "Series metadata generation timeout after 5 seconds, continue processing");
+                    break;
+                }
+                // 键存在且值为"1"，表示仍在生成中，继续等待
+                info!(
+                log,
+                "Series metadata generation in progress, sleep 100 ms to wait"
+            );
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }
+            Ok(false) => {
+                // 键不存在或值不为"1"，表示生成已完成或未在进行中，跳出循环
+                info!(log, "No ongoing series metadata generation, continue processing");
+                break;
+            }
+            Err(e) => {
+                // 发生错误，记录错误并跳出循环
+                error!(log, "Error checking series metadata generation status: {}", e);
+                break;
+            }
+
+        }
     }
 
     let storage_config = StorageConfig::make_storage_config(&app_state.config );
