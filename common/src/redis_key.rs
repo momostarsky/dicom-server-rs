@@ -227,8 +227,10 @@ impl RedisHelper {
     ) -> Result<bool, redis::RedisError> {
         let key = format!("wado:{}:series:{}:json_generating", tenant_id, series_uid);
 
-        match self.get_value(key).await {
-            Ok(cached_data) => Ok(cached_data == "1"),
+        match self.get_value(key.as_str().parse().unwrap()).await {
+            Ok(cached_data) =>{
+                Ok(cached_data == "1")
+            }
             Err(_) => Ok(false),
         }
     }
