@@ -19,8 +19,8 @@
   },
   "local_storage": {
     "type": "DISK",
-    "dicm_store_path": "/home/zdy/dicom-server-rs/vdcmdata/xdcm",
-    "json_store_path": "/home/zdy/dicom-server-rs/vdcmdata/json"
+    "dicm_store_path": "~/dicom-server-rs/vdcmdata/xdcm",
+    "json_store_path": "~/dicom-server-rs/vdcmdata/json"
   },
   "dicom_store_scp": {
     "port": 11111,
