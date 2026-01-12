@@ -7,7 +7,7 @@ echo "Starting Redpanda initialization..."
 # 启动 Redpanda 服务
 rpk redpanda start \
       --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092 \
-      --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092 \
+      --advertise-kafka-addr internal://redpanda:9092,external://192.168.1.14:19092 \
       --mode dev-container \
       --smp 1 &
 REDPANDA_PID=$!
