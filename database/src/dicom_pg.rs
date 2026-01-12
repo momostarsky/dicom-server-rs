@@ -1,5 +1,7 @@
 use crate::dicom_dbprovider::{DbError, DbProvider};
-use crate::dicom_meta::{DicomArchiveState, DicomImageMeta, DicomJsonMeta, DicomStateMeta, DicomStoreMeta};
+use crate::dicom_meta::{
+    DicomImageMeta, DicomJsonMeta, DicomStateArchive, DicomStateMeta, DicomStoreMeta,
+};
 use async_trait::async_trait;
 use tokio_postgres::{Client, NoTls};
 #[derive(Debug, Clone)]
@@ -665,12 +667,113 @@ impl DbProvider for PgDbProvider {
         Ok(())
     }
 
-    async fn get_state_archives(&self) -> Result<Vec<(String, String, String, String)>, DbError> {
-        todo!()
+    // get all states that need to arichive to  S3 Storage and last update time older than 3 months
+    // return Vec of (tenant_id, study_uid, series_uid)
+    async fn get_state_archives(&self) -> Result<Vec<(String, String, String)>, DbError> {
+        let client = self.make_client().await?;
+        let statement = client
+            .prepare(
+                 "SELECT dsm.tenant_id, dsm.study_uid, dsm.series_uid
+                        FROM dicom_state_meta AS dsm
+                        WHERE dsm.updated_time < NOW() - INTERVAL '3 months'
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM dicom_state_archive dsa
+                              WHERE dsa.tenant_id = dsm.tenant_id
+                                AND dsa.study_uid = dsm.study_uid
+                                AND dsa.series_uid = dsm.series_uid
+                          )
+                        ORDER BY dsm.updated_time
+                        LIMIT 10; ",
+            )
+            .await
+            .map_err(|e| DbError::DatabaseError(e.to_string()))?;
+
+        let rows = client
+            .query(&statement, &[])
+            .await
+            .map_err(|e| DbError::DatabaseError(e.to_string()))?;
+
+        let mut result = Vec::with_capacity(rows.len());
+        for row in rows {
+            let tenant_id: String = row.get(0);
+            let study_uid: String = row.get(1);
+            let series_uid: String = row.get(2);
+            result.push((tenant_id, study_uid, series_uid));
+        }
+
+        Ok(result)
     }
 
-    async fn save_archive_list(&self, archive_infos: &[DicomArchiveState]) -> Result<(), DbError> {
-        todo!()
+    // 替换原来的 save_archive_list 方法
+    async fn save_archive_list(&self, archive_infos: &[DicomStateArchive]) -> Result<(), DbError> {
+        if archive_infos.is_empty() {
+            return Ok(());
+        }
+
+        let mut client = self.make_client().await?;
+        let transaction = client.transaction().await.map_err(|e| {
+            println!("Failed to start transaction: {}", e);
+            DbError::DatabaseError(e.to_string())
+        })?;
+
+        println!(
+            "Starting transaction to save archive info list of length {}",
+            archive_infos.len()
+        );
+
+        let statement = transaction
+            .prepare(
+                r#"
+            INSERT INTO dicom_state_archive (
+                tenant_id,
+                study_uid,
+                series_uid,
+                start_time,
+                end_time,
+                space_size
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6
+            )
+            ON CONFLICT (tenant_id, study_uid, series_uid)
+            DO UPDATE SET
+                start_time = EXCLUDED.start_time,
+                end_time = EXCLUDED.end_time,
+                space_size = EXCLUDED.space_size
+            "#,
+            )
+            .await
+            .map_err(|e| {
+                println!("Error preparing statement: {:?}", e);
+                DbError::DatabaseError(e.to_string())
+            })?;
+
+        for archive_info in archive_infos {
+            transaction
+                .execute(
+                    &statement,
+                    &[
+                        &archive_info.tenant_id,
+                        &archive_info.study_uid,
+                        &archive_info.series_uid,
+                        &archive_info.start_time,
+                        &archive_info.end_time,
+                        &archive_info.space_size,
+                    ],
+                )
+                .await
+                .map_err(|e| {
+                    println!("Error executing statement: {:?}", e);
+                    DbError::DatabaseError(e.to_string())
+                })?;
+        }
+
+        transaction.commit().await.map_err(|e| {
+            println!("Error committing transaction: {:?}", e);
+            DbError::DatabaseError(e.to_string())
+        })?;
+
+        Ok(())
     }
 
     async fn get_state_metaes(

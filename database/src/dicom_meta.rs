@@ -307,7 +307,7 @@ pub struct DicomImageMeta {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DicomArchiveState {
+pub struct DicomStateArchive {
     #[serde(rename = "tenant_id")]
     pub tenant_id: BoundedString<64>,
     #[serde(rename = "study_uid")]

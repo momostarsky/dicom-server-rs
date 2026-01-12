@@ -1,5 +1,5 @@
 use crate::dicom_meta::{
-    DicomArchiveState, DicomImageMeta, DicomJsonMeta, DicomStateMeta, DicomStoreMeta,
+    DicomStateArchive, DicomImageMeta, DicomJsonMeta, DicomStateMeta, DicomStoreMeta,
 };
 use async_trait::async_trait;
 use thiserror::Error;
@@ -37,10 +37,10 @@ pub trait DbProvider: Send + Sync {
 
     /// get all states that need to arichive to  S3 Storage
     /// return Vec of (tenant_id, study_date, study_uid, series_uid)
-    async fn get_state_archives(&self) -> Result<Vec<(String, String, String, String)>, DbError>;
+    async fn get_state_archives(&self) -> Result<Vec<(String, String, String)>, DbError>;
 
     /// save archive info into Persistent DB
-    async fn save_archive_list(&self, archive_infos: &[DicomArchiveState]) -> Result<(), DbError>;
+    async fn save_archive_list(&self, archive_infos: &[DicomStateArchive]) -> Result<(), DbError>;
 
     async fn get_state_metaes(
         &self,
