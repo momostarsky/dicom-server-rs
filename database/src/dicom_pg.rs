@@ -1,5 +1,5 @@
 use crate::dicom_dbprovider::{DbError, DbProvider};
-use crate::dicom_meta::{DicomImageMeta, DicomJsonMeta, DicomStateMeta, DicomStoreMeta};
+use crate::dicom_meta::{DicomArchiveState, DicomImageMeta, DicomJsonMeta, DicomStateMeta, DicomStoreMeta};
 use async_trait::async_trait;
 use tokio_postgres::{Client, NoTls};
 #[derive(Debug, Clone)]
@@ -663,6 +663,14 @@ impl DbProvider for PgDbProvider {
         })?;
 
         Ok(())
+    }
+
+    async fn get_state_archives(&self) -> Result<Vec<(String, String, String, String)>, DbError> {
+        todo!()
+    }
+
+    async fn save_archive_list(&self, archive_infos: &[DicomArchiveState]) -> Result<(), DbError> {
+        todo!()
     }
 
     async fn get_state_metaes(

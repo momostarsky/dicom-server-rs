@@ -1,4 +1,6 @@
-use crate::dicom_meta::{DicomImageMeta, DicomJsonMeta, DicomStateMeta, DicomStoreMeta};
+use crate::dicom_meta::{
+    DicomArchiveState, DicomImageMeta, DicomJsonMeta, DicomStateMeta, DicomStoreMeta,
+};
 use async_trait::async_trait;
 use thiserror::Error;
 
@@ -24,7 +26,6 @@ pub fn current_time() -> chrono::NaiveDateTime {
 }
 #[async_trait]
 pub trait DbProvider: Send + Sync {
-
     async fn save_store_list(&self, store_meta_list: &[DicomStoreMeta]) -> Result<(), DbError>;
 
     async fn save_state_info(&self, state_meta: &DicomStateMeta) -> Result<(), DbError>;
@@ -33,6 +34,13 @@ pub trait DbProvider: Send + Sync {
     async fn save_image_list(&self, state_meta: &[DicomImageMeta]) -> Result<(), DbError>;
 
     async fn save_json_list(&self, state_meta: &[DicomJsonMeta]) -> Result<(), DbError>;
+
+    /// get all states that need to arichive to  S3 Storage
+    /// return Vec of (tenant_id, study_date, study_uid, series_uid)
+    async fn get_state_archives(&self) -> Result<Vec<(String, String, String, String)>, DbError>;
+
+    /// save archive info into Persistent DB
+    async fn save_archive_list(&self, archive_infos: &[DicomArchiveState]) -> Result<(), DbError>;
 
     async fn get_state_metaes(
         &self,
