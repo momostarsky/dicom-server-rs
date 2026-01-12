@@ -671,21 +671,40 @@ impl DbProvider for PgDbProvider {
     // return Vec of (tenant_id, study_uid, series_uid)
     async fn get_state_archives(&self) -> Result<Vec<(String, String, String)>, DbError> {
         let client = self.make_client().await?;
+        #[cfg(debug_assertions)]
+        let query = "
+            SELECT dsm.tenant_id, dsm.study_uid, dsm.series_uid
+            FROM dicom_state_meta AS dsm
+            WHERE dsm.updated_time < NOW() - INTERVAL  '30 minutes'
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM dicom_state_archive dsa
+                  WHERE dsa.tenant_id = dsm.tenant_id
+                    AND dsa.study_uid = dsm.study_uid
+                    AND dsa.series_uid = dsm.series_uid
+              )
+            ORDER BY dsm.updated_time
+            LIMIT 10;
+        ";
+
+        #[cfg(not(debug_assertions))]
+        let query = "
+            SELECT dsm.tenant_id, dsm.study_uid, dsm.series_uid
+            FROM dicom_state_meta AS dsm
+            WHERE dsm.updated_time < NOW() - INTERVAL '3 months'
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM dicom_state_archive dsa
+                  WHERE dsa.tenant_id = dsm.tenant_id
+                    AND dsa.study_uid = dsm.study_uid
+                    AND dsa.series_uid = dsm.series_uid
+              )
+            ORDER BY dsm.updated_time
+            LIMIT 100;  -- release 模式下返回更多记录
+        ";
+
         let statement = client
-            .prepare(
-                 "SELECT dsm.tenant_id, dsm.study_uid, dsm.series_uid
-                        FROM dicom_state_meta AS dsm
-                        WHERE dsm.updated_time < NOW() - INTERVAL '3 months'
-                          AND NOT EXISTS (
-                              SELECT 1
-                              FROM dicom_state_archive dsa
-                              WHERE dsa.tenant_id = dsm.tenant_id
-                                AND dsa.study_uid = dsm.study_uid
-                                AND dsa.series_uid = dsm.series_uid
-                          )
-                        ORDER BY dsm.updated_time
-                        LIMIT 10; ",
-            )
+            .prepare(query)
             .await
             .map_err(|e| DbError::DatabaseError(e.to_string()))?;
 
