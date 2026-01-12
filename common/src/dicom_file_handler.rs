@@ -103,12 +103,9 @@ pub async fn process_dicom_buffer(
         .build()
         .whatever_context("failed to build DICOM meta file information")?;
     let file_obj = obj.with_exact_meta(file_meta);
-
-    let study_date_str = study_date.format("%Y%m%d").to_string();
     let dir_path = storage_config
         .make_series_dicom_dir(
             tenant_id,
-            &*study_date_str,
             study_uid.as_str(),
             series_uid.as_str(),
             true,

@@ -504,10 +504,9 @@ async fn process_multipart_fields(
 
                             let dir_path = match storage_confg.make_series_dicom_dir(
                                 tenant_id,
-                                &study_date.unwrap().to_string(),
                                 tag_study_uid.unwrap().as_str(),
                                 seris_instance_uid.unwrap().as_str(),
-                                true,
+                                 true,
                             ) {
                                 Ok(path) => path,
                                 Err(_e) => {

@@ -41,10 +41,9 @@ impl<'a> StorageConfig<'a> {
     ) -> Result<String, std::io::Error> {
         let dicom_store_path = &self.app_config.local_storage.dicm_store_path;
         let study_dir = format!(
-            "{}/{}/{}/{}/{}",
+            "{}/{}/{}/{}",
             dicom_store_path,
             study_info.tenant_id.as_str(),
-            study_info.study_date_origin.as_str(),
             study_info.study_uid.as_str(),
             study_info.series_uid.as_str()
         );
@@ -66,10 +65,9 @@ impl<'a> StorageConfig<'a> {
     ) -> Result<String, std::io::Error> {
         let json_store_path = &self.app_config.local_storage.json_store_path;
         let study_dir = format!(
-            "{}/{}/metadata/{}",
+            "{}/{}/metadata",
             json_store_path,
-            study_info.tenant_id.as_str(),
-            study_info.study_date_origin.as_str()
+            study_info.tenant_id.as_str()
         );
         let json_path = format!("{}/{}.json", study_dir, study_info.study_uid.as_str());
         if create_when_not_exists {
@@ -90,10 +88,9 @@ impl<'a> StorageConfig<'a> {
     ) -> Result<String, std::io::Error> {
         let json_store_path = &self.app_config.local_storage.json_store_path;
         let study_dir = format!(
-            "{}/{}/metadata/{}/{}",
+            "{}/{}/metadata/{}",
             json_store_path,
             study_info.tenant_id.as_str(),
-            study_info.study_date_origin.as_str(),
             study_info.study_uid.as_str()
         );
         let json_path = format!("{}/{}.json", study_dir, study_info.series_uid.as_str());
@@ -111,15 +108,14 @@ impl<'a> StorageConfig<'a> {
     pub fn make_series_dicom_dir(
         &self,
         tenant_id: &str,
-        study_date: &str,
         study_uid: &str,
         series_uid: &str,
         create_when_not_exists: bool,
     ) -> Result<String, std::io::Error> {
         let dicom_store_path = &self.app_config.local_storage.dicm_store_path;
         let study_dir = format!(
-            "{}/{}/{}/{}/{}",
-            dicom_store_path, tenant_id, study_date, study_uid, series_uid
+            "{}/{}/{}/{}",
+            dicom_store_path, tenant_id,   study_uid, series_uid
         );
         if create_when_not_exists {
             std::fs::create_dir_all(&study_dir).map_err(|e| {
