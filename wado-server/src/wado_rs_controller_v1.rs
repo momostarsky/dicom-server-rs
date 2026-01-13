@@ -185,8 +185,7 @@ async fn retrieve_study_metadata(
     }
 
     //  从缓存中加载study_info
-    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state ).await
-    {
+    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state).await {
         Ok(info) => info,
         Err(response) => return response,
     };
@@ -210,7 +209,11 @@ async fn retrieve_study_metadata(
 
     let storage_config = StorageConfig::make_storage_config(&app_state.config);
 
-    let json_path = match storage_config.json_metadata_path_for_study(study_info, false) {
+    let tenant_id = study_info.tenant_id.as_str();
+    let study_uid = study_info.study_uid.as_str();
+    let series_uid = study_info.series_uid.as_str();
+
+    let json_path = match storage_config.json_metadata_path_for_study(tenant_id, study_uid, false) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -218,7 +221,7 @@ async fn retrieve_study_metadata(
         }
     };
 
-    let dicom_dir = match storage_config.dicom_study_dir(study_info, false) {
+    let dicom_dir = match storage_config.dicom_study_dir(tenant_id, study_uid, false) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -227,7 +230,7 @@ async fn retrieve_study_metadata(
     };
 
     // 判断JSON是否生成
-    let db_json = get_series_json_meta(&tenant_id, &study_uid, &study_uid, &app_state).await;
+    let db_json = get_series_json_meta(tenant_id, study_uid, series_uid, &app_state).await;
     if db_json.is_some() && std::path::Path::new(&json_path).exists() {
         let read_context = std::fs::read_to_string(&json_path);
         if read_context.is_ok() {
@@ -241,7 +244,9 @@ async fn retrieve_study_metadata(
         let dicom_path = PathBuf::from(&dicom_dir);
         let json_path = PathBuf::from(&json_path);
         info!(log, "DICOM directory: {:?}", dicom_path);
-        if let Err(e) = dicom_json_helper::generate_study_json(&tenant_id,study_uid.as_str(), &dicom_path, &json_path) {
+        if let Err(e) =
+            dicom_json_helper::generate_study_json(&tenant_id, study_uid, &dicom_path, &json_path)
+        {
             return HttpResponse::InternalServerError().body(format!(
                 "retrieve_study_metadata Failed to generate JSON file: {}: {}",
                 json_path.display(),
@@ -320,11 +325,10 @@ async fn retrieve_study_subseries(
         ));
     }
     //  从缓存中加载study_info
-    let study_info =
-        match get_study_info_with_cache(&tenant_id, &study_uid, &app_state).await {
-            Ok(info) => info,
-            Err(response) => return response,
-        };
+    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state).await {
+        Ok(info) => info,
+        Err(response) => return response,
+    };
     if study_info.is_empty() {
         return HttpResponse::NotFound().body(format!(
             "retrieve_study_metadata Study not found in database retry after 30 seconds: {},{}",
@@ -413,8 +417,7 @@ async fn retrieve_series_metadata(
         ));
     }
     // ... existing code ...
-    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state ).await
-    {
+    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state).await {
         Ok(info) => info,
         Err(response) => return response,
     };
@@ -442,11 +445,9 @@ async fn retrieve_series_metadata(
 
     info!(log, "Series Info: {:?}", series_info);
     info!(
-            log,
-            "get_series_metadata_gererate:{},{}",
-            tenant_id,
-            series_uid
-        );
+        log,
+        "get_series_metadata_gererate:{},{}", tenant_id, series_uid
+    );
     // 修复后的逻辑
     let start_time = Instant::now();
     let timeout_duration = std::time::Duration::from_secs(5);
@@ -459,33 +460,46 @@ async fn retrieve_series_metadata(
             Ok(true) => {
                 // 检查是否超时
                 if start_time.elapsed() >= timeout_duration {
-                    info!(log, "Series metadata generation timeout after 5 seconds, continue processing");
+                    info!(
+                        log,
+                        "Series metadata generation timeout after 5 seconds, continue processing"
+                    );
                     break;
                 }
                 // 键存在且值为"1"，表示仍在生成中，继续等待
                 info!(
-                log,
-                "Series metadata generation in progress, sleep 100 ms to wait"
-            );
+                    log,
+                    "Series metadata generation in progress, sleep 100 ms to wait"
+                );
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             }
             Ok(false) => {
                 // 键不存在或值不为"1"，表示生成已完成或未在进行中，跳出循环
-                info!(log, "No ongoing series metadata generation, continue processing");
+                info!(
+                    log,
+                    "No ongoing series metadata generation, continue processing"
+                );
                 break;
             }
             Err(e) => {
                 // 发生错误，记录错误并跳出循环
-                error!(log, "Error checking series metadata generation status: {}", e);
+                error!(
+                    log,
+                    "Error checking series metadata generation status: {}", e
+                );
                 break;
             }
-
         }
     }
 
-    let storage_config = StorageConfig::make_storage_config(&app_state.config );
+    let storage_config = StorageConfig::make_storage_config(&app_state.config);
+    let tenant_id = series_info.tenant_id.as_str();
+    let study_uid = series_info.study_uid.as_str();
+    let series_uid = series_info.series_uid.as_str();
 
-    let json_file_path = match storage_config.json_metadata_path_for_series(&series_info, true) {
+    let json_file_path = match storage_config
+        .json_metadata_path_for_series(tenant_id, study_uid, series_uid, true)
+    {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -629,8 +643,7 @@ async fn retrieve_instance_impl(
         ));
     }
     // 获取series_info (使用提取的函数)
-    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state ).await
-    {
+    let study_info = match get_study_info_with_cache(&tenant_id, &study_uid, &app_state).await {
         Ok(info) => info,
         Err(response) => return response,
     };
@@ -657,9 +670,11 @@ async fn retrieve_instance_impl(
 
     info!(log, "Series Info: {:?}", series_info);
 
-    let storage_config = StorageConfig::make_storage_config(&app_state.config );
-
-    let dicom_dir = match storage_config.dicom_series_dir(&series_info, false) {
+    let storage_config = StorageConfig::make_storage_config(&app_state.config);
+    let tenant_id = series_info.tenant_id.as_str();
+    let study_uid = series_info.study_uid.as_str();
+    let series_uid = series_info.series_uid.as_str();
+    let dicom_dir = match storage_config.dicom_series_dir(tenant_id, study_uid, series_uid, false) {
         Ok(v) => v,
         Err(e) => {
             return HttpResponse::InternalServerError()
@@ -687,7 +702,6 @@ async fn retrieve_instance_impl(
         Err(_) => HttpResponse::NotFound().body(format!("DICOM file not found: {}", &dicom_file)),
     }
 }
-
 
 use crate::auth_information::Claims; // 确保能访问Claims结构
 

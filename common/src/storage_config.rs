@@ -1,5 +1,4 @@
 use crate::server_config::AppConfig;
-use database::dicom_meta::DicomStateMeta;
 use seahash::SeaHasher;
 use std::hash::Hasher;
 pub struct StorageConfig<'a> {
@@ -12,17 +11,12 @@ impl<'a> StorageConfig<'a> {
     }
     pub fn dicom_study_dir(
         &self,
-        study_info: &DicomStateMeta,
+        tenant_id: &str,
+        study_uid: &str,
         create_not_exists: bool,
     ) -> Result<String, std::io::Error> {
         let dicom_store_path = &self.app_config.local_storage.dicm_store_path;
-        let study_dir = format!(
-            "{}/{}/{}/{}",
-            dicom_store_path,
-            study_info.tenant_id.as_str(),
-            study_info.study_date_origin.as_str(),
-            study_info.study_uid.as_str()
-        );
+        let study_dir = format!("{}/{}/{}", dicom_store_path, tenant_id, study_uid);
         if create_not_exists {
             std::fs::create_dir_all(&study_dir).map_err(|e| {
                 std::io::Error::new(
@@ -36,16 +30,15 @@ impl<'a> StorageConfig<'a> {
 
     pub fn dicom_series_dir(
         &self,
-        study_info: &DicomStateMeta,
+        tenant_id: &str,
+        study_uid: &str,
+        series_uid: &str,
         create_when_not_exists: bool,
     ) -> Result<String, std::io::Error> {
         let dicom_store_path = &self.app_config.local_storage.dicm_store_path;
         let study_dir = format!(
             "{}/{}/{}/{}",
-            dicom_store_path,
-            study_info.tenant_id.as_str(),
-            study_info.study_uid.as_str(),
-            study_info.series_uid.as_str()
+            dicom_store_path, tenant_id, study_uid, series_uid
         );
         if create_when_not_exists {
             std::fs::create_dir_all(&study_dir).map_err(|e| {
@@ -60,16 +53,14 @@ impl<'a> StorageConfig<'a> {
 
     pub fn json_metadata_path_for_study(
         &self,
-        study_info: &DicomStateMeta,
+        tenant_id: &str,
+        study_uid: &str,
+
         create_when_not_exists: bool,
     ) -> Result<String, std::io::Error> {
         let json_store_path = &self.app_config.local_storage.json_store_path;
-        let study_dir = format!(
-            "{}/{}/metadata",
-            json_store_path,
-            study_info.tenant_id.as_str()
-        );
-        let json_path = format!("{}/{}.json", study_dir, study_info.study_uid.as_str());
+        let study_dir = format!("{}/{}/metadata", json_store_path, tenant_id);
+        let json_path = format!("{}/{}.json", study_dir, study_uid);
         if create_when_not_exists {
             std::fs::create_dir_all(&study_dir).map_err(|e| {
                 std::io::Error::new(
@@ -83,17 +74,14 @@ impl<'a> StorageConfig<'a> {
 
     pub fn json_metadata_path_for_series(
         &self,
-        study_info: &DicomStateMeta,
+        tenant_id: &str,
+        study_uid: &str,
+        series_uid: &str,
         create_when_not_exists: bool,
     ) -> Result<String, std::io::Error> {
         let json_store_path = &self.app_config.local_storage.json_store_path;
-        let study_dir = format!(
-            "{}/{}/metadata/{}",
-            json_store_path,
-            study_info.tenant_id.as_str(),
-            study_info.study_uid.as_str()
-        );
-        let json_path = format!("{}/{}.json", study_dir, study_info.series_uid.as_str());
+        let study_dir = format!("{}/{}/metadata/{}", json_store_path, tenant_id, study_uid);
+        let json_path = format!("{}/{}.json", study_dir, series_uid);
         if create_when_not_exists {
             std::fs::create_dir_all(&study_dir).map_err(|e| {
                 std::io::Error::new(
@@ -115,7 +103,7 @@ impl<'a> StorageConfig<'a> {
         let dicom_store_path = &self.app_config.local_storage.dicm_store_path;
         let study_dir = format!(
             "{}/{}/{}/{}",
-            dicom_store_path, tenant_id,   study_uid, series_uid
+            dicom_store_path, tenant_id, study_uid, series_uid
         );
         if create_when_not_exists {
             std::fs::create_dir_all(&study_dir).map_err(|e| {

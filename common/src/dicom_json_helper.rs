@@ -284,7 +284,10 @@ pub async fn generate_series_json(series_info: &DicomStateMeta) -> Result<String
     };
     let storage_config = StorageConfig::make_storage_config(&app_config);
 
-    let json_file_path = match storage_config.json_metadata_path_for_series(series_info, true) {
+    let tenant_id = series_info.tenant_id.as_str();
+    let study_uid = series_info.study_uid.as_str();
+    let series_uid = series_info.series_uid.as_str();
+    let json_file_path = match storage_config.json_metadata_path_for_series(tenant_id, study_uid, series_uid, true) {
         Ok(v) => v,
         Err(e) => {
             return Err(Error::new(
@@ -294,7 +297,7 @@ pub async fn generate_series_json(series_info: &DicomStateMeta) -> Result<String
         }
     };
 
-    let dicom_dir = match storage_config.dicom_series_dir(series_info, false) {
+    let dicom_dir = match storage_config.dicom_series_dir(tenant_id, study_uid, series_uid,  false) {
         Ok(vv) => vv,
         Err(_) => {
             return Err(Error::new(
