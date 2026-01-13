@@ -675,7 +675,7 @@ impl DbProvider for PgDbProvider {
         let query = "
             SELECT dsm.tenant_id, dsm.study_uid, dsm.series_uid
             FROM dicom_state_meta AS dsm
-            WHERE dsm.updated_time < NOW() - INTERVAL  '30 minutes'
+            WHERE dsm.updated_time > NOW() - INTERVAL  '30 minutes'
               AND NOT EXISTS (
                   SELECT 1
                   FROM dicom_state_archive dsa
@@ -691,7 +691,7 @@ impl DbProvider for PgDbProvider {
         let query = "
             SELECT dsm.tenant_id, dsm.study_uid, dsm.series_uid
             FROM dicom_state_meta AS dsm
-            WHERE dsm.updated_time < NOW() - INTERVAL '3 months'
+            WHERE dsm.updated_time > NOW() - INTERVAL '3 months'
               AND NOT EXISTS (
                   SELECT 1
                   FROM dicom_state_archive dsa
