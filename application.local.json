@@ -70,7 +70,8 @@
   "s3config": {
     "s3_end_point": "http://192.168.1.14:9000",
     "region": "us-east-1",
-    "s3_bucket_name": "xdicom",
+    "s3_dicom_bucket_name": "xdicom",
+    "s3_json_bucket_name": "xjson",
     "s3_access_key": "xdicom_admin",
     "s3_secret_key": "xdicom3ks"
   }

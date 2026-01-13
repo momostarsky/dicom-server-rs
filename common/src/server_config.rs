@@ -111,8 +111,10 @@ pub struct S3StorageConfig {
     pub s3_end_point: String,
 
     pub region:Option<String>,
-    /// bucket_name
-    pub s3_bucket_name: String,
+    /// bucket_name for dicom
+    pub s3_dicom_bucket_name: String,
+    /// bucket_name for JSON
+    pub s3_json_bucket_name: String,
     /// access_id
     pub s3_access_key: String,
     /// secret_key

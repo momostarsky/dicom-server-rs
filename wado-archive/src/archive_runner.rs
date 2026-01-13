@@ -14,11 +14,11 @@ pub(crate) async fn background_task_manager(app_state: AppState) {
     }
 }
 
-// 执行后台JSON生成任务
+/// execute archive dicom files to s3 storage
 async fn execute_archive(app_state: &AppState) -> Result<(), Box<dyn std::error::Error>> {
     info!(
         app_state.log,
-        "Starting background JSON metadata generation"
+        "Starting background execute_archive"
     );
 
     // 调用数据库获取需要生成JSON的记录
@@ -32,6 +32,9 @@ async fn execute_archive(app_state: &AppState) -> Result<(), Box<dyn std::error:
         "Found {} records for archive processing",
         pending_records.len()
     );
+    for record in pending_records {
+         info!(app_state.log, "Processing archive record: {:?}", record);
+    }
 
     info!(app_state.log, "Background archive completed");
     Ok(())
