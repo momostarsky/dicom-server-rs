@@ -70,3 +70,4 @@ target/release
 /common/data/x-RLELossless.dcm
 [Xx]-*.dcm
 [Yy]-*.dcm
+*-nlog.txt
