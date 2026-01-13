@@ -106,6 +106,22 @@ pub struct WebWorkerConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct S3StorageConfig {
+    ///MINIO_ENDPOINT  + X 分钟内没有更新
+    pub s3_end_point: String,
+
+    pub region:Option<String>,
+    /// bucket_name for dicom
+    pub s3_dicom_bucket_name: String,
+    /// bucket_name for JSON
+    pub s3_json_bucket_name: String,
+    /// access_id
+    pub s3_access_key: String,
+    /// secret_key
+    pub s3_secret_key: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
     pub redis: RedisConfig,
     pub kafka: KafkaConfig,
@@ -117,6 +133,7 @@ pub struct AppConfig {
     pub wado_oauth2: Option<OAuth2Config>,
     pub stow_oauth2: Option<OAuth2Config>,
     pub webworker: Option<WebWorkerConfig>,
+    pub s3config: Option<S3StorageConfig>,
 }
 
 static APP_ENV: &str = "APP_ENV";
@@ -223,8 +240,10 @@ fn load_config_internal() -> Result<AppConfig, ConfigError> {
         .map_err(|err| ConfigError::Message(format!("Error parsing config: {}", err)))?;
 
     // 展开并标准化本地存储路径
-    app_config.local_storage.dicm_store_path = expand_path(&app_config.local_storage.dicm_store_path)?;
-    app_config.local_storage.json_store_path = expand_path(&app_config.local_storage.json_store_path)?;
+    app_config.local_storage.dicm_store_path =
+        expand_path(&app_config.local_storage.dicm_store_path)?;
+    app_config.local_storage.json_store_path =
+        expand_path(&app_config.local_storage.json_store_path)?;
 
     // 验证本地存储路径
     validate_and_create_path(&app_config.local_storage.dicm_store_path, "dicm_store_path")?;
@@ -336,17 +355,19 @@ pub fn generate_pg_database_connection(dbconfig: &DatabaseConfig) -> Result<Stri
     Ok(db_conn)
 }
 
-use std::path::{Path};
+use std::path::Path;
 
 fn expand_path(path: &str) -> Result<String, ConfigError> {
     let path = Path::new(path);
 
     let expanded_path = if path.starts_with("~") {
         // 处理 ~ 开头的路径
-        let home_dir = dirs::home_dir()
-            .ok_or_else(|| ConfigError::Message("Could not determine home directory".to_string()))?;
+        let home_dir = dirs::home_dir().ok_or_else(|| {
+            ConfigError::Message("Could not determine home directory".to_string())
+        })?;
 
-        let relative_path = path.strip_prefix("~")
+        let relative_path = path
+            .strip_prefix("~")
             .map_err(|_| ConfigError::Message("Failed to strip ~ prefix".to_string()))?;
 
         home_dir.join(relative_path)
@@ -355,7 +376,8 @@ fn expand_path(path: &str) -> Result<String, ConfigError> {
         let current_dir = env::current_dir()
             .map_err(|e| ConfigError::Message(format!("Failed to get current directory: {}", e)))?;
 
-        let relative_path = path.strip_prefix("./")
+        let relative_path = path
+            .strip_prefix("./")
             .or_else(|_| path.strip_prefix("."))
             .map_err(|_| ConfigError::Message("Failed to strip . prefix".to_string()))?;
 

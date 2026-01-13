@@ -3,16 +3,21 @@
 set -e
 
 echo "Starting Redpanda initialization..."
-
-# 启动 Redpanda 服务
+IPADDR=$(hostname -I | awk '{print $1}')
+echo "Host IP: $IPADDR"
+ADVERTISE_IP=${HOST_IP:-${IPADDR:-localhost}}
+echo "Detected Container IP: $IPADDR"
+echo "Final Advertised IP: $ADVERTISE_IP"
+# start redpanda service
+# shellcheck disable=SC1073
 rpk redpanda start \
       --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092 \
-      --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092 \
+      --advertise-kafka-addr internal://redpanda:9092,external://"${ADVERTISE_IP}":19092 \
       --mode dev-container \
       --smp 1 &
 REDPANDA_PID=$!
 
-# 等待服务启动
+# wait for redpanda to started...
 echo "Waiting for Redpanda..."
 until rpk cluster info --brokers localhost:9092 &> /dev/null; do
   echo "waiting Redpanda Kafka API..."
@@ -21,10 +26,10 @@ done
 
 echo "Creating topics..."
 
-# 定义要创建的主题列表
+# topices to be create.
 TOPICS=("dicom_image_queue" "dicom_state_queue" "log_queue" "storage_queue" "webapi_access_queue")
 
-# 检查并创建主题
+# check and create topics
 for topic in "${TOPICS[@]}"; do
   if rpk topic list --brokers localhost:9092 | grep -q "^$topic "; then
     echo "Topic '$topic' already exists, skipping..."
@@ -37,5 +42,5 @@ done
 
 echo "Topics created completed"
 
-# 等待 Redpanda 进程
+# waiting to redpanda process exit
 wait $REDPANDA_PID

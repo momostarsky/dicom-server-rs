@@ -367,8 +367,8 @@ pub async fn run_store_async(
     if !dicom_message_lists.is_empty() {
         info!(
             &logger,
-            "Finished processing association with {}",
-            association.client_ae_title()
+            "Processed remains  messages {}",
+            dicom_message_lists.len()
         );
         match classify_and_publish_dicom_messages(
             &dicom_message_lists,

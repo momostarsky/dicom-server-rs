@@ -231,3 +231,15 @@ create index idx_dicom_object_meta
 
 create index idx_dicom_object_meta_createdate
     on dicom_object_meta (tenant_id, created_time);
+
+
+create table  IF NOT EXISTS  dicom_state_archive
+(
+    tenant_id                varchar(64) not null,
+    study_uid                varchar(64) not null,
+    series_uid               varchar(64) not null,
+    start_time               timestamp,
+    end_time                 timestamp,
+    space_size               bigint,
+    primary key (tenant_id, study_uid, series_uid)
+);

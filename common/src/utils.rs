@@ -155,6 +155,8 @@ pub fn deduplicate_state_metas(state_metas: Vec<DicomStateMeta>) -> Vec<DicomSta
 }
 
 use futures::StreamExt;
+use thiserror::Error;
+
 pub async fn group_dicom_state(
     messages: &[DicomStoreMeta],
 ) -> Result<(Vec<DicomStateMeta>, Vec<DicomImageMeta>), ReadError> {
@@ -281,11 +283,26 @@ fn can_read_file(p0: &&str) -> bool {
     File::open(p0).is_ok()
 }
 
+#[derive(Error, Debug)]
+pub enum UtilsError {
+    #[error("Message publishing failed: {0}")]
+    PublishError(String),
+
+    #[error("File operation failed: {0}")]
+    FileError(String),
+
+    #[error("DICOM processing failed: {0}")]
+    DicomError(String),
+
+    #[error("Transfer syntax conversion failed: {0}")]
+    ConversionError(String),
+}
+
 // 发送消息到指定队列
 pub async fn publish_messages(
     message_producer: &dyn MessagePublisher,
     dicom_message_lists: &[DicomStoreMeta],
-) -> Result<(), Whatever> {
+) -> Result<(), UtilsError> {
     if dicom_message_lists.is_empty() {
         return Ok(());
     }
@@ -297,17 +314,18 @@ pub async fn publish_messages(
     {
         Ok(_) => {
             info!(logger, "Successfully publish_messages");
+            Ok(())
         }
         Err(e) => {
             error!(logger, "Failed to publish_messages: {}", e);
+            Err(UtilsError::PublishError(e.to_string()))
         }
     }
-    Ok(())
 }
 pub async fn publish_state_messages(
     message_producer: &dyn MessagePublisher,
     state_metaes: &[DicomStateMeta],
-) -> Result<(), Whatever> {
+) -> Result<(), UtilsError> {
     if state_metaes.is_empty() {
         return Ok(());
     }
@@ -316,17 +334,19 @@ pub async fn publish_state_messages(
     match message_producer.send_state_messages(&state_metaes).await {
         Ok(_) => {
             info!(logger, "Successfully publish_state_messages");
+            Ok(())
         }
         Err(e) => {
             error!(logger, "Failed to publish_state_messages: {}", e);
+            Err(UtilsError::PublishError(e.to_string()))
         }
     }
-    Ok(())
+
 }
 pub async fn publish_image_messages(
     message_producer: &dyn MessagePublisher,
     image_metaes: &[DicomImageMeta],
-) -> Result<(), Whatever> {
+) -> Result<(), UtilsError> {
     if image_metaes.is_empty() {
         return Ok(());
     }
@@ -335,12 +355,14 @@ pub async fn publish_image_messages(
     match message_producer.send_image_messages(&image_metaes).await {
         Ok(_) => {
             info!(logger, "Successfully publish_image_messages");
+            Ok(())
         }
         Err(e) => {
             error!(logger, "Failed to publish_image_messages: {}", e);
+            Err(UtilsError::PublishError(e.to_string()))
         }
     }
-    Ok(())
+
 }
 
 pub async fn change_transfersyntax(src_file: &str) -> Result<(), Whatever> {

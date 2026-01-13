@@ -3,6 +3,9 @@ services:
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:latest # 使用最新的稳定版本
     container_name: redpanda
+    environment:
+      # external access IP
+      - HOST_IP=192.168.1.14
     ports:
       - "19092:19092" # 暴露给外部应用的 Kafka 端口
       - "9644:9644" # Admin API 端口

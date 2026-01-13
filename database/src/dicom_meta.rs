@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 
-#[derive(Clone, Debug, Serialize, Deserialize,PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[non_exhaustive]
 pub enum TransferStatus {
     NoNeedTransfer,
@@ -304,4 +304,20 @@ pub struct DicomImageMeta {
 
     #[serde(rename = "updated_time")]
     pub updated_time: NaiveDateTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DicomStateArchive {
+    #[serde(rename = "tenant_id")]
+    pub tenant_id: BoundedString<64>,
+    #[serde(rename = "study_uid")]
+    pub study_uid: BoundedString<64>,
+    #[serde(rename = "series_uid")]
+    pub series_uid: BoundedString<64>,
+    #[serde(rename = "created_time")]
+    pub start_time: NaiveDateTime,
+    #[serde(rename = "updated_time")]
+    pub end_time: NaiveDateTime,
+    #[serde(rename = "status")]
+    pub space_size: i64,
 }

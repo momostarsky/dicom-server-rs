@@ -2,7 +2,7 @@ use crate::dicom_utils::{get_bounder_string, get_date_value_dicom, get_tag_value
 use crate::message_sender_kafka::KafkaMessagePublisher;
 use crate::storage_config::{StorageConfig, hash_uid};
 use crate::utils;
-use crate::utils::get_logger;
+use crate::utils::{UtilsError, get_logger};
 use crate::{server_config, storage_config};
 use database::dicom_dbtype::{BoundedString, FixedLengthString};
 use database::dicom_meta::{DicomStoreMeta, TransferStatus};
@@ -38,13 +38,13 @@ static JS_CHANGE_TO_TS: LazyLock<String> = LazyLock::new(|| {
 });
 
 pub async fn process_dicom_buffer(
-    instance_buffer: &[u8],    //DICOM ByteStream
-    tenant_id: &String,        //hospital  or tenant id , or department id
-    ts: &String,               //Transfer Syntax UID
-    sop_instance_uid: &String, //Current file's SOP Instance UID
-    sop_class_uid: &String,    //Current file's SOP Class UID
-    ip: String,  // source  IP address of the DICOM sender
-    client_ae: String, // source  AE Title of the DICOM sender
+    instance_buffer: &[u8],             //DICOM ByteStream
+    tenant_id: &String,                 //hospital  or tenant id , or department id
+    ts: &String,                        //Transfer Syntax UID
+    sop_instance_uid: &String,          //Current file's SOP Instance UID
+    sop_class_uid: &String,             //Current file's SOP Class UID
+    ip: String,                         // source  IP address of the DICOM sender
+    client_ae: String,                  // source  AE Title of the DICOM sender
     storage_config: &StorageConfig<'_>, // storage config
 ) -> Result<DicomStoreMeta, Whatever> {
     let root_logger = get_logger();
@@ -103,12 +103,9 @@ pub async fn process_dicom_buffer(
         .build()
         .whatever_context("failed to build DICOM meta file information")?;
     let file_obj = obj.with_exact_meta(file_meta);
-
-    let study_date_str = study_date.format("%Y%m%d").to_string();
     let dir_path = storage_config
         .make_series_dicom_dir(
             tenant_id,
-            &*study_date_str,
             study_uid.as_str(),
             series_uid.as_str(),
             true,
@@ -127,7 +124,6 @@ pub async fn process_dicom_buffer(
     let mut transcode_status = TransferStatus::NoNeedTransfer;
     if !JS_SUPPORTED_TS.contains(ts) {
         transcode_status = TransferStatus::NeedTransfer;
-
     } else {
         info!(logger, "not need transcode: {}", ts.to_string());
     }
@@ -235,9 +231,6 @@ pub async fn process_dicom_memobject(
         frames
     );
 
-
-
-
     let study_uid_hash_v = hash_uid(study_uid.as_str());
     let series_uid_hash_v = hash_uid(series_uid.as_str());
     let uuid_v7 = Uuid::now_v7();
@@ -247,7 +240,6 @@ pub async fn process_dicom_memobject(
     if !JS_SUPPORTED_TS.contains(transfer_syntax_uid.as_str()) {
         transcode_status = TransferStatus::NeedTransfer;
     }
-
 
     let fsize = match std::fs::metadata(&dicom_file_path) {
         Ok(metadata) => metadata.len(),
@@ -435,6 +427,15 @@ pub async fn process_dicom_file_from_file(
         source_ae: BoundedString::<64>::make_str(&"STOW-RS-API"),
     })
 }
+
+#[derive(Debug)]
+pub struct PublishResult {
+    pub storage_success: bool,
+    pub log_success: bool,
+    pub storage_error: Option<UtilsError>,
+    pub log_error: Option<UtilsError>,
+}
+
 /// Publishes DICOM metadata to Kafka topics
 /// Files are saved to local disk regardless of transcoding success or failure
 ///
@@ -448,52 +449,72 @@ pub async fn classify_and_publish_dicom_messages(
     dicom_message_lists: &Vec<DicomStoreMeta>,
     storage_producer: &KafkaMessagePublisher,
     log_producer: &KafkaMessagePublisher,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<PublishResult, Box<dyn std::error::Error>> {
     let root_logger = get_logger();
-    let logger = root_logger.new(o!("wado-storescp"=>"classify_and_publish_dicom_messages"));
+    let logger = root_logger.new(o!("wado-storescp"=>"publish_messages"));
     if dicom_message_lists.is_empty() {
         info!(logger, "Empty dicom message list, skip");
-        return Ok(());
+        return Ok(PublishResult {
+            storage_success: true,
+            log_success: true,
+            storage_error: None,
+            log_error: None,
+        });
     }
 
     let message_count = dicom_message_lists.len();
 
-    let topic_name = storage_producer.topic();
-
+    let mut storage_success = false;
+    let mut log_success = false;
     match utils::publish_messages(storage_producer, &dicom_message_lists).await {
         Ok(_) => {
+            storage_success = true;
             info!(
                 logger,
-                "classify_and_publish_dicom_messages Successfully published {} supported messages to Kafka: {}",
-                message_count,
-                topic_name
+                "Successfully published {} supported messages to Kafka: storage_queue",
+                message_count
             );
         }
-        Err(e) => {
+        Err(_e) => {
+
             error!(
                 logger,
-                "classify_and_publish_dicom_messages Failed to publish messages to Kafka: {},  topic: {}", e, topic_name
+                "Failed to publish {} messages to Kafka: storage_queue", message_count
             );
         }
     }
 
-    let log_topic_name = log_producer.topic();
     match utils::publish_messages(log_producer, &dicom_message_lists).await {
         Ok(_) => {
+            log_success = true;
             info!(
                 logger,
-                "classify_and_publish_dicom_messages Successfully published {} messages to Kafka: {}",
-                message_count,
-                log_topic_name
+                "uccessfully published {} messages to Kafka: log_queue", message_count
             );
         }
-        Err(e) => {
+        Err(_e) => {
+
             error!(
                 logger,
-                "classify_and_publish_dicom_messages Failed to publish log messages to Kafka: {}, topic: {}", e, log_topic_name
+                "Failed to publish {} log messages to Kafka: log_queue", message_count
             );
         }
     }
-
-    Ok(())
+    // 如果任一发布失败，返回错误
+    if !storage_success || !log_success {
+        let error_msg = format!(
+            "Publish failed - storage_success: {}, log_success: {}",
+            storage_success, log_success
+        );
+        return Err(Box::from(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            error_msg,
+        )));
+    }
+    Ok(PublishResult {
+        storage_success: true,
+        log_success: true,
+        storage_error: None,
+        log_error: None,
+    })
 }
