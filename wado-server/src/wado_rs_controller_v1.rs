@@ -521,7 +521,7 @@ async fn retrieve_series_metadata(
 
     info!(log, "Study Info: {:?}", study_info);
 
-    match generate_series_json(&series_info).await {
+    match generate_series_json(&tenant_id, &study_uid, &series_uid).await {
         Ok(json_str) => HttpResponse::Ok()
             .content_type(ACCEPT_DICOM_JSON_TYPE)
             .body(json_str),

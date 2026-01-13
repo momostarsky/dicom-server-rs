@@ -3,6 +3,7 @@ use aws_sdk_s3::Client;
 use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
 use aws_sdk_s3::error::SdkError;
 use aws_smithy_types::byte_stream::ByteStream;
+use common::dicom_json_helper::generate_series_json;
 use common::storage_config::StorageConfig;
 use common::utils::{collect_dicom_file, get_current_time};
 use database::dicom_dbtype::BoundedString;
@@ -10,7 +11,7 @@ use database::dicom_meta::DicomStateArchive;
 use futures_util::future::join_all;
 use slog::{error, info};
 use std::fs;
-use std::time::{Duration};
+use std::time::Duration;
 use tokio::time::interval;
 
 pub(crate) async fn background_task_manager(app_state: AppState) {
@@ -130,7 +131,33 @@ async fn execute_archive(app_state: &AppState) -> Result<(), Box<dyn std::error:
                 app_state.log,
                 "json file path: {} not exists", &json_file_path
             );
-            continue;
+            let result_status =
+                match generate_series_json(&tenant_id, &study_uid, &series_uid).await {
+                    Ok(_) => {
+                        info!(
+                            app_state.log,
+                            "Generated JSON for tenant_id:{},  study: {}, series: {}",
+                            &tenant_id,
+                            &study_uid,
+                            &series_uid
+                        );
+                        true
+                    }
+                    Err(e) => {
+                        error!(
+                            app_state.log,
+                            "Failed to generate JSON for tenant_id:{},   study: {}, series: {}: {}",
+                            &tenant_id,
+                            &study_uid,
+                            &series_uid,
+                            e
+                        );
+                        false
+                    }
+                };
+            if false == result_status {
+                continue;
+            }
         }
         let series_dir =
             local_storage.make_series_dicom_dir(&tenant_id, &study_uid, &series_uid, false);

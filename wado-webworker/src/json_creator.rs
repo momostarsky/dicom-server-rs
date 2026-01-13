@@ -128,9 +128,9 @@ async fn execute_background_json_generation(
                 )
             }
         };
-        // 这里应该调用实际的JSON生成逻辑
-        // 可以参考wado_rs_controller.rs中的实现
-        let result_status = match generate_series_json(&record).await {
+
+
+        let result_status = match generate_series_json(&tenant_id, &study_uid, &series_uid).await {
             Ok(_) => {
                 info!(
                     app_state.log,

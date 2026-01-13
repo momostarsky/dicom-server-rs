@@ -9,7 +9,6 @@ use crate::encrypt_helper::{EncryptHelper, Salsa20Encryptor};
 use crate::storage_config::StorageConfig;
 use crate::utils::get_current_time;
 use crate::{dicom_utils, server_config};
-use database::dicom_meta::DicomStateMeta;
 use dicom_dictionary_std::tags;
 use dicom_object::file::CharacterSetOverride;
 use rayon::iter::ParallelIterator;
@@ -272,7 +271,7 @@ pub fn generate_study_json(
     Ok(())
 }
 
-pub async fn generate_series_json(series_info: &DicomStateMeta) -> Result<String, Error> {
+pub async fn generate_series_json(tenant_id:&str,study_uid:&str, series_uid:&str) -> Result<String, Error> {
     let app_config = match server_config::load_config() {
         Ok(v) => v,
         Err(e) => {
@@ -282,11 +281,7 @@ pub async fn generate_series_json(series_info: &DicomStateMeta) -> Result<String
             ));
         }
     };
-    let storage_config = StorageConfig::make_storage_config(&app_config);
-
-    let tenant_id = series_info.tenant_id.as_str();
-    let study_uid = series_info.study_uid.as_str();
-    let series_uid = series_info.series_uid.as_str();
+    let storage_config = StorageConfig::make_storage_config(&app_config); 
     let json_file_path = match storage_config.json_metadata_path_for_series(tenant_id, study_uid, series_uid, true) {
         Ok(v) => v,
         Err(e) => {
