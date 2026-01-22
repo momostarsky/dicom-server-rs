@@ -1,4 +1,4 @@
-use crate::change_ts::ExtractError::{MissingTag, TagValueUnExcepted};
+use crate::change_ts::ExtractError::{FrameOutOfBounds, MissingTag, TagValueUnExcepted};
 use common::dicom_utils;
 use dicom_core::header::Tag;
 use dicom_core::value::{PixelFragmentSequence, PrimitiveValue};
@@ -12,6 +12,7 @@ use std::path::PathBuf;
 pub struct ExtractMultiFrameToMultiFile {
     pub input_file_path: String,
     pub output_file_dir: String,
+    #[allow(dead_code)]
     pub change_transfer_syntax: bool,
 }
 #[derive(Debug, Snafu)]
@@ -22,15 +23,33 @@ pub enum ExtractError {
         source: Box<dicom_object::ReadError>,
         path: PathBuf,
     },
-
+    #[snafu(display("could not write DICOM file {}", path.display()))]
+    WriteFile {
+        #[snafu(source(from(dicom_object::WriteError, Box::new)))]
+        source: Box<dicom_object::WriteError>,
+        path: PathBuf,
+    },
     /// missing offset table entry for frame #{frame_number}
-    MissingOffsetEntry { frame_number: u32 },
+    MissingOffsetEntry {
+        frame_number: u32,
+    },
     /// missing tag {tag}
-    MissingTag { tag: Tag },
+    MissingTag {
+        tag: Tag,
+    },
     /// tag value is unexpected
-    TagValueUnExcepted { tag: Tag, value: String },
+    TagValueUnExcepted {
+        tag: Tag,
+        value: String,
+    },
+    TagValueLengthOutofBound {
+        tag: Tag,
+        value: String,
+    },
     /// missing key property {name}
-    MissingProperty { name: &'static str },
+    MissingProperty {
+        name: &'static str,
+    },
     /// property {name} contains an invalid value
     InvalidPropertyValue {
         name: &'static str,
@@ -38,20 +57,14 @@ pub enum ExtractError {
         source: Box<dicom_core::value::ConvertValueError>,
     },
     /// pixel data of frame #{frame_number} is out of bounds
-    FrameOutOfBounds { frame_number: u32 },
-    /// failed to save image to file
-    SaveImage {
-        #[snafu(source(from(dicom_pixeldata::image::ImageError, Box::new)))]
-        source: Box<dicom_pixeldata::image::ImageError>,
+    #[snafu(display("pixel data of frame #{} is out of bounds", frame_number))]
+    FrameOutOfBounds {
+        frame_number: u32,
     },
-    /// failed to save pixel data to file
-    SaveData { source: std::io::Error },
     /// Unexpected DICOM pixel data as data set sequence
     UnexpectedPixelData,
     /// No files given
     NoFiles,
-    /// Read dir error
-    ReadDir { source: std::io::Error },
 }
 
 impl ExtractMultiFrameToMultiFile {
@@ -80,6 +93,8 @@ impl ExtractMultiFrameToMultiFile {
             tags::COLUMNS,
             tags::SAMPLES_PER_PIXEL,
             tags::BITS_ALLOCATED,
+            tags::SOP_INSTANCE_UID,
+            tags::PHOTOMETRIC_INTERPRETATION,
         ];
         for ctag in tags {
             if !dicom_utils::tag_exists(&dicom_obj, ctag) {
@@ -103,9 +118,10 @@ impl ExtractMultiFrameToMultiFile {
                 .to_int::<usize>()
                 .context(InvalidPropertyValueSnafu { name })
         };
-        let series_uid =
-            dicom_utils::get_text_value(&dicom_obj, tags::SERIES_INSTANCE_UID).unwrap();
-        let pixel_element = dicom_obj.get(tags::PIXEL_DATA).unwrap();
+
+        let pixel_element = dicom_obj
+            .get(tags::PIXEL_DATA)
+            .context(MissingPropertySnafu { name: "PIXEL_DATA" })?;
         let pixel_vr = pixel_element.vr(); // 获取实际的VR类型（VR::OB 或 VR::OW）
 
         let pixeldata = pixel_element.value();
@@ -114,8 +130,11 @@ impl ExtractMultiFrameToMultiFile {
         let samples_per_pixel = get_int_property(tags::SAMPLES_PER_PIXEL, "Samples Per Pixel")?;
         let bits_allocated = get_int_property(tags::BITS_ALLOCATED, "Bits Allocated")?;
         let frame_size = rows * columns * samples_per_pixel * ((bits_allocated + 7) / 8);
-
         println!("Pixel VR: {:?}", pixel_vr);
+        let mut sop_uid = dicom_gen_uid::gen_uid();
+        if sop_uid.len() > 60 {
+            sop_uid = sop_uid[0..60].to_string();
+        }
         for frame_number in 0..num_frames {
             let out_data = match pixeldata {
                 DicomValue::PixelSequence(seq) => {
@@ -125,7 +144,14 @@ impl ExtractMultiFrameToMultiFile {
                         // frame-to-fragment mapping is 1:1
 
                         // get fragment containing our frame
-                        let fragment = seq.fragments().get(frame_number as usize).unwrap();
+                        // let fragment = seq.fragments().get(frame_number as usize).context( FrameOutOfBounds { frame_number: frame_number as u32})?;
+
+                        let fragment =
+                            seq.fragments()
+                                .get(frame_number as usize)
+                                .ok_or(FrameOutOfBounds {
+                                    frame_number: frame_number as u32,
+                                })?;
 
                         Cow::Borrowed(&fragment[..])
                     } else {
@@ -194,7 +220,7 @@ impl ExtractMultiFrameToMultiFile {
             out_obj.put(DataElement::new(
                 tags::SOP_INSTANCE_UID,
                 VR::UI,
-                PrimitiveValue::from(format!("{}.000{}", series_uid, frame_number + 1)),
+                PrimitiveValue::from(format!("{}.{:04}", sop_uid, frame_number + 1)),
             ));
             out_obj.put(DataElement::new(
                 tags::INSTANCE_NUMBER,
@@ -213,21 +239,21 @@ impl ExtractMultiFrameToMultiFile {
                 DicomValue::PixelSequence(PixelFragmentSequence::new_fragments(vec![all_data])),
             ));
             let out_file_path = format!(
-                "{}/{}_{}.dcm",
+                "{}/{}.{:04}.dcm",
                 self.output_file_dir,
-                series_uid,
+                sop_uid,
                 frame_number + 1
             );
             // 这里不再需要显式指定字典类型，因为write_file方法会自动处理
-            //TODO: out_obj 写入磁盘
+            // TODO: out_obj 写入磁盘
             // write the DICOM file to disk
             // 修正部分：直接调用 out_obj 实例的 write_to_file 方法
-            match out_obj.write_to_file(&out_file_path) {
-                Ok(_) => println!("Wrote {}", out_file_path),
-                Err(e) => eprintln!("failed to write {}: {}", out_file_path, e),
-            }
+            out_obj
+                .write_to_file(&out_file_path)
+                .context(WriteFileSnafu {
+                    path: out_file_path,
+                })?;
         }
-
         Ok(())
     }
 }

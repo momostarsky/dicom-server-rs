@@ -1997,6 +1997,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "dicom-gen-uid"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c573f177af6a2e6c9430bcc6c85a2f2b9098cc87a00f69f2809b22e69695daac"
+dependencies = [
+ "uuid",
+]
+
+[[package]]
 name = "dicom-object"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3898,6 +3907,7 @@ dependencies = [
  "dicom-core",
  "dicom-dictionary-std",
  "dicom-encoding",
+ "dicom-gen-uid",
  "dicom-object",
  "dicom-pixeldata",
  "dicom-transfer-syntax-registry",
@@ -3907,6 +3917,7 @@ dependencies = [
  "seahash",
  "serde",
  "serde_json",
+ "sha2",
  "snafu",
  "sqlx",
  "tokio",
