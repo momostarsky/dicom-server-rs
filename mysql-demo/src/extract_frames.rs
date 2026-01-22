@@ -1,10 +1,12 @@
 use crate::extract_frames::ExtractError::{FrameOutOfBounds, MissingTag, TagValueUnExcepted};
 use common::dicom_utils;
-use dicom_core::header::Tag;
+use dicom_core::header::{Header, Tag};
 use dicom_core::value::{PixelFragmentSequence, PrimitiveValue};
 use dicom_core::{DataElement, DicomValue, VR};
 use dicom_dictionary_std::tags;
-use dicom_object::open_file;
+use dicom_object::{DefaultDicomObject, InMemDicomObject, open_file};
+use dicom_pixeldata::Transcode;
+use dicom_transfer_syntax_registry::entries::EXPLICIT_VR_LITTLE_ENDIAN;
 use snafu::{OptionExt, ResultExt, Snafu};
 use std::borrow::Cow;
 use std::path::PathBuf;
@@ -78,6 +80,41 @@ impl ExtractMultiFrameToMultiFile {
             output_file_dir,
             change_transfer_syntax,
         }
+    }
+    fn is_private_tag(&self, tag: Tag) -> bool {
+        // group为奇数表示是私有标签，但排除一些特殊的标准组
+        let group = tag.group();
+
+        // DICOM标准规定私有标签的group是奇数，但有一些例外
+        // 0x0001 是保留给标准使用，但实际很少用到
+        // 通常私有标签范围：0x0001-0xFFFF（奇数组）
+        (group & 0x0001) == 0x0001 && group != 0x0001
+    }
+    fn create_filtered_dicom_object(&self, original_obj: &DefaultDicomObject) -> InMemDicomObject {
+        let mut filtered_obj = InMemDicomObject::new_empty();
+
+        for tag in original_obj.tags() {
+            if tag == tags::PIXEL_DATA {
+                continue;
+            };
+            if let Some(element) = original_obj.get(tag) {
+                if self.is_private_tag(element.tag()) {
+                    continue;
+                }
+                if element.vr() == VR::SQ && element.tag() != tags::PROCEDURE_CODE_SEQUENCE {
+                    continue;
+                }
+                filtered_obj.put(element.clone());
+            }
+        }
+
+        // for &tag in SAVED_TAGS.iter() {
+        //     if let Some(element) = original_obj.get(tag) {
+        //         filtered_obj.put(element.clone());
+        //     }
+        // }
+
+        filtered_obj
     }
 
     pub fn run(&self) -> Result<(), ExtractError> {
@@ -212,7 +249,20 @@ impl ExtractMultiFrameToMultiFile {
                 Cow::Borrowed(b) => b.to_vec(),
                 Cow::Owned(b) => b,
             };
-            let mut out_obj = dicom_obj.clone();
+
+            // let pixel =  dicom_obj.decode_pixel_data_frame(frame_number as u32)
+            //     .context(DecodePixelDataSnafu)?;
+            // println!(
+            //     "{}x{}x{} image, {}-bit",
+            //     pixel.columns(),
+            //     pixel.rows(),
+            //     pixel.samples_per_pixel(),
+            //     pixel.bits_stored()
+            // );
+
+            // 使用过滤函数创建新对象
+            let mut out_obj = self.create_filtered_dicom_object(&dicom_obj);
+
             out_obj.remove_element(tags::SOP_INSTANCE_UID);
             out_obj.remove_element(tags::NUMBER_OF_FRAMES);
             out_obj.remove_element(tags::INSTANCE_NUMBER);
@@ -238,17 +288,44 @@ impl ExtractMultiFrameToMultiFile {
                 pixel_vr,
                 DicomValue::PixelSequence(PixelFragmentSequence::new_fragments(vec![all_data])),
             ));
+
             let out_file_path = format!(
                 "{}/{}.{:04}.dcm",
                 self.output_file_dir,
                 sop_uid,
                 frame_number + 1
             );
+
+            // 直接使用 InMemDicomObject 的 write_dataset 方法写入文件
+            use dicom_object::FileMetaTableBuilder;
+
+            let file_meta = FileMetaTableBuilder::new()
+                .media_storage_sop_class_uid(dicom_obj.meta().media_storage_sop_class_uid.clone())
+                .media_storage_sop_instance_uid(
+                    dicom_obj.meta().media_storage_sop_instance_uid.clone(),
+                )
+                .transfer_syntax(dicom_obj.meta().transfer_syntax.clone())
+                .build();
+            let mut out_obj_default = out_obj.with_exact_meta(file_meta.unwrap());
+
+            if self.change_transfer_syntax {
+                let success = out_obj_default
+                    .transcode(&EXPLICIT_VR_LITTLE_ENDIAN.erased())
+                    .is_ok();
+                if success {
+                    println!("{} 转换成功", out_file_path);
+                } else {
+                    println!("{} 转换失败", out_file_path);
+                }
+            }
+
             // 这里不再需要显式指定字典类型，因为write_file方法会自动处理
             // TODO: out_obj 写入磁盘
             // write the DICOM file to disk
             // 修正部分：直接调用 out_obj 实例的 write_to_file 方法
-            out_obj
+            // 将 InMemDicomObject 转换为 DefaultDicomObject 以便写入文件
+            // let out_obj_default: DefaultDicomObject = out_obj.into();
+            out_obj_default
                 .write_to_file(&out_file_path)
                 .context(WriteFileSnafu {
                     path: out_file_path,
