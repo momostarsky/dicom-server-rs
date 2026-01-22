@@ -1,4 +1,4 @@
-use crate::change_ts::ExtractError::{FrameOutOfBounds, MissingTag, TagValueUnExcepted};
+use crate::extract_frames::ExtractError::{FrameOutOfBounds, MissingTag, TagValueUnExcepted};
 use common::dicom_utils;
 use dicom_core::header::Tag;
 use dicom_core::value::{PixelFragmentSequence, PrimitiveValue};

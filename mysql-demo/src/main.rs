@@ -1,6 +1,6 @@
-mod change_ts;
+mod extract_frames;
 
-use crate::change_ts::ExtractMultiFrameToMultiFile;
+use crate::extract_frames::ExtractMultiFrameToMultiFile;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::{MySql, MySqlPool, Transaction};
