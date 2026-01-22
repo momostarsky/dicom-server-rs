@@ -275,8 +275,6 @@ mod tests {
             patient_id: BoundedString::<64>::from_str("Patient_001").unwrap(),
             study_uid: BoundedString::<64>::from_str("1.333.902009.002").unwrap(),
             series_uid: BoundedString::<64>::from_str("1.23899.290").unwrap(),
-            study_uid_hash: BoundedString::<20>::from_str("8832893289").unwrap(),
-            series_uid_hash: BoundedString::<20>::from_str("832898923832").unwrap(),
             study_date_origin: DicomDateString::try_from("20200301").unwrap(),
             patient_name: Option::from(BoundedString::<64>::try_from("John^Doe").unwrap()),
             patient_sex: Option::from(BoundedString::<1>::try_from("F").unwrap()),

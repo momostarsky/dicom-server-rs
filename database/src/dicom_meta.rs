@@ -54,10 +54,6 @@ pub struct DicomStoreMeta {
     pub number_of_frames: i32,
     #[serde(rename = "created_time")]
     pub created_time: NaiveDateTime,
-    #[serde(rename = "series_uid_hash")]
-    pub series_uid_hash: BoundedString<20>,
-    #[serde(rename = "study_uid_hash")]
-    pub study_uid_hash: BoundedString<20>,
     #[serde(rename = "accession_number")]
     pub accession_number: Option<BoundedString<16>>,
     #[serde(rename = "target_ts")]
@@ -75,7 +71,6 @@ pub struct DicomStoreMeta {
 impl Hash for DicomStoreMeta {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.tenant_id.hash(state);
-        self.patient_id.hash(state);
         self.study_uid.hash(state);
         self.series_uid.hash(state);
         self.sop_uid.hash(state);
@@ -84,10 +79,9 @@ impl Hash for DicomStoreMeta {
 impl PartialEq for DicomStoreMeta {
     fn eq(&self, other: &Self) -> bool {
         self.tenant_id == other.tenant_id
-            && self.patient_id == other.patient_id
-            && self.study_uid == other.study_uid
-            && self.series_uid == other.series_uid
-            && self.sop_uid == other.sop_uid
+        && self.study_uid == other.study_uid
+        && self.series_uid == other.series_uid
+        && self.sop_uid == other.sop_uid
     }
 }
 impl Eq for DicomStoreMeta {}
@@ -101,12 +95,6 @@ pub struct DicomJsonMeta {
     pub study_uid: BoundedString<64>,
     #[serde(rename = "series_uid")]
     pub series_uid: BoundedString<64>,
-    #[serde(rename = "study_uid_hash")]
-    pub study_uid_hash: BoundedString<20>,
-    #[serde(rename = "series_uid_hash")]
-    pub series_uid_hash: BoundedString<20>,
-    #[serde(rename = "study_date_origin")]
-    pub study_date_origin: DicomDateString,
     #[serde(rename = "flag_time")]
     pub flag_time: NaiveDateTime,
     #[serde(rename = "created_time")]
@@ -126,10 +114,6 @@ pub struct DicomStateMeta {
     pub study_uid: BoundedString<64>,
     #[serde(rename = "series_uid")]
     pub series_uid: BoundedString<64>,
-    #[serde(rename = "study_uid_hash")]
-    pub study_uid_hash: BoundedString<20>,
-    #[serde(rename = "series_uid_hash")]
-    pub series_uid_hash: BoundedString<20>,
     #[serde(rename = "study_date_origin")]
     pub study_date_origin: DicomDateString,
 
@@ -182,10 +166,9 @@ pub struct DicomStateMeta {
 }
 
 impl DicomStateMeta {
-    pub fn unique_key(&self) -> (String, String, String, String) {
+    pub fn unique_key(&self) -> (String, String, String) {
         (
             self.tenant_id.as_str().to_string(),
-            self.patient_id.as_str().to_string(),
             self.study_uid.as_str().to_string(),
             self.series_uid.as_str().to_string(),
         )
@@ -208,12 +191,6 @@ pub struct DicomImageMeta {
 
     #[serde(rename = "sop_uid")]
     pub sop_uid: BoundedString<64>,
-
-    #[serde(rename = "study_uid_hash")]
-    pub study_uid_hash: BoundedString<20>,
-
-    #[serde(rename = "series_uid_hash")]
-    pub series_uid_hash: BoundedString<20>,
 
     #[serde(rename = "instance_number")]
     pub instance_number: Option<i32>,

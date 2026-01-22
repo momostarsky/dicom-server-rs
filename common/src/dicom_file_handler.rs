@@ -1,6 +1,6 @@
 use crate::dicom_utils::{get_bounder_string, get_date_value_dicom, get_tag_value};
 use crate::message_sender_kafka::KafkaMessagePublisher;
-use crate::storage_config::{StorageConfig, hash_uid};
+use crate::storage_config::{StorageConfig};
 use crate::utils;
 use crate::utils::{UtilsError, get_logger};
 use crate::{server_config, storage_config};
@@ -114,8 +114,7 @@ pub async fn process_dicom_buffer(
         "failed to get dicom series dir: tenant_id={}, study_date={}, study_uid={}, series_uid={}",
         tenant_id, study_date, study_uid, series_uid
     ))?;
-    let study_uid_hash_v = hash_uid(study_uid.as_str());
-    let series_uid_hash_v = hash_uid(series_uid.as_str());
+
 
     let file_path = storage_config::dicom_file_path(&dir_path, sop_instance_uid);
 
@@ -159,8 +158,6 @@ pub async fn process_dicom_buffer(
         transfer_status: transcode_status,
         number_of_frames: frames,
         created_time: cdate,
-        series_uid_hash: BoundedString::<20>::make_str(&series_uid_hash_v),
-        study_uid_hash: BoundedString::<20>::make_str(&study_uid_hash_v),
         accession_number,
         source_ip: BoundedString::<24>::make_str(&ip),
         source_ae: BoundedString::<64>::make_str(&client_ae),
@@ -231,8 +228,6 @@ pub async fn process_dicom_memobject(
         frames
     );
 
-    let study_uid_hash_v = hash_uid(study_uid.as_str());
-    let series_uid_hash_v = hash_uid(series_uid.as_str());
     let uuid_v7 = Uuid::now_v7();
     let trace_uid = uuid_v7.to_string(); // 或直接用 format!("{}", uuid_v7)
     let mut transcode_status = TransferStatus::NoNeedTransfer;
@@ -264,9 +259,6 @@ pub async fn process_dicom_memobject(
         transfer_status: transcode_status,
         number_of_frames: frames,
         created_time: cdate,
-        // 修改为使用 from_string 方法创建 BoundedString<20>
-        series_uid_hash: BoundedString::<20>::make_str(&series_uid_hash_v),
-        study_uid_hash: BoundedString::<20>::make_str(&study_uid_hash_v),
         accession_number,
         source_ip: BoundedString::<24>::make_str("127.0.0.1"),
         source_ae: BoundedString::<64>::make_str(&"STOW-RS-API"),
@@ -347,8 +339,6 @@ pub async fn process_dicom_file_from_file(
         study_date,
         frames
     );
-    let study_uid_hash_v = hash_uid(study_uid.as_str());
-    let series_uid_hash_v = hash_uid(series_uid.as_str());
     let uuid_v7 = Uuid::now_v7();
     let trace_uid = uuid_v7.to_string(); // 或直接用 format!("{}", uuid_v7)
     let mut transcode_status = TransferStatus::NoNeedTransfer;
@@ -419,9 +409,6 @@ pub async fn process_dicom_file_from_file(
         transfer_status: transcode_status,
         number_of_frames: frames,
         created_time: cdate,
-        // 修改为使用 from_string 方法创建 BoundedString<20>
-        series_uid_hash: BoundedString::<20>::make_str(&series_uid_hash_v),
-        study_uid_hash: BoundedString::<20>::make_str(&study_uid_hash_v),
         accession_number,
         source_ip: BoundedString::<24>::make_str("127.0.0.1"),
         source_ae: BoundedString::<64>::make_str(&"STOW-RS-API"),

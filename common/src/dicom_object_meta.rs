@@ -1,6 +1,5 @@
 use crate::dicom_utils;
 
-use crate::storage_config::hash_uid;
 use crate::utils::get_current_time;
 use chrono::NaiveDate;
 use database::dicom_dbtype::{BoundedString, DicomDateString};
@@ -189,11 +188,7 @@ pub fn make_image_info(
         dicom_utils::get_bounder_string::<64>(dicom_obj, tags::TRANSFER_SYNTAX_UID)
             .unwrap_or_else(|| BoundedString::<64>::make_str("1.2.840.10008.1.2"));
 
-    let image_status = Some(BoundedString::<32>::make_str("ACTIVE"));
-
-    // 计算哈希值
-    let study_uid_hash = BoundedString::<20>::make(hash_uid(&common_meta.study_uid));
-    let series_uid_hash = BoundedString::<20>::make(hash_uid(&common_meta.series_uid));
+    let image_status = Some(BoundedString::<32>::make_str("ACTIVE")); 
 
     let space_size = fsize;
     // 时间戳
@@ -204,10 +199,7 @@ pub fn make_image_info(
         patient_id: BoundedString::<64>::make(common_meta.patient_id),
         study_uid: BoundedString::<64>::make(common_meta.study_uid),
         series_uid: BoundedString::<64>::make(common_meta.series_uid),
-        sop_uid: BoundedString::<64>::make(common_meta.sop_uid),
-        study_uid_hash,
-        series_uid_hash,
-
+        sop_uid: BoundedString::<64>::make(common_meta.sop_uid), 
         instance_number,
 
         content_date,
@@ -299,10 +291,6 @@ pub fn make_state_info(
     let series_related_instances =
         dicom_utils::get_int_value(dicom_obj, tags::NUMBER_OF_SERIES_RELATED_INSTANCES);
 
-    // 计算哈希值
-    // 计算哈希值
-    let study_uid_hash = BoundedString::<20>::make_str(&hash_uid(&common_meta.study_uid));
-    let series_uid_hash = BoundedString::<20>::make_str(&hash_uid(&common_meta.series_uid));
 
     // 时间戳
     let now = chrono::Local::now().naive_local();
@@ -321,8 +309,6 @@ pub fn make_state_info(
         patient_id,
         study_uid,
         series_uid,
-        study_uid_hash,
-        series_uid_hash,
         study_date_origin,
         // 患者信息
         patient_name,
