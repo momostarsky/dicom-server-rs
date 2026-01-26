@@ -82,12 +82,13 @@ impl ExtractMultiFrameToMultiFile {
         }
     }
     fn is_private_tag(&self, tag: Tag) -> bool {
-        // group为奇数表示是私有标签，但排除一些特殊的标准组
+        // A group number being odd indicates a private tag, but excludes some special standard groups
         let group = tag.group();
 
-        // DICOM标准规定私有标签的group是奇数，但有一些例外
-        // 0x0001 是保留给标准使用，但实际很少用到
-        // 通常私有标签范围：0x0001-0xFFFF（奇数组）
+        // DICOM standard specifies that private tags have odd groups, but there are exceptions
+        // 0x0001 is reserved for standard use but rarely used in practice
+        // Usually private tag range: 0x0001-0xFFFF (odd groups)
+
         (group & 0x0001) == 0x0001 && group != 0x0001
     }
     fn create_filtered_dicom_object(&self, original_obj: &DefaultDicomObject) -> InMemDicomObject {
@@ -159,7 +160,7 @@ impl ExtractMultiFrameToMultiFile {
         let pixel_element = dicom_obj
             .get(tags::PIXEL_DATA)
             .context(MissingPropertySnafu { name: "PIXEL_DATA" })?;
-        let pixel_vr = pixel_element.vr(); // 获取实际的VR类型（VR::OB 或 VR::OW）
+        let pixel_vr = pixel_element.vr(); // GET Pixeldata ValueType （VR::OB 或 VR::OW）
 
         let pixeldata = pixel_element.value();
         let rows = get_int_property(tags::ROWS, "Rows")?;
@@ -260,7 +261,6 @@ impl ExtractMultiFrameToMultiFile {
             //     pixel.bits_stored()
             // );
 
-            // 使用过滤函数创建新对象
             let mut out_obj = self.create_filtered_dicom_object(&dicom_obj);
 
             out_obj.remove_element(tags::SOP_INSTANCE_UID);
@@ -296,7 +296,7 @@ impl ExtractMultiFrameToMultiFile {
                 frame_number + 1
             );
 
-            // 直接使用 InMemDicomObject 的 write_dataset 方法写入文件
+
             use dicom_object::FileMetaTableBuilder;
 
             let file_meta = FileMetaTableBuilder::new()
@@ -313,18 +313,14 @@ impl ExtractMultiFrameToMultiFile {
                     .transcode(&EXPLICIT_VR_LITTLE_ENDIAN.erased())
                     .is_ok();
                 if success {
-                    println!("{} 转换成功", out_file_path);
+                    println!("{} change transfer syntax success", out_file_path);
                 } else {
-                    println!("{} 转换失败", out_file_path);
+                    println!("{} change transfer syntax failed", out_file_path);
                 }
             }
 
-            // 这里不再需要显式指定字典类型，因为write_file方法会自动处理
-            // TODO: out_obj 写入磁盘
+
             // write the DICOM file to disk
-            // 修正部分：直接调用 out_obj 实例的 write_to_file 方法
-            // 将 InMemDicomObject 转换为 DefaultDicomObject 以便写入文件
-            // let out_obj_default: DefaultDicomObject = out_obj.into();
             out_obj_default
                 .write_to_file(&out_file_path)
                 .context(WriteFileSnafu {

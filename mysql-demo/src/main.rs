@@ -124,5 +124,5 @@ fn main() {
         "/home/dhz/jpdata/vdcmdata/dcmfiles/XA2".to_string(),
         true,
     );
-    ex.run().expect("提取多帧为多文件失败");
+    ex.run().expect("extract multi frame to multi file failed");
 }
