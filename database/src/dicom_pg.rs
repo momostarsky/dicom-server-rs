@@ -63,8 +63,6 @@ impl DbProvider for PgDbProvider {
                 file_path,
                 transfer_syntax_uid,
                 number_of_frames,
-                series_uid_hash,
-                study_uid_hash,
                 accession_number,
                 target_ts,
                 study_date,
@@ -74,7 +72,7 @@ impl DbProvider for PgDbProvider {
                 created_time
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-                $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+                $11, $12, $13, $14, $15, $16, $17, $18
             )
             ON CONFLICT (trace_id)
             DO UPDATE SET
@@ -88,8 +86,6 @@ impl DbProvider for PgDbProvider {
                 file_path = EXCLUDED.file_path,
                 transfer_syntax_uid = EXCLUDED.transfer_syntax_uid,
                 number_of_frames = EXCLUDED.number_of_frames,
-                series_uid_hash = EXCLUDED.series_uid_hash,
-                study_uid_hash = EXCLUDED.study_uid_hash,
                 accession_number = EXCLUDED.accession_number,
                 target_ts = EXCLUDED.target_ts,
                 study_date = EXCLUDED.study_date,
@@ -121,8 +117,6 @@ impl DbProvider for PgDbProvider {
                         &store_meta.file_path,
                         &store_meta.transfer_syntax_uid,
                         &store_meta.number_of_frames,
-                        &store_meta.series_uid_hash,
-                        &store_meta.study_uid_hash,
                         &store_meta.accession_number,
                         &store_meta.target_ts,
                         &store_meta.study_date,
@@ -156,8 +150,6 @@ impl DbProvider for PgDbProvider {
                        patient_id,
                        study_uid,
                        series_uid,
-                       study_uid_hash,
-                       series_uid_hash,
                        study_date_origin,
                        patient_name,
                        patient_sex,
@@ -181,12 +173,10 @@ impl DbProvider for PgDbProvider {
                        series_related_instances,
                        created_time,
                        updated_time
-                   ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+                   ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
                    ON CONFLICT (tenant_id, study_uid, series_uid)
                    DO UPDATE SET
                        patient_id = EXCLUDED.patient_id,
-                       study_uid_hash = EXCLUDED.study_uid_hash,
-                       series_uid_hash = EXCLUDED.series_uid_hash,
                        study_date_origin = EXCLUDED.study_date_origin,
                        patient_name = EXCLUDED.patient_name,
                        patient_sex = EXCLUDED.patient_sex,
@@ -221,8 +211,6 @@ impl DbProvider for PgDbProvider {
                     &state_meta.patient_id,
                     &state_meta.study_uid,
                     &state_meta.series_uid,
-                    &state_meta.study_uid_hash,
-                    &state_meta.series_uid_hash,
                     &state_meta.study_date_origin,
                     &state_meta.patient_name,
                     &state_meta.patient_sex,
@@ -254,27 +242,28 @@ impl DbProvider for PgDbProvider {
         Ok(())
     }
 
-    async fn save_state_list(&self, state_meta_list: &[DicomStateMeta]) -> Result<(), DbError> {
-        // 使用事务确保所有数据要么全部保存成功，要么全部失败
-        let mut client = self.make_client().await?;
-        let transaction = client.transaction().await.map_err(|e| {
-            println!("Failed to start transaction: {}", e);
-            DbError::DatabaseError(e.to_string())
-        })?;
-        println!(
-            "Starting transaction to save state meta list of length {}",
-            state_meta_list.len()
-        );
+   async fn save_state_list(&self, state_meta_list: &[DicomStateMeta]) -> Result<(), DbError> {
+    if state_meta_list.is_empty() {
+        return Ok(());
+    }
 
-        let statement = transaction
-            .prepare(
-                "INSERT INTO dicom_state_meta (
+    let mut client = self.make_client().await?;
+    let transaction = client.transaction().await.map_err(|e| {
+        println!("Failed to start transaction: {}", e);
+        DbError::DatabaseError(e.to_string())
+    })?;
+    println!(
+        "Starting transaction to save state meta list of length {}",
+        state_meta_list.len()
+    );
+
+    let statement = transaction
+        .prepare(
+            "INSERT INTO dicom_state_meta (
                 tenant_id,
                 patient_id,
                 study_uid,
                 series_uid,
-                study_uid_hash,
-                series_uid_hash,
                 study_date_origin,
                 patient_name,
                 patient_sex,
@@ -298,12 +287,10 @@ impl DbProvider for PgDbProvider {
                 series_related_instances,
                 created_time,
                 updated_time
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
             ON CONFLICT (tenant_id, study_uid, series_uid)
             DO UPDATE SET
                 patient_id = EXCLUDED.patient_id,
-                study_uid_hash = EXCLUDED.study_uid_hash,
-                series_uid_hash = EXCLUDED.series_uid_hash,
                 study_date_origin = EXCLUDED.study_date_origin,
                 patient_name = EXCLUDED.patient_name,
                 patient_sex = EXCLUDED.patient_sex,
@@ -325,227 +312,218 @@ impl DbProvider for PgDbProvider {
                 body_part_examined = EXCLUDED.body_part_examined,
                 protocol_name = EXCLUDED.protocol_name,
                 series_related_instances = EXCLUDED.series_related_instances,
+                created_time = EXCLUDED.created_time,
                 updated_time = EXCLUDED.updated_time"
+        )
+        .await
+        .map_err(|e| {
+            println!("Error transaction.prepare: {:?}", e);
+            DbError::DatabaseError(e.to_string())
+        })?;
+
+    for state_meta in state_meta_list {
+        transaction
+            .execute(
+                &statement,
+                &[
+                    &state_meta.tenant_id,
+                    &state_meta.patient_id,
+                    &state_meta.study_uid,
+                    &state_meta.series_uid,
+                    &state_meta.study_date_origin,
+                    &state_meta.patient_name,
+                    &state_meta.patient_sex,
+                    &state_meta.patient_birth_date,
+                    &state_meta.patient_birth_time,
+                    &state_meta.patient_age,
+                    &state_meta.patient_size,
+                    &state_meta.patient_weight,
+                    &state_meta.study_date,
+                    &state_meta.study_time,
+                    &state_meta.accession_number,
+                    &state_meta.study_id,
+                    &state_meta.study_description,
+                    &state_meta.modality,
+                    &state_meta.series_number,
+                    &state_meta.series_date,
+                    &state_meta.series_time,
+                    &state_meta.series_description,
+                    &state_meta.body_part_examined,
+                    &state_meta.protocol_name,
+                    &state_meta.series_related_instances,
+                    &state_meta.created_time,
+                    &state_meta.updated_time,
+                ],
             )
             .await
             .map_err(|e| {
-                println!("Error transaction.prepare: {:?}", e);
+                println!("Error transaction.execute: {:?}", e);
                 DbError::DatabaseError(e.to_string())
             })?;
-
-        // 遍历所有 DicomStateMeta 对象并执行插入操作
-        for state_meta in state_meta_list {
-            transaction
-                .execute(
-                    &statement,
-                    &[
-                        &state_meta.tenant_id,
-                        &state_meta.patient_id,
-                        &state_meta.study_uid,
-                        &state_meta.series_uid,
-                        &state_meta.study_uid_hash,
-                        &state_meta.series_uid_hash,
-                        &state_meta.study_date_origin,
-                        &state_meta.patient_name,
-                        &state_meta.patient_sex,
-                        &state_meta.patient_birth_date,
-                        &state_meta.patient_birth_time,
-                        &state_meta.patient_age,
-                        &state_meta.patient_size,
-                        &state_meta.patient_weight,
-                        &state_meta.study_date,
-                        &state_meta.study_time,
-                        &state_meta.accession_number,
-                        &state_meta.study_id,
-                        &state_meta.study_description,
-                        &state_meta.modality,
-                        &state_meta.series_number,
-                        &state_meta.series_date,
-                        &state_meta.series_time,
-                        &state_meta.series_description,
-                        &state_meta.body_part_examined,
-                        &state_meta.protocol_name,
-                        &state_meta.series_related_instances,
-                        &state_meta.created_time,
-                        &state_meta.updated_time,
-                    ],
-                )
-                .await
-                .map_err(|e| {
-                    println!("Error transaction.execute: {:?}", e);
-                    DbError::DatabaseError(e.to_string())
-                })?;
-        }
-
-        // 提交事务
-        transaction.commit().await.map_err(|e| {
-            println!("Error transaction.commit: {:?}", e);
-            DbError::DatabaseError(e.to_string())
-        })?;
-
-        Ok(())
     }
-    // File: `database/src/dicom_pg.rs`
+
+    transaction.commit().await.map_err(|e| {
+        println!("Error transaction.commit: {:?}", e);
+        DbError::DatabaseError(e.to_string())
+    })?;
+
+    Ok(())
+}
+
     async fn save_image_list(&self, image_meta_list: &[DicomImageMeta]) -> Result<(), DbError> {
-        if image_meta_list.is_empty() {
-            return Ok(());
-        }
-
-        let mut client = self.make_client().await?;
-        let transaction = client.transaction().await.map_err(|e| {
-            println!("Failed to start transaction: {}", e);
-            DbError::DatabaseError(e.to_string())
-        })?;
-
-        println!(
-            "Starting transaction to save image meta list of length {}",
-            image_meta_list.len()
-        );
-
-        let sql_statement = r#"
-    INSERT INTO dicom_image_meta (
-        tenant_id,
-        patient_id,
-        study_uid,
-        series_uid,
-        sop_uid,
-        study_uid_hash,
-        series_uid_hash,
-        content_date,
-        content_time,
-        instance_number,
-        image_type,
-        image_orientation_patient,
-        image_position_patient,
-        slice_thickness,
-        spacing_between_slices,
-        slice_location,
-        samples_per_pixel,
-        photometric_interpretation,
-        width,
-        columns,
-        bits_allocated,
-        bits_stored,
-        high_bit,
-        pixel_representation,
-        rescale_intercept,
-        rescale_slope,
-        rescale_type,
-        window_center,
-        window_width,
-        transfer_syntax_uid,
-        pixel_data_location,
-        thumbnail_location,
-        sop_class_uid,
-        image_status,
-        space_size,
-        created_time,
-        updated_time
-    ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-        $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-        $31, $32, $33, $34, $35, $36, $37
-    )
-    ON CONFLICT (tenant_id, study_uid, series_uid, sop_uid)
-    DO UPDATE SET
-        patient_id = EXCLUDED.patient_id,
-        study_uid_hash = EXCLUDED.study_uid_hash,
-        series_uid_hash = EXCLUDED.series_uid_hash,
-        content_date = EXCLUDED.content_date,
-        content_time = EXCLUDED.content_time,
-        instance_number = EXCLUDED.instance_number,
-        image_type = EXCLUDED.image_type,
-        image_orientation_patient = EXCLUDED.image_orientation_patient,
-        image_position_patient = EXCLUDED.image_position_patient,
-        slice_thickness = EXCLUDED.slice_thickness,
-        spacing_between_slices = EXCLUDED.spacing_between_slices,
-        slice_location = EXCLUDED.slice_location,
-        samples_per_pixel = EXCLUDED.samples_per_pixel,
-        photometric_interpretation = EXCLUDED.photometric_interpretation,
-        width = EXCLUDED.width,
-        columns = EXCLUDED.columns,
-        bits_allocated = EXCLUDED.bits_allocated,
-        bits_stored = EXCLUDED.bits_stored,
-        high_bit = EXCLUDED.high_bit,
-        pixel_representation = EXCLUDED.pixel_representation,
-        rescale_intercept = EXCLUDED.rescale_intercept,
-        rescale_slope = EXCLUDED.rescale_slope,
-        rescale_type = EXCLUDED.rescale_type,
-        window_center = EXCLUDED.window_center,
-        window_width = EXCLUDED.window_width,
-        transfer_syntax_uid = EXCLUDED.transfer_syntax_uid,
-        pixel_data_location = EXCLUDED.pixel_data_location,
-        thumbnail_location = EXCLUDED.thumbnail_location,
-        sop_class_uid = EXCLUDED.sop_class_uid,
-        image_status = EXCLUDED.image_status,
-        space_size = EXCLUDED.space_size,
-        updated_time = EXCLUDED.updated_time
-    "#;
-
-        let statement = transaction.prepare(sql_statement).await.map_err(|e| {
-            println!("Error preparing statement: {:?}", e);
-            DbError::DatabaseError(e.to_string())
-        })?;
-
-        for image_meta in image_meta_list {
-            transaction
-                .execute(
-                    &statement,
-                    &[
-                        &image_meta.tenant_id,
-                        &image_meta.patient_id,
-                        &image_meta.study_uid,
-                        &image_meta.series_uid,
-                        &image_meta.sop_uid,
-                        &image_meta.study_uid_hash,
-                        &image_meta.series_uid_hash,
-                        &image_meta.content_date,
-                        &image_meta.content_time,
-                        &image_meta.instance_number,
-                        &image_meta.image_type,
-                        &image_meta.image_orientation_patient,
-                        &image_meta.image_position_patient,
-                        &image_meta.slice_thickness,
-                        &image_meta.spacing_between_slices,
-                        &image_meta.slice_location,
-                        &image_meta.samples_per_pixel,
-                        &image_meta.photometric_interpretation,
-                        &image_meta.width,
-                        &image_meta.columns,
-                        &image_meta.bits_allocated,
-                        &image_meta.bits_stored,
-                        &image_meta.high_bit,
-                        &image_meta.pixel_representation,
-                        &image_meta.rescale_intercept,
-                        &image_meta.rescale_slope,
-                        &image_meta.rescale_type,
-                        &image_meta.window_center,
-                        &image_meta.window_width,
-                        &image_meta.transfer_syntax_uid,
-                        &image_meta.pixel_data_location,
-                        &image_meta.thumbnail_location,
-                        &image_meta.sop_class_uid,
-                        &image_meta.image_status,
-                        &image_meta.space_size,
-                        &image_meta.created_time,
-                        &image_meta.updated_time,
-                    ],
-                )
-                .await
-                .map_err(|e| {
-                    println!("Error executing statement: {:?}", e);
-                    DbError::DatabaseError(e.to_string())
-                })?;
-        }
-
-        transaction.commit().await.map_err(|e| {
-            println!("Error committing transaction: {:?}", e);
-            DbError::DatabaseError(e.to_string())
-        })?;
-
-        Ok(())
+    if image_meta_list.is_empty() {
+        return Ok(());
     }
+
+    let mut client = self.make_client().await?;
+    let transaction = client.transaction().await.map_err(|e| {
+        println!("Failed to start transaction: {}", e);
+        DbError::DatabaseError(e.to_string())
+    })?;
+
+    println!(
+        "Starting transaction to save image meta list of length {}",
+        image_meta_list.len()
+    );
+
+    let sql_statement = r#"
+INSERT INTO dicom_image_meta (
+    tenant_id,
+    patient_id,
+    study_uid,
+    series_uid,
+    sop_uid,
+    content_date,
+    content_time,
+    instance_number,
+    image_type,
+    image_orientation_patient,
+    image_position_patient,
+    slice_thickness,
+    spacing_between_slices,
+    slice_location,
+    samples_per_pixel,
+    photometric_interpretation,
+    width,
+    columns,
+    bits_allocated,
+    bits_stored,
+    high_bit,
+    pixel_representation,
+    rescale_intercept,
+    rescale_slope,
+    rescale_type,
+    window_center,
+    window_width,
+    transfer_syntax_uid,
+    pixel_data_location,
+    thumbnail_location,
+    sop_class_uid,
+    image_status,
+    space_size,
+    created_time,
+    updated_time
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+    $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+    $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
+    $31, $32, $33, $34, $35
+)
+ON CONFLICT (tenant_id, study_uid, series_uid, sop_uid)
+DO UPDATE SET
+    patient_id = EXCLUDED.patient_id,
+    content_date = EXCLUDED.content_date,
+    content_time = EXCLUDED.content_time,
+    instance_number = EXCLUDED.instance_number,
+    image_type = EXCLUDED.image_type,
+    image_orientation_patient = EXCLUDED.image_orientation_patient,
+    image_position_patient = EXCLUDED.image_position_patient,
+    slice_thickness = EXCLUDED.slice_thickness,
+    spacing_between_slices = EXCLUDED.spacing_between_slices,
+    slice_location = EXCLUDED.slice_location,
+    samples_per_pixel = EXCLUDED.samples_per_pixel,
+    photometric_interpretation = EXCLUDED.photometric_interpretation,
+    width = EXCLUDED.width,
+    columns = EXCLUDED.columns,
+    bits_allocated = EXCLUDED.bits_allocated,
+    bits_stored = EXCLUDED.bits_stored,
+    high_bit = EXCLUDED.high_bit,
+    pixel_representation = EXCLUDED.pixel_representation,
+    rescale_intercept = EXCLUDED.rescale_intercept,
+    rescale_slope = EXCLUDED.rescale_slope,
+    rescale_type = EXCLUDED.rescale_type,
+    window_center = EXCLUDED.window_center,
+    window_width = EXCLUDED.window_width,
+    transfer_syntax_uid = EXCLUDED.transfer_syntax_uid,
+    pixel_data_location = EXCLUDED.pixel_data_location,
+    thumbnail_location = EXCLUDED.thumbnail_location,
+    sop_class_uid = EXCLUDED.sop_class_uid,
+    image_status = EXCLUDED.image_status,
+    space_size = EXCLUDED.space_size,
+    updated_time = EXCLUDED.updated_time
+"#;
+
+    let statement = transaction.prepare(sql_statement).await.map_err(|e| {
+        println!("Error preparing statement: {:?}", e);
+        DbError::DatabaseError(e.to_string())
+    })?;
+
+    for image_meta in image_meta_list {
+        transaction
+            .execute(
+                &statement,
+                &[
+                    &image_meta.tenant_id,
+                    &image_meta.patient_id,
+                    &image_meta.study_uid,
+                    &image_meta.series_uid,
+                    &image_meta.sop_uid,
+                    &image_meta.content_date,
+                    &image_meta.content_time,
+                    &image_meta.instance_number,
+                    &image_meta.image_type,
+                    &image_meta.image_orientation_patient,
+                    &image_meta.image_position_patient,
+                    &image_meta.slice_thickness,
+                    &image_meta.spacing_between_slices,
+                    &image_meta.slice_location,
+                    &image_meta.samples_per_pixel,
+                    &image_meta.photometric_interpretation,
+                    &image_meta.width,
+                    &image_meta.columns,
+                    &image_meta.bits_allocated,
+                    &image_meta.bits_stored,
+                    &image_meta.high_bit,
+                    &image_meta.pixel_representation,
+                    &image_meta.rescale_intercept,
+                    &image_meta.rescale_slope,
+                    &image_meta.rescale_type,
+                    &image_meta.window_center,
+                    &image_meta.window_width,
+                    &image_meta.transfer_syntax_uid,
+                    &image_meta.pixel_data_location,
+                    &image_meta.thumbnail_location,
+                    &image_meta.sop_class_uid,
+                    &image_meta.image_status,
+                    &image_meta.space_size,
+                    &image_meta.created_time,
+                    &image_meta.updated_time,
+                ],
+            )
+            .await
+            .map_err(|e| {
+                println!("Error executing statement: {:?}", e);
+                DbError::DatabaseError(e.to_string())
+            })?;
+    }
+
+    transaction.commit().await.map_err(|e| {
+        println!("Error committing transaction: {:?}", e);
+        DbError::DatabaseError(e.to_string())
+    })?;
+
+    Ok(())
+}
 
     async fn save_json_list(&self, json_meta_list: &[DicomJsonMeta]) -> Result<(), DbError> {
         if json_meta_list.is_empty() {
@@ -570,19 +548,13 @@ impl DbProvider for PgDbProvider {
                 tenant_id,
                 study_uid,
                 series_uid,
-                study_uid_hash,
-                series_uid_hash,
-                study_date_origin,
                 flag_time,
                 created_time,
                 json_status,
                 retry_times
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (tenant_id, study_uid, series_uid)
             DO UPDATE SET
-                study_uid_hash = EXCLUDED.study_uid_hash,
-                series_uid_hash = EXCLUDED.series_uid_hash,
-                study_date_origin = EXCLUDED.study_date_origin,
                 flag_time = EXCLUDED.flag_time,
                 created_time = EXCLUDED.created_time,
                 json_status = EXCLUDED.json_status,
@@ -626,9 +598,6 @@ impl DbProvider for PgDbProvider {
                         &json_meta.tenant_id,
                         &json_meta.study_uid,
                         &json_meta.series_uid,
-                        &json_meta.study_uid_hash,
-                        &json_meta.series_uid_hash,
-                        &json_meta.study_date_origin,
                         &json_meta.flag_time,
                         &json_meta.created_time,
                         &json_meta.json_status,
@@ -795,197 +764,189 @@ impl DbProvider for PgDbProvider {
         Ok(())
     }
 
-    async fn get_state_metaes(
-        &self,
-        tenant_id: &str,
-        study_uid: &str,
-    ) -> Result<Vec<DicomStateMeta>, DbError> {
-        let client = self.make_client().await?;
-        let statement = client
-            .prepare(
-                "SELECT
-                tenant_id,
-                patient_id,
-                study_uid,
-                series_uid,
-                study_uid_hash,
-                series_uid_hash,
-                study_date_origin,
-                patient_name,
-                patient_sex,
-                patient_birth_date,
-                patient_birth_time,
-                patient_age,
-                patient_size,
-                patient_weight,
-                study_date,
-                study_time,
-                accession_number,
-                study_id,
-                study_description,
-                modality,
-                series_number,
-                series_date,
-                series_time,
-                series_description,
-                body_part_examined,
-                protocol_name,
-                series_related_instances,
-                created_time,
-                updated_time
-            FROM dicom_state_meta
-            WHERE tenant_id = $1 AND study_uid = $2",
-            )
-            .await
-            .map_err(|e| DbError::DatabaseError(e.to_string()))?;
+  async fn get_state_metaes(
+    &self,
+    tenant_id: &str,
+    study_uid: &str,
+) -> Result<Vec<DicomStateMeta>, DbError> {
+    let client = self.make_client().await?;
+    let statement = client
+        .prepare(
+            "SELECT
+            tenant_id,
+            patient_id,
+            study_uid,
+            series_uid,
+            study_date_origin,
+            patient_name,
+            patient_sex,
+            patient_birth_date,
+            patient_birth_time,
+            patient_age,
+            patient_size,
+            patient_weight,
+            study_date,
+            study_time,
+            accession_number,
+            study_id,
+            study_description,
+            modality,
+            series_number,
+            series_date,
+            series_time,
+            series_description,
+            body_part_examined,
+            protocol_name,
+            series_related_instances,
+            created_time,
+            updated_time
+        FROM dicom_state_meta
+        WHERE tenant_id = $1 AND study_uid = $2",
+        )
+        .await
+        .map_err(|e| DbError::DatabaseError(e.to_string()))?;
 
-        let rows = client
-            .query(&statement, &[&tenant_id, &study_uid])
-            .await
-            .map_err(|e| DbError::DatabaseError(e.to_string()))?;
+    let rows = client
+        .query(&statement, &[&tenant_id, &study_uid])
+        .await
+        .map_err(|e| DbError::DatabaseError(e.to_string()))?;
 
-        let mut result = Vec::with_capacity(rows.len());
-        for row in rows {
-            let state_meta = DicomStateMeta {
-                tenant_id: row.get(0),
-                patient_id: row.get(1),
-                study_uid: row.get(2),
-                series_uid: row.get(3),
-                study_uid_hash: row.get(4),
-                series_uid_hash: row.get(5),
-                study_date_origin: row.get(6),
-                patient_name: row.get(7),
-                patient_sex: row.get(8),
-                patient_birth_date: row.get(9),
-                patient_birth_time: row.get(10),
-                patient_age: row.get(11),
-                patient_size: row.get(12),
-                patient_weight: row.get(13),
-                study_date: row.get(14),
-                study_time: row.get(15),
-                accession_number: row.get(16),
-                study_id: row.get(17),
-                study_description: row.get(18),
-                modality: row.get(19),
-                series_number: row.get(20),
-                series_date: row.get(21),
-                series_time: row.get(22),
-                series_description: row.get(23),
-                body_part_examined: row.get(24),
-                protocol_name: row.get(25),
-                series_related_instances: row.get(26),
-                created_time: row.get(27),
-                updated_time: row.get(28),
-            };
-            result.push(state_meta);
-        }
-
-        Ok(result)
+    let mut result = Vec::with_capacity(rows.len());
+    for row in rows {
+        let state_meta = DicomStateMeta {
+            tenant_id: row.get(0),
+            patient_id: row.get(1),
+            study_uid: row.get(2),
+            series_uid: row.get(3),
+            study_date_origin: row.get(4),
+            patient_name: row.get(5),
+            patient_sex: row.get(6),
+            patient_birth_date: row.get(7),
+            patient_birth_time: row.get(8),
+            patient_age: row.get(9),
+            patient_size: row.get(10),
+            patient_weight: row.get(11),
+            study_date: row.get(12),
+            study_time: row.get(13),
+            accession_number: row.get(14),
+            study_id: row.get(15),
+            study_description: row.get(16),
+            modality: row.get(17),
+            series_number: row.get(18),
+            series_date: row.get(19),
+            series_time: row.get(20),        // 修复: 正确索引
+            series_description: row.get(21), // 修复: 正确索引
+            body_part_examined: row.get(22), // 修复: 正确索引
+            protocol_name: row.get(23),      // 修复: 正确索引
+            series_related_instances: row.get(24), // 修复: 正确索引
+            created_time: row.get(25),       // 修复: 正确索引
+            updated_time: row.get(26),       // 修复: 正确索引
+        };
+        result.push(state_meta);
     }
 
-    async fn get_json_metaes(
-        &self,
-        end_time: chrono::NaiveDateTime,
-    ) -> Result<Vec<DicomStateMeta>, DbError> {
-        let client = self.make_client().await?;
-        let statement = client
-            .prepare(
-                " Select tenant_id,
-                patient_id,
-                study_uid,
-                series_uid,
-                study_uid_hash,
-                series_uid_hash,
-                study_date_origin,
-                patient_name,
-                patient_sex,
-                patient_birth_date,
-                patient_birth_time,
-                patient_age,
-                patient_size,
-                patient_weight,
-                study_date,
-                study_time,
-                accession_number,
-                study_id,
-                study_description,
-                modality,
-                series_number,
-                series_date,
-                series_time,
-                series_description,
-                body_part_examined,
-                protocol_name,
-                series_related_instances,
-                created_time,
-                updated_time
-                From (SELECT dsm.*
-                      FROM dicom_state_meta dsm
-                               LEFT JOIN dicom_json_meta djm
-                                         ON dsm.tenant_id = djm.tenant_id
-                                             AND dsm.study_uid = djm.study_uid
-                                             AND dsm.series_uid = djm.series_uid
-                      WHERE djm.tenant_id IS NULL AND dsm.updated_time <  $1
-                      UNION ALL
-                      SELECT dsm.*
-                      FROM dicom_state_meta dsm
-                               INNER JOIN dicom_json_meta djm
-                                          ON dsm.tenant_id = djm.tenant_id
-                                              AND dsm.study_uid = djm.study_uid
-                                              AND dsm.series_uid = djm.series_uid
-                      WHERE dsm.updated_time != djm.flag_time AND dsm.updated_time <  $1
-                      ) AS t
-                order by t.updated_time asc limit 10;",
-            )
-            .await
-            .map_err(|e| {
-                println!("{:?}", e);
-                DbError::DatabaseError(e.to_string())
-            })?;
+    Ok(result)
+}
 
-        let rows = client
-            .query(&statement, &[&end_time])
-            .await
-            .map_err(|e| DbError::DatabaseError(e.to_string()))?;
+ async fn get_json_metaes(
+    &self,
+    end_time: chrono::NaiveDateTime,
+) -> Result<Vec<DicomStateMeta>, DbError> {
+    let client = self.make_client().await?;
+    let statement = client
+        .prepare(
+            " Select tenant_id,
+            patient_id,
+            study_uid,
+            series_uid,
+            study_date_origin,
+            patient_name,
+            patient_sex,
+            patient_birth_date,
+            patient_birth_time,
+            patient_age,
+            patient_size,
+            patient_weight,
+            study_date,
+            study_time,
+            accession_number,
+            study_id,
+            study_description,
+            modality,
+            series_number,
+            series_date,
+            series_time,
+            series_description,
+            body_part_examined,
+            protocol_name,
+            series_related_instances,
+            created_time,
+            updated_time
+            From (SELECT dsm.*
+                  FROM dicom_state_meta dsm
+                           LEFT JOIN dicom_json_meta djm
+                                     ON dsm.tenant_id = djm.tenant_id
+                                         AND dsm.study_uid = djm.study_uid
+                                         AND dsm.series_uid = djm.series_uid
+                  WHERE djm.tenant_id IS NULL AND dsm.updated_time <  $1
+                  UNION ALL
+                  SELECT dsm.*
+                  FROM dicom_state_meta dsm
+                           INNER JOIN dicom_json_meta djm
+                                      ON dsm.tenant_id = djm.tenant_id
+                                          AND dsm.study_uid = djm.study_uid
+                                          AND dsm.series_uid = djm.series_uid
+                  WHERE dsm.updated_time != djm.flag_time AND dsm.updated_time <  $1
+                  ) AS t
+            order by t.updated_time asc limit 10;",
+        )
+        .await
+        .map_err(|e| {
+            println!("{:?}", e);
+            DbError::DatabaseError(e.to_string())
+        })?;
 
-        let mut result = Vec::with_capacity(rows.len());
-        for row in rows {
-            let state_meta = DicomStateMeta {
-                tenant_id: row.get(0),
-                patient_id: row.get(1),
-                study_uid: row.get(2),
-                series_uid: row.get(3),
-                study_uid_hash: row.get(4),
-                series_uid_hash: row.get(5),
-                study_date_origin: row.get(6),
-                patient_name: row.get(7),
-                patient_sex: row.get(8),
-                patient_birth_date: row.get(9),
-                patient_birth_time: row.get(10),
-                patient_age: row.get(11),
-                patient_size: row.get(12),
-                patient_weight: row.get(13),
-                study_date: row.get(14),
-                study_time: row.get(15),
-                accession_number: row.get(16),
-                study_id: row.get(17),
-                study_description: row.get(18),
-                modality: row.get(19),
-                series_number: row.get(20),
-                series_date: row.get(21),
-                series_time: row.get(22),
-                series_description: row.get(23),
-                body_part_examined: row.get(24),
-                protocol_name: row.get(25),
-                series_related_instances: row.get(26),
-                created_time: row.get(27),
-                updated_time: row.get(28),
-            };
-            result.push(state_meta);
-        }
+    let rows = client
+        .query(&statement, &[&end_time])
+        .await
+        .map_err(|e| DbError::DatabaseError(e.to_string()))?;
 
-        Ok(result)
+    let mut result = Vec::with_capacity(rows.len());
+    for row in rows {
+        let state_meta = DicomStateMeta {
+            tenant_id: row.get(0),
+            patient_id: row.get(1),
+            study_uid: row.get(2),
+            series_uid: row.get(3),
+            study_date_origin: row.get(4),
+            patient_name: row.get(5),
+            patient_sex: row.get(6),
+            patient_birth_date: row.get(7),
+            patient_birth_time: row.get(8),
+            patient_age: row.get(9),
+            patient_size: row.get(10),
+            patient_weight: row.get(11),
+            study_date: row.get(12),
+            study_time: row.get(13),
+            accession_number: row.get(14),
+            study_id: row.get(15),
+            study_description: row.get(16),
+            modality: row.get(17),
+            series_number: row.get(18),
+            series_date: row.get(19),
+            series_time: row.get(20),        // 修复: 正确索引
+            series_description: row.get(21), // 修复: 正确索引
+            body_part_examined: row.get(22), // 修复: 正确索引
+            protocol_name: row.get(23),      // 修复: 正确索引
+            series_related_instances: row.get(24), // 修复: 正确索引
+            created_time: row.get(25),       // 修复: 正确索引
+            updated_time: row.get(26),       // 修复: 正确索引
+        };
+        result.push(state_meta);
     }
+
+    Ok(result)
+}
 
     async fn get_json_meta(
         &self,
@@ -1000,9 +961,6 @@ impl DbProvider for PgDbProvider {
                 tenant_id,
                 study_uid,
                 series_uid,
-                study_uid_hash,
-                series_uid_hash,
-                study_date_origin,
                 flag_time,
                 created_time,
                 json_status,
@@ -1030,13 +988,10 @@ impl DbProvider for PgDbProvider {
             tenant_id: row.get(0),
             study_uid: row.get(1),
             series_uid: row.get(2),
-            study_uid_hash: row.get(3),
-            series_uid_hash: row.get(4),
-            study_date_origin: row.get(5),
-            flag_time: row.get(6),
-            created_time: row.get(7),
-            json_status: row.get(8),
-            retry_times: row.get(9),
+            flag_time: row.get(3),
+            created_time: row.get(4),
+            json_status: row.get(5),
+            retry_times: row.get(6),
         };
 
         Ok(json_meta)
@@ -1052,12 +1007,14 @@ mod tests {
     use ctor::ctor;
     use dotenv::dotenv;
     use std::env;
+    use std::env::current_dir;
     use std::ops::Sub;
 
     #[cfg(test)]
     #[ctor]
     fn init_tests() {
         // 这个函数会在所有测试运行之前执行一次
+        println!("working directory:{:?}", current_dir());
         dotenv().ok();
         println!("Initializing tests...");
         // 可以在这里进行全局的测试设置
@@ -1106,7 +1063,7 @@ mod tests {
         let sql_cnn = env::var("DICOM_PGSQL");
         if sql_cnn.is_err() {
             println!("DICOM_PGSQL environment variable not set");
-            println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
+            println!("eg:postgresql://xdcm_admin:xdicom3ks@localhost:5432/postgres");
             return Ok(());
         }
 
@@ -1121,8 +1078,6 @@ mod tests {
         let patient_id = BoundedString::<64>::try_from("test_patient_456".to_string())?;
         let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9".to_string())?;
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1".to_string())?;
-        let study_uid_hash = BoundedString::<20>::make_str("1.2.3.4.5.6.7.8.9");
-        let series_uid_hash = BoundedString::<20>::make_str("9.8.7.6.5.4.3.2.1");
         let study_date_origin = DicomDateString::from_str("20231201")?;
         let accession_number = BoundedString::<16>::make_str("ACC123456");
         let modality = Some(BoundedString::<16>::make_str("CT"));
@@ -1150,8 +1105,6 @@ mod tests {
             patient_id,
             study_uid,
             series_uid,
-            study_uid_hash,
-            series_uid_hash,
             study_date_origin,
             patient_name,
             patient_sex,
@@ -1190,84 +1143,230 @@ mod tests {
         Ok(()) //   cleanup 会在函数结束时自动调用 Drop
     }
 
-    #[tokio::test]
-    async fn test_get_state_metaes() -> Result<(), Box<dyn std::error::Error>> {
-        let sql_cnn = env::var("DICOM_PGSQL");
-        if sql_cnn.is_err() {
-            println!("DICOM_PGSQL environment variable not set");
-            println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
-            return Ok(());
-        }
+  #[tokio::test]
+async fn test_get_state_metaes() -> Result<(), Box<dyn std::error::Error>> {
+    let sql_cnn = env::var("DICOM_PGSQL");
+    if sql_cnn.is_err() {
+        println!("DICOM_PGSQL environment variable not set");
+        println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
+        return Ok(());
+    }
 
-        let db_provider = PgDbProvider::new(sql_cnn?);
+    let db_provider = PgDbProvider::new(sql_cnn?);
 
-        let tenant_id = "1234567890";
-        let study_uid = "1.2.156.112605.0.1685486876.2025061710152134339.2.1.1";
+    // 先创建并保存测试数据
+    let tenant_id = BoundedString::<64>::try_from("1234567890".to_string())?;
+    let patient_id = BoundedString::<64>::try_from("test_patient_for_query".to_string())?;
+    let study_uid = BoundedString::<64>::try_from("1.2.156.112605.0.1685486876.2025061710152134339.2.1.1".to_string())?;
+    let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.test.query".to_string())?;
+    let study_date_origin = DicomDateString::make("20231201");
+    let accession_number = BoundedString::<16>::make_str("ACCQUERY");
+    let modality = Some(BoundedString::<16>::make_str("CT"));
+    let series_number = Some(1);
+    let series_date = Some(NaiveDate::from_ymd_opt(2023, 12, 1).unwrap());
+    let series_time = Some(NaiveTime::parse_from_str("120000", "%H%M%S")?);
+    let series_description = Some(BoundedString::<256>::try_from("Test Query Series".to_string())?);
+    let body_part_examined = Some(BoundedString::<64>::try_from("CHEST".to_string())?);
+    let protocol_name = Some(BoundedString::<64>::try_from("CHEST QUERY CT".to_string())?);
+    let study_date = NaiveDate::from_ymd_opt(2023, 12, 1).unwrap();
+    let study_time = Some(NaiveTime::parse_from_str("120000", "%H%M%S")?);
+    let study_id = Some(BoundedString::<16>::try_from("STUDYQUERY".to_string())?);
+    let study_description = Some(BoundedString::<64>::try_from("Test Query Study".to_string())?);
+    let patient_age = Some(BoundedString::<16>::try_from("045Y".to_string())?);
+    let patient_sex = Some(BoundedString::<1>::try_from("M".to_string())?);
+    let patient_name = Some(BoundedString::<64>::try_from("TEST^QUERY".to_string())?);
+    let patient_birth_date = Some(NaiveDate::from_ymd_opt(1978, 1, 1).unwrap());
+    let patient_birth_time = Some(NaiveTime::parse_from_str("080000", "%H%M%S")?);
+    let created_time = current_time();
+    let updated_time = current_time();
 
-        // 执行查询操作
-        let result = db_provider.get_state_metaes(tenant_id, study_uid).await;
+    let state_meta = DicomStateMeta {
+        tenant_id: tenant_id.clone(),
+        patient_id,
+        study_uid: study_uid.clone(),
+        series_uid,
+        study_date_origin,
+        patient_name,
+        patient_sex,
+        patient_birth_date,
+        patient_birth_time,
+        patient_age,
+        patient_size: Some(175.5),
+        patient_weight: Some(70.2),
+        study_date,
+        study_time,
+        accession_number: Some(accession_number),
+        study_id,
+        study_description,
+        modality,
+        series_number,
+        series_date,
+        series_time,
+        series_description,
+        body_part_examined,
+        protocol_name,
+        series_related_instances: None,
+        created_time,
+        updated_time,
+    };
 
-        // 验证查询成功
-        assert!(
-            result.is_ok(),
-            "Failed to get DicomStateMeta list: {:?}",
-            result.err()
-        );
+    // 先保存数据
+    db_provider.save_state_info(&state_meta).await?;
 
-        let state_meta_list = result?;
+    // 然后执行查询操作
+    let result = db_provider.get_state_metaes("1234567890", "1.2.156.112605.0.1685486876.2025061710152134339.2.1.1").await;
 
-        // 验证返回结果不为空
-        assert!(!state_meta_list.is_empty(), "Expected non-empty result");
+    // 验证查询成功
+    assert!(
+        result.is_ok(),
+        "Failed to get DicomStateMeta list: {:?}",
+        result.err()
+    );
 
-        // 验证每条记录的 tenant_id 和 study_uid 是否正确
-        for state_meta in state_meta_list {
-            assert_eq!(state_meta.tenant_id.as_str(), tenant_id);
-            assert_eq!(state_meta.study_uid.as_str(), study_uid);
+    let state_meta_list = result?;
+
+    // 验证返回结果不为空
+    assert!(!state_meta_list.is_empty(), "Expected non-empty result");
+
+    // 验证每条记录的 tenant_id 和 study_uid 是否正确
+    for state_meta in state_meta_list {
+        assert_eq!(state_meta.tenant_id.as_str(), "1234567890");
+        assert_eq!(state_meta.study_uid.as_str(), "1.2.156.112605.0.1685486876.2025061710152134339.2.1.1");
+        let json = serde_json::to_string_pretty(&state_meta)?;
+        println!("DicomStateMeta JSON: {}", json);
+    }
+
+    Ok(())
+}
+
+   #[tokio::test]
+async fn test_get_json_metaes() -> Result<(), Box<dyn std::error::Error>> {
+    let sql_cnn = env::var("DICOM_PGSQL");
+    if sql_cnn.is_err() {
+        println!("DICOM_PGSQL environment variable not set");
+        println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
+        return Ok(());
+    }
+
+    let db_provider = PgDbProvider::new(sql_cnn?);
+
+    // 创建满足查询条件的测试数据
+    let tenant_id = BoundedString::<64>::try_from("test_json_metaes_tenant".to_string())?;
+    let patient_id = BoundedString::<64>::try_from("test_json_metaes_patient".to_string())?;
+    let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9.json_test".to_string())?;
+    let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.json_test".to_string())?;
+    let study_date_origin = DicomDateString::make("20231201");
+    let accession_number = BoundedString::<16>::make_str("ACCJSON");
+    let modality = Some(BoundedString::<16>::make_str("CT"));
+    let series_number = Some(1);
+    let series_date = Some(NaiveDate::from_ymd_opt(2023, 12, 1).unwrap());
+    let series_time = Some(NaiveTime::parse_from_str("120000", "%H%M%S")?);
+    let series_description = Some(BoundedString::<256>::try_from("Test JSON Metaes Series".to_string())?);
+    let body_part_examined = Some(BoundedString::<64>::try_from("CHEST".to_string())?);
+    let protocol_name = Some(BoundedString::<64>::try_from("CHEST JSON CT".to_string())?);
+    let study_date = NaiveDate::from_ymd_opt(2023, 12, 1).unwrap();
+    let study_time = Some(NaiveTime::parse_from_str("120000", "%H%M%S")?);
+    let study_id = Some(BoundedString::<16>::try_from("STUDYJSON".to_string())?);
+    let study_description = Some(BoundedString::<64>::try_from("Test JSON Metaes Study".to_string())?);
+    let patient_age = Some(BoundedString::<16>::try_from("045Y".to_string())?);
+    let patient_sex = Some(BoundedString::<1>::try_from("M".to_string())?);
+    let patient_name = Some(BoundedString::<64>::try_from("TEST^JSONMETAES".to_string())?);
+    let patient_birth_date = Some(NaiveDate::from_ymd_opt(1978, 1, 1).unwrap());
+    let patient_birth_time = Some(NaiveTime::parse_from_str("080000", "%H%M%S")?);
+
+    // 设置一个较早的时间，确保满足查询的时间条件
+    let past_time = chrono::Utc::now().naive_utc() - chrono::Duration::minutes(10);
+    let created_time = past_time;
+    let updated_time = past_time;
+
+    let state_meta = DicomStateMeta {
+        tenant_id: tenant_id.clone(),
+        patient_id,
+        study_uid: study_uid.clone(),
+        series_uid: series_uid.clone(),
+        study_date_origin,
+        patient_name,
+        patient_sex,
+        patient_birth_date,
+        patient_birth_time,
+        patient_age,
+        patient_size: Some(175.5),
+        patient_weight: Some(70.2),
+        study_date,
+        study_time,
+        accession_number: Some(accession_number),
+        study_id,
+        study_description,
+        modality,
+        series_number,
+        series_date,
+        series_time,
+        series_description,
+        body_part_examined,
+        protocol_name,
+        series_related_instances: None,
+        created_time,
+        updated_time,
+    };
+
+    // 先保存状态元数据
+    db_provider.save_state_info(&state_meta).await?;
+
+    // 获取当前时间作为查询的截止时间
+    let cd = current_time();
+    let cd = cd.sub(chrono::Duration::minutes(5)); // 调整为5分钟前，确保包含我们刚添加的数据
+
+    // 执行查询操作
+    let result = db_provider.get_json_metaes(cd).await;
+
+    // 验证查询成功
+    assert!(
+        result.is_ok(),
+        "Failed to get DicomStateMeta list: {:?}",
+        result.err()
+    );
+
+    let state_meta_list = result?;
+
+    // 验证返回结果不为空
+    // 注意：这里的结果可能仍然为空，因为如果没有对应的 dicom_json_meta 记录，
+    // 且状态元数据更新时间不满足条件，则不会返回任何结果
+    if state_meta_list.is_empty() {
+        // 如果查询结果为空，我们可以先插入一个JSON元数据，然后再次查询
+        let json_meta = DicomJsonMeta {
+            tenant_id: tenant_id.clone(),
+            study_uid: study_uid.clone(),
+            series_uid: series_uid.clone(),
+            flag_time: past_time - chrono::Duration::minutes(1), // 设置一个更早的flag时间，使其与更新时间不同
+            created_time: past_time,
+            json_status: 0,
+            retry_times: 0,
+        };
+
+        // 保存JSON元数据
+        db_provider.save_json_list(&[json_meta]).await?;
+
+        // 再次查询
+        let result2 = db_provider.get_json_metaes(cd).await?;
+
+        // 验证第二次查询不为空
+        assert!(!result2.is_empty(), "Expected non-empty result after adding JSON metadata");
+
+        for state_meta in result2 {
             let json = serde_json::to_string_pretty(&state_meta)?;
             println!("DicomStateMeta JSON: {}", json);
         }
-
-        Ok(())
-    }
-    #[tokio::test]
-    async fn test_get_json_metaes() -> Result<(), Box<dyn std::error::Error>> {
-        let sql_cnn = env::var("DICOM_PGSQL");
-        if sql_cnn.is_err() {
-            println!("DICOM_PGSQL environment variable not set");
-            println!("eg:postgresql://root:jp%23123@192.168.1.14:5432/postgres");
-            return Ok(());
-        }
-
-        let db_provider = PgDbProvider::new(sql_cnn?);
-
-        let cd = current_time();
-        let cd = cd.sub(chrono::Duration::minutes(3));
-        // 执行查询操作
-        let result = db_provider.get_json_metaes(cd).await;
-
-        // 验证查询成功
-        assert!(
-            result.is_ok(),
-            "Failed to get DicomStateMeta list: {:?}",
-            result.err()
-        );
-
-        let state_meta_list = result?;
-
-        // 验证返回结果不为空
-        assert!(!state_meta_list.is_empty(), "Expected non-empty result");
-
-        if state_meta_list.is_empty() {
-            return Ok(());
-        }
+    } else {
         // 验证每条记录的 tenant_id 和 study_uid 是否正确
         for state_meta in state_meta_list {
             let json = serde_json::to_string_pretty(&state_meta)?;
             println!("DicomStateMeta JSON: {}", json);
         }
-
-        Ok(())
     }
+
+    Ok(())
+}
+
     #[tokio::test]
     async fn test_save_state_list() -> Result<(), Box<dyn std::error::Error>> {
         let sql_cnn = env::var("DICOM_PGSQL");
@@ -1286,8 +1385,6 @@ mod tests {
         let patient_id = BoundedString::<64>::try_from("test_patient_list_456".to_string())?;
         let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9.list".to_string())?;
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.list".to_string())?;
-        let study_uid_hash = BoundedString::<20>::from_str("0AA07C2AA455BEB01D5A")?;
-        let series_uid_hash = BoundedString::<20>::from_str("0AB07C2AA455BEB01D5A")?;
         let study_date_origin = DicomDateString::make("20231202");
         let accession_number = BoundedString::<16>::try_from("ACC123457".to_string())?;
         let modality = Some(BoundedString::<16>::try_from("MRI".to_string())?);
@@ -1318,8 +1415,6 @@ mod tests {
             patient_id,
             study_uid,
             series_uid,
-            study_uid_hash,
-            series_uid_hash,
             study_date_origin,
             patient_name,
             patient_sex,
@@ -1387,9 +1482,8 @@ mod tests {
         let tenant_id = BoundedString::<64>::try_from("test_tenant_json_123".to_string())?;
         let study_uid = BoundedString::<64>::try_from("1.2.3.4.5.6.7.8.9.json".to_string())?;
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.json".to_string())?;
-        let study_uid_hash = BoundedString::<20>::from_str("0AC07C2AA455BEB01D5A")?;
-        let series_uid_hash = BoundedString::<20>::from_str("0AD07C2AA455BEB01D5A")?;
-        let study_date_origin = DicomDateString::make("20231203");
+
+
         let flag_time = current_time();
         let created_time = current_time();
         let json_status = 0;
@@ -1399,9 +1493,6 @@ mod tests {
             tenant_id: tenant_id.clone(),
             study_uid: study_uid.clone(),
             series_uid: series_uid.clone(),
-            study_uid_hash,
-            series_uid_hash,
-            study_date_origin,
             flag_time,
             created_time,
             json_status,
@@ -1446,8 +1537,7 @@ mod tests {
         let file_path = BoundedString::<512>::try_from("/data/test/file.dcm".to_string())?;
         let transfer_syntax_uid = BoundedString::<64>::try_from("1.2.840.10008.1.2.1".to_string())?;
         let number_of_frames = 1;
-        let series_uid_hash = BoundedString::<20>::from_str("0BA07C2AA455BEB01D5A")?;
-        let study_uid_hash = BoundedString::<20>::from_str("0BB07C2AA455BEB01D5A")?;
+
         let accession_number = BoundedString::<16>::try_from("ACC123458".to_string())?;
         let target_ts = BoundedString::<64>::try_from("1.2.840.10008.1.2.1".to_string())?;
         let study_date = NaiveDate::from_ymd_opt(2023, 12, 5).unwrap();
@@ -1468,8 +1558,6 @@ mod tests {
             file_path,
             transfer_syntax_uid,
             number_of_frames,
-            series_uid_hash,
-            study_uid_hash,
             accession_number: Some(accession_number),
             target_ts,
             study_date,
@@ -1516,8 +1604,6 @@ mod tests {
         let series_uid = BoundedString::<64>::try_from("9.8.7.6.5.4.3.2.1.image".to_string())?;
         let sop_uid =
             BoundedString::<64>::try_from("1.3.6.1.4.1.5962.1.1.0.0.0.1234567890".to_string())?;
-        let study_uid_hash = BoundedString::<20>::from_str("0AE07C2AA455BEB01D5A")?;
-        let series_uid_hash = BoundedString::<20>::from_str("0AF07C2AA455BEB01D5A")?;
 
         let content_date = Some(NaiveDate::parse_from_str("20231204", "%Y%m%d")?);
         let content_time = Some(NaiveTime::parse_from_str("120000", "%H%M%S")?);
@@ -1563,8 +1649,6 @@ mod tests {
             study_uid,
             series_uid,
             sop_uid,
-            study_uid_hash,
-            series_uid_hash,
             content_date,
             content_time,
             instance_number,

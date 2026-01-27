@@ -87,6 +87,10 @@ pub fn get_int_value(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<i32> {
     dicom_obj.element(tag).ok().and_then(|e| e.to_int().ok())
 }
 
+pub fn tag_exists(dicom_obj: &InMemDicomObject, tag: Tag) -> bool {
+    dicom_obj.element_opt(tag).ok().flatten().is_some()
+}
+
 pub fn get_decimal_value(dicom_obj: &InMemDicomObject, tag: Tag) -> Option<f64> {
     dicom_obj
         .element(tag)

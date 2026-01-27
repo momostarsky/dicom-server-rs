@@ -143,7 +143,7 @@ pub fn get_unique_tenant_ids(message: &[DicomStoreMeta]) -> Vec<String> {
 pub fn deduplicate_state_metas(state_metas: Vec<DicomStateMeta>) -> Vec<DicomStateMeta> {
     use std::collections::HashMap;
 
-    let mut unique_map: HashMap<(String, String, String, String), DicomStateMeta> = HashMap::new();
+    let mut unique_map: HashMap<(String,  String, String), DicomStateMeta> = HashMap::new();
 
     for state_meta in state_metas {
         let key = state_meta.unique_key();
