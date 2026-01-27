@@ -1,6 +1,6 @@
 [package]
 name = "wado-consumer"
-version = "0.1.0"
+version = "0.1.3"
 edition = "2024"
 description = "A DICOM consumer that parse DICOM file tags and save into database."
 

@@ -1,6 +1,6 @@
 [package]
 name = "wado-storescp"
-version = "0.1.0"
+version = "0.1.3"
 authors = ["Victor Saase <vsaase@gmail.com>", "Eduardo Pinho <enet4mikeenet@gmail.com>"]
 edition = "2021"
 
