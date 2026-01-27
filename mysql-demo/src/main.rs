@@ -1,8 +1,9 @@
-mod change_ts;
+mod extract_frames;
 
+use crate::extract_frames::ExtractMultiFrameToMultiFile;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
-use sqlx::{ MySql, MySqlPool, Transaction};
+use sqlx::{MySql, MySqlPool, Transaction};
 use tracing::{error, info};
 
 // static DB_URL: &str = " mysql://dicomstore:hzjp%23123@192.168.1.14:3306/dicomdb";
@@ -117,4 +118,11 @@ impl MySqlDatabase {
 
 fn main() {
     println!("Hello, world!");
+
+    let ex = ExtractMultiFrameToMultiFile::new(
+        "/home/dhz/jpdata/vdcmdata/dcmfiles/XA/MR2.dcm".to_string(),
+        "/home/dhz/jpdata/vdcmdata/dcmfiles/XA2".to_string(),
+        true,
+    );
+    ex.run().expect("extract multi frame to multi file failed");
 }

@@ -7,8 +7,6 @@ create table dicom_state_meta
     patient_id               varchar(64) not null,
     study_uid                varchar(64) not null,
     series_uid               varchar(64) not null,
-    study_uid_hash           varchar(20) not null,
-    series_uid_hash          varchar(20) not null,
     patient_name             varchar(64),
     patient_sex              varchar(1),
     patient_birth_date       date,
@@ -54,18 +52,12 @@ create table dicom_json_meta
     tenant_id         varchar(64)                            not null,
     study_uid         varchar(64)                            not null,
     series_uid        varchar(64)                            not null,
-    study_uid_hash    varchar(20)                            not null,
-    series_uid_hash   varchar(20)                            not null,
-    study_date_origin varchar(8)                             not null,
     flag_time         timestamp                              not null,
     created_time      timestamp default CURRENT_TIMESTAMP(6) not null,
     json_status       integer   default 0                    not null,
     retry_times       integer   default 0                    not null,
-    constraint pk_dicom_json_meta
-        primary key (tenant_id, study_uid, series_uid)
+    constraint pk_dicom_json_meta  primary key (tenant_id, study_uid, series_uid)
 );
-
-
 
 create index ix_flag_time
     on dicom_json_meta (flag_time);
@@ -77,8 +69,6 @@ create table dicom_image_meta
     study_uid                  varchar(64) not null,
     series_uid                 varchar(64) not null,
     sop_uid                    varchar(64) not null,
-    study_uid_hash             varchar(20) not null,
-    series_uid_hash            varchar(20) not null,
     content_date               date,
     content_time               time,
     instance_number            integer,
@@ -109,8 +99,7 @@ create table dicom_image_meta
     space_size                 bigint,
     created_time               timestamp,
     updated_time               timestamp,
-    constraint pk_dicom_image_meta
-        primary key (tenant_id, study_uid, series_uid, sop_uid)
+    constraint pk_dicom_image_meta  primary key (tenant_id, study_uid, series_uid, sop_uid)
 );
 
 comment on column dicom_image_meta.tenant_id is '租户ID';
@@ -123,9 +112,6 @@ comment on column dicom_image_meta.series_uid is '序列UID';
 
 comment on column dicom_image_meta.sop_uid is '实例UID';
 
-comment on column dicom_image_meta.study_uid_hash is '检查UID哈希值';
-
-comment on column dicom_image_meta.series_uid_hash is '序列UID哈希值';
 
 comment on column dicom_image_meta.content_date is '内容日期';
 
@@ -190,12 +176,10 @@ comment on column dicom_image_meta.updated_time is '更新时间';
 
 create table dicom_object_meta
 (
-    trace_id            varchar(36)                         not null
-        constraint pk_dicom_object_meta
-            primary key,
-    worker_node_id      varchar(64)                         not null,
-    tenant_id           varchar(64)                         not null,
-    patient_id          varchar(64)                         not null,
+    trace_id            varchar(36)                         not null  constraint pk_dicom_object_meta  primary key,
+    worker_node_id      varchar(64)                  not null,
+    tenant_id           varchar(64)                        not null,
+    patient_id          varchar(64)                        not null,
     study_uid           varchar(64),
     series_uid          varchar(64),
     sop_uid             varchar(64),
@@ -203,8 +187,6 @@ create table dicom_object_meta
     file_path           varchar(512),
     transfer_syntax_uid varchar(64),
     number_of_frames    integer,
-    series_uid_hash     varchar(20),
-    study_uid_hash      varchar(20),
     accession_number    varchar(64),
     target_ts           varchar(64),
     study_date          date,
@@ -223,22 +205,19 @@ comment on column dicom_object_meta.tenant_id is '租户ID';
 comment on column dicom_object_meta.patient_id is '患者ID';
 
 
-create index idx_dicom_object_meta_date
-    on dicom_object_meta (tenant_id, study_date);
+create index idx_dicom_object_meta_date  on dicom_object_meta (tenant_id, study_date);
 
-create index idx_dicom_object_meta
-    on dicom_object_meta (tenant_id, patient_id, study_uid, series_uid, sop_uid);
+create index idx_dicom_object_meta  on dicom_object_meta (tenant_id, patient_id, study_uid, series_uid, sop_uid);
 
-create index idx_dicom_object_meta_createdate
-    on dicom_object_meta (tenant_id, created_time);
+create index idx_dicom_object_meta_createdate   on dicom_object_meta (tenant_id, created_time);
 
 
 create table  IF NOT EXISTS  dicom_state_archive
 (
     tenant_id                varchar(64) not null,
     study_uid                varchar(64) not null,
-    series_uid               varchar(64) not null,
-    start_time               timestamp,
+    series_uid                varchar(64) not null,
+    start_time                timestamp,
     end_time                 timestamp,
     space_size               bigint,
     primary key (tenant_id, study_uid, series_uid)
