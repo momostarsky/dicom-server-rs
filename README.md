@@ -36,6 +36,7 @@
 | wado-storescp  | C-Store SCP Provider, writes DICOM files to disk and publishes message to Kafka: storage_queue, log_queue |
 | wado-consumer  | Consumes storage-queue, publishes messages to Kafka: dicom_state_queue, dicom_image_queue                 |
 | wado-webworker | Generates metadata for wado-server and updates related instances for series and study.                    |
+| wado-archive   | Save DICOM files to S3. Specific filtering conditions are implemented inside get_state_archives.          |
 
 ### How to deploy for testing
 
@@ -50,7 +51,7 @@
 - [✓] Basic DICOM Metadata Extraction and Storage
 - [✓] DICOMWeb STOW-RS Support
 - [✓] OAuth2 Support  for WADO-RS , STOW-RS
-- [ ] Add S3 Storage Support
+- [✓]] Add S3 Storage Support
 - [ ] Web-based Viewer Integration
 - [ ] Add Prometheus & Grafana Monitoring Support
 - [ ] DICOM Query-Retrieve (C-FIND, C-MOVE, C-GET) Support
