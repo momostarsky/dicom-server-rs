@@ -2,9 +2,9 @@
 .vscode
 .tmp
 temp
-tmp
-logs
-target
+tmp/
+logs/
+target/
 .git
 .DS_Store
 .env
@@ -70,4 +70,4 @@ target/release
 /common/data/x-RLELossless.dcm
 [Xx]-*.dcm
 [Yy]-*.dcm
-*-nlog.txt
+*-nlog.txt!/logs/
